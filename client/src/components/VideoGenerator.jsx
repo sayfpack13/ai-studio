@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
 import { enqueuePipeline, generateVideo, getModels } from "../services/api";
+import AssetPickerDialog from "./library/AssetPickerDialog";
 
 // Generate unique video ID
 const generateVideoId = () =>
@@ -64,6 +65,7 @@ export default function VideoGenerator() {
   );
   const [wanLibraryImageId, setWanLibraryImageId] = useState("");
   const [wanUploadingImage, setWanUploadingImage] = useState(false);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
 
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -239,6 +241,14 @@ export default function VideoGenerator() {
       setWanImageSourceType("library");
     }
   }, [wanLibraryImageId, imageLibraryAssets]);
+
+  const handleAssetPickerSelect = (asset) => {
+    if (asset?.url) {
+      setWanImageData(asset.url);
+      setWanLibraryImageId(asset.id);
+      setWanImageSourceType("library");
+    }
+  };
 
   const handleWanImageUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -698,18 +708,27 @@ export default function VideoGenerator() {
                   )}
 
                   {wanImageSourceType === "library" && (
-                    <select
-                      value={wanLibraryImageId}
-                      onChange={(e) => setWanLibraryImageId(e.target.value)}
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    <button
+                      onClick={() => setShowAssetPicker(true)}
+                      className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
                     >
-                      <option value="">Select image from library...</option>
-                      {imageLibraryAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.title}
-                        </option>
-                      ))}
-                    </select>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                      {wanLibraryImageId
+                        ? "Change Image from Library"
+                        : "Select Image from Library"}
+                    </button>
                   )}
 
                   {wanImageData && (
@@ -946,6 +965,15 @@ export default function VideoGenerator() {
           {loading ? "Stop Generation" : "Generate Video"}
         </button>
       </div>
+
+      {/* Asset Picker Dialog */}
+      <AssetPickerDialog
+        open={showAssetPicker}
+        onClose={() => setShowAssetPicker(false)}
+        onSelect={handleAssetPickerSelect}
+        type="image"
+        title="Select Image for Wan I2V"
+      />
     </div>
   );
 }

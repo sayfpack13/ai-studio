@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
+import { uploadLibraryFile } from "../../services/api";
 
 const fallbackTime = 0;
 
@@ -46,6 +47,23 @@ function normalizeLibraryAsset(asset) {
   };
 }
 
+function inferTypeFromFile(file) {
+  if (!file?.type) return "project";
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  return "project";
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function MediaLibrary() {
   const {
     libraryAssets,
@@ -54,7 +72,6 @@ export default function MediaLibrary() {
     refreshLibraryAssets,
     removeLibraryAsset,
     runLibrarySearch,
-
     imageHistory,
     videoHistory,
     musicHistory,
@@ -69,6 +86,14 @@ export default function MediaLibrary() {
 
   const [loading, setLoading] = useState(false);
   const [previewAsset, setPreviewAsset] = useState(null);
+
+  // Upload state
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadType, setUploadType] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
 
   const loadLibraryAssets = async () => {
     setLoading(true);
@@ -85,6 +110,63 @@ export default function MediaLibrary() {
       await runLibrarySearch(libraryFilters);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSelectUploadFile = (event) => {
+    const selected = event.target.files?.[0] || null;
+    setUploadFile(selected);
+    setUploadError("");
+    setUploadSuccess("");
+
+    if (selected && !uploadTitle.trim()) {
+      const dot = selected.name.lastIndexOf(".");
+      const baseName = dot > 0 ? selected.name.slice(0, dot) : selected.name;
+      setUploadTitle(baseName);
+    }
+
+    if (selected && !uploadType) {
+      setUploadType(inferTypeFromFile(selected));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile || uploading) return;
+
+    setUploading(true);
+    setUploadError("");
+    setUploadSuccess("");
+
+    try {
+      const dataUrl = await fileToDataUrl(uploadFile);
+
+      const response = await uploadLibraryFile({
+        fileName: uploadFile.name,
+        fileBase64: dataUrl,
+        mimeType: uploadFile.type || undefined,
+        title: uploadTitle.trim() || uploadFile.name,
+        type: uploadType || inferTypeFromFile(uploadFile),
+        source: "upload",
+        metadata: {
+          uploadedFrom: "media-library-ui",
+          sizeBytes: uploadFile.size,
+        },
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.error || "Upload failed");
+      }
+
+      setUploadSuccess("File uploaded successfully.");
+      setUploadFile(null);
+      setUploadTitle("");
+      setUploadType("");
+
+      await loadLibraryAssets();
+    } catch (error) {
+      setUploadError(error.message || "Failed to upload file");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -164,7 +246,6 @@ export default function MediaLibrary() {
     musicHistory,
     remixHistory,
     editorProjects,
-
     getImageIds,
     getVideoIds,
     getMusicIds,
@@ -182,6 +263,57 @@ export default function MediaLibrary() {
         </p>
       </div>
 
+      {/* Upload Controls */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-gray-200">Upload File</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <input
+            type="file"
+            onChange={handleSelectUploadFile}
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 md:col-span-2"
+          />
+          <input
+            value={uploadTitle}
+            onChange={(e) => setUploadTitle(e.target.value)}
+            placeholder="Asset title"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+          />
+          <select
+            value={uploadType}
+            onChange={(e) => setUploadType(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+          >
+            <option value="">Auto type</option>
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="audio">Audio</option>
+            <option value="project">Project</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleUpload}
+            disabled={!uploadFile || uploading}
+            className="px-3 py-2 rounded bg-emerald-600 disabled:opacity-50 text-sm"
+          >
+            {uploading ? "Uploading..." : "Upload to Library"}
+          </button>
+          {uploadFile && (
+            <span className="text-xs text-gray-400 truncate">
+              {uploadFile.name} ({Math.round(uploadFile.size / 1024)} KB)
+            </span>
+          )}
+        </div>
+
+        {uploadError && <p className="text-sm text-red-400">{uploadError}</p>}
+        {uploadSuccess && (
+          <p className="text-sm text-emerald-400">{uploadSuccess}</p>
+        )}
+      </div>
+
+      {/* Search / Filter */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 grid md:grid-cols-4 gap-2">
         <input
           value={libraryFilters.query || ""}
@@ -218,6 +350,7 @@ export default function MediaLibrary() {
         </button>
       </div>
 
+      {/* Assets */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {mergedAssets.map((asset) => (
           <div
@@ -298,6 +431,7 @@ export default function MediaLibrary() {
 
       {loading && <p className="text-sm text-gray-400">Loading library...</p>}
 
+      {/* Preview Dialog */}
       {previewAsset && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"

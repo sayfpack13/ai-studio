@@ -31,7 +31,9 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use("/uploads", express.static(join(__dirname, "data", "uploads")));
 
 // Load config
 const configPath = join(__dirname, "config.json");
@@ -582,7 +584,10 @@ async function processMusicJob({ payload, setProgress, isCanceled }) {
 
 async function processPipelineJob({ payload, setProgress }) {
   await setProgress(20, { stage: "pipeline_enqueued" });
-  await setProgress(100, { stage: "pipeline_tracking", type: payload?.pipelineType || "custom" });
+  await setProgress(100, {
+    stage: "pipeline_tracking",
+    type: payload?.pipelineType || "custom",
+  });
   return {
     success: true,
     pipelineType: payload?.pipelineType || "custom",

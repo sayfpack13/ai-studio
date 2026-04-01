@@ -9,9 +9,34 @@ const generateVideoId = () =>
 const VIDEO_SELECTED_MODEL_KEY = "blackbox_ai_video_selected_model";
 const VIDEO_SELECTED_PROVIDER_KEY = "blackbox_ai_video_selected_provider";
 
+const WAN_I2V_MODEL_ID = "chutes/Wan-AI/Wan2.2-I2V-14B-Fast";
+const WAN_DEFAULT_NEGATIVE_PROMPT =
+  "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走";
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function clamp(num, min, max) {
+  return Math.min(max, Math.max(min, num));
+}
+
 export default function VideoGenerator() {
-  const { isConfigured, saveVideo, providers, getVideo, addLibraryAsset } =
-    useApp();
+  const {
+    isConfigured,
+    saveVideo,
+    providers,
+    getVideo,
+    addLibraryAsset,
+    libraryAssets,
+    refreshLibraryAssets,
+  } = useApp();
+
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem(VIDEO_SELECTED_MODEL_KEY) || "",
@@ -23,22 +48,54 @@ export default function VideoGenerator() {
 
   const [duration, setDuration] = useState(5);
   const [fps, setFps] = useState(24);
+
+  // Wan I2V controls
+  const [wanImageData, setWanImageData] = useState("");
+  const [wanImageSourceType, setWanImageSourceType] = useState("none"); // none | upload | library
+  const [wanFrames, setWanFrames] = useState(81);
+  const [wanFps, setWanFps] = useState(16);
+  const [wanFast, setWanFast] = useState(true);
+  const [wanSeed, setWanSeed] = useState("");
+  const [wanResolution, setWanResolution] = useState("480p");
+  const [wanGuidanceScale, setWanGuidanceScale] = useState(1);
+  const [wanGuidanceScale2, setWanGuidanceScale2] = useState(1);
+  const [wanNegativePrompt, setWanNegativePrompt] = useState(
+    WAN_DEFAULT_NEGATIVE_PROMPT,
+  );
+  const [wanLibraryImageId, setWanLibraryImageId] = useState("");
+  const [wanUploadingImage, setWanUploadingImage] = useState(false);
+
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [configuredProviderFilter, setConfiguredProviderFilter] = useState(
     () => localStorage.getItem(VIDEO_SELECTED_PROVIDER_KEY) || "",
   );
+
   const searchInputRef = useRef(null);
   const abortControllerRef = useRef(null);
 
-  // Focus search input when modal opens
+  const selectedModelInfo = useMemo(
+    () => availableModels.find((m) => m.modelKey === selectedModel),
+    [availableModels, selectedModel],
+  );
+
+  const isWanI2VSelected = selectedModelInfo?.id === WAN_I2V_MODEL_ID;
+
+  const imageLibraryAssets = useMemo(
+    () => (libraryAssets || []).filter((asset) => asset.type === "image"),
+    [libraryAssets],
+  );
+
   useEffect(() => {
     if (showModelSelector && searchInputRef.current) {
       searchInputRef.current.focus();
     }
   }, [showModelSelector]);
 
-  // Load models on mount
+  useEffect(() => {
+    refreshLibraryAssets?.({ type: "image" });
+  }, [refreshLibraryAssets]);
+
   useEffect(() => {
     const loadVideoModels = async () => {
       try {
@@ -85,6 +142,7 @@ export default function VideoGenerator() {
         const firstGatewayModel = nextModels.find(
           (model) => model.provider === firstGateway,
         );
+
         setSelectedModel(
           persistedModelForGateway || firstGatewayModel?.modelKey || "",
         );
@@ -109,15 +167,14 @@ export default function VideoGenerator() {
           provider: configuredProviderFilter,
         });
         setAvailableModels(result.models || []);
-      } catch (error) {
-        console.error("Failed to load gateway video models:", error);
+      } catch (err) {
+        console.error("Failed to load gateway video models:", err);
       }
     };
 
     loadGatewayModels();
   }, [configuredProviderFilter]);
 
-  // Gateway providers from AppContext (these are the configured gateways)
   const gatewayProviders = useMemo(() => {
     return providers
       .filter((provider) => provider.configured)
@@ -127,17 +184,15 @@ export default function VideoGenerator() {
 
   const providerModels = useMemo(() => availableModels, [availableModels]);
 
-  // Filter models based on search and selected gateway
   const filteredModels = useMemo(() => {
     return providerModels.filter((model) => {
+      const search = modelSearch.toLowerCase();
       const matchesSearch =
         modelSearch === "" ||
-        model.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
-        model.provider.toLowerCase().includes(modelSearch.toLowerCase()) ||
-        (model.modelProvider || "")
-          .toLowerCase()
-          .includes(modelSearch.toLowerCase()) ||
-        model.id.toLowerCase().includes(modelSearch.toLowerCase());
+        model.name.toLowerCase().includes(search) ||
+        model.provider.toLowerCase().includes(search) ||
+        (model.modelProvider || "").toLowerCase().includes(search) ||
+        model.id.toLowerCase().includes(search);
 
       return matchesSearch;
     });
@@ -169,6 +224,75 @@ export default function VideoGenerator() {
     }
   }, [configuredProviderFilter]);
 
+  useEffect(() => {
+    if (!isWanI2VSelected) return;
+
+    setDuration(5);
+    setFps(24);
+  }, [isWanI2VSelected]);
+
+  useEffect(() => {
+    if (!wanLibraryImageId) return;
+    const selected = imageLibraryAssets.find((a) => a.id === wanLibraryImageId);
+    if (selected?.url) {
+      setWanImageData(selected.url);
+      setWanImageSourceType("library");
+    }
+  }, [wanLibraryImageId, imageLibraryAssets]);
+
+  const handleWanImageUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setWanUploadingImage(true);
+    setError("");
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setWanImageData(dataUrl);
+      setWanImageSourceType("upload");
+      setWanLibraryImageId("");
+    } catch (err) {
+      setError(err.message || "Failed to process image file");
+    } finally {
+      setWanUploadingImage(false);
+    }
+  };
+
+  const validateWanInputs = () => {
+    if (!prompt.trim() || prompt.trim().length < 3) {
+      return "Prompt must be at least 3 characters.";
+    }
+    if (!wanImageData) {
+      return "Please upload an image or select one from library.";
+    }
+    if (
+      !Number.isInteger(Number(wanFrames)) ||
+      wanFrames < 21 ||
+      wanFrames > 140
+    ) {
+      return "Frames must be an integer between 21 and 140.";
+    }
+    if (!Number.isInteger(Number(wanFps)) || wanFps < 16 || wanFps > 24) {
+      return "FPS must be an integer between 16 and 24.";
+    }
+    if (Number(wanGuidanceScale) < 0 || Number(wanGuidanceScale) > 10) {
+      return "Guidance Scale must be between 0 and 10.";
+    }
+    if (Number(wanGuidanceScale2) < 0 || Number(wanGuidanceScale2) > 10) {
+      return "Guidance Scale 2 must be between 0 and 10.";
+    }
+    if (wanResolution !== "480p" && wanResolution !== "720p") {
+      return "Resolution must be 480p or 720p.";
+    }
+    if (
+      wanSeed !== "" &&
+      (!Number.isInteger(Number(wanSeed)) || Number.isNaN(Number(wanSeed)))
+    ) {
+      return "Seed must be an integer or empty.";
+    }
+    return "";
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim() || loading) return;
 
@@ -176,53 +300,99 @@ export default function VideoGenerator() {
     setError("");
     setGeneratedVideo(null);
 
-    const selectedModelInfo = availableModels.find(
+    const selectedInfo = availableModels.find(
       (m) => m.modelKey === selectedModel,
     );
     const effectiveProvider =
-      configuredProviderFilter || selectedModelInfo?.provider;
+      configuredProviderFilter || selectedInfo?.provider;
 
-    if (!selectedModelInfo || !effectiveProvider) {
+    if (!selectedInfo || !effectiveProvider) {
       setError("Please select a gateway and model first");
       setLoading(false);
       return;
+    }
+
+    if (isWanI2VSelected) {
+      const validationError = validateWanInputs();
+      if (validationError) {
+        setError(validationError);
+        setLoading(false);
+        return;
+      }
     }
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const response = await generateVideo(prompt, selectedModelInfo?.id, {
+      const payload = {
         provider: effectiveProvider,
-        modelKey: selectedModelInfo?.modelKey,
-        duration,
-        fps,
+        modelKey: selectedInfo?.modelKey,
         signal: controller.signal,
-      });
+      };
+
+      if (isWanI2VSelected) {
+        Object.assign(payload, {
+          image: wanImageData,
+          wanFrames: clamp(Number(wanFrames), 21, 140),
+          wanFps: clamp(Number(wanFps), 16, 24),
+          wanFast: Boolean(wanFast),
+          wanSeed: wanSeed === "" ? null : Number(wanSeed),
+          wanResolution: wanResolution === "720p" ? "720p" : "480p",
+          wanGuidanceScale: clamp(Number(wanGuidanceScale), 0, 10),
+          wanGuidanceScale2: clamp(Number(wanGuidanceScale2), 0, 10),
+          wanNegativePrompt:
+            wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
+        });
+      } else {
+        Object.assign(payload, {
+          duration,
+          fps,
+        });
+      }
+
+      const response = await generateVideo(prompt, selectedInfo?.id, payload);
 
       if (response.data || response.video || response.url) {
         const videoData = {
           url: response.data?.[0]?.url || response.video || response.url,
           id: response.id,
+          raw: response.providerResponse || response.raw || null,
         };
         setGeneratedVideo(videoData);
 
-        // Save to history
         const videoId = generateVideoId();
         saveVideo(
           videoId,
           prompt,
           videoData,
-          selectedModelInfo?.id || selectedModel,
+          selectedInfo?.id || selectedModel,
         );
+
         await addLibraryAsset({
           type: "video",
           source: "video",
           title: prompt.slice(0, 80) || "Generated video",
           url: videoData.url,
           metadata: {
-            model: selectedModelInfo?.id || selectedModel,
+            model: selectedInfo?.id || selectedModel,
             provider: effectiveProvider,
+            ...(isWanI2VSelected
+              ? {
+                  wan: {
+                    frames: Number(wanFrames),
+                    fps: Number(wanFps),
+                    fast: Boolean(wanFast),
+                    seed: wanSeed === "" ? null : Number(wanSeed),
+                    resolution: wanResolution,
+                    guidance_scale: Number(wanGuidanceScale),
+                    guidance_scale_2: Number(wanGuidanceScale2),
+                    negative_prompt:
+                      wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
+                    imageSourceType: wanImageSourceType,
+                  },
+                }
+              : {}),
           },
         });
       } else if (response.error) {
@@ -243,19 +413,17 @@ export default function VideoGenerator() {
   };
 
   const handleDownload = () => {
-    if (generatedVideo?.url) {
-      const link = document.createElement("a");
-      link.href = generatedVideo.url;
-      link.download = `ai-video-${Date.now()}.mp4`;
-      link.click();
-    }
+    if (!generatedVideo?.url) return;
+    const link = document.createElement("a");
+    link.href = generatedVideo.url;
+    link.download = `ai-video-${Date.now()}.mp4`;
+    link.click();
   };
 
   const handleStopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    if (!abortControllerRef.current) return;
+    abortControllerRef.current.abort();
+    abortControllerRef.current = null;
   };
 
   const handleMusicToEditorPipeline = async () => {
@@ -304,7 +472,6 @@ export default function VideoGenerator() {
 
   useEffect(() => {
     window.addEventListener("videoHistorySelected", handleVideoHistorySelected);
-
     return () => {
       window.removeEventListener(
         "videoHistorySelected",
@@ -313,19 +480,19 @@ export default function VideoGenerator() {
     };
   }, [handleVideoHistorySelected]);
 
-  const selectedModelInfo = availableModels.find(
-    (m) => m.modelKey === selectedModel,
-  );
-
   return (
     <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden">
-      {/* Header */}
       <div className="p-4 border-b border-gray-700 flex justify-between items-start">
         <div>
           <h2 className="text-xl font-semibold text-white">Video Generation</h2>
           <p className="text-sm text-gray-400">
             Model: {selectedModelInfo?.name || "Select a model"}
           </p>
+          {isWanI2VSelected && (
+            <p className="text-xs text-indigo-300 mt-1">
+              Wan 2.2 I2V mode: image-to-video with advanced controls
+            </p>
+          )}
         </div>
         <button
           onClick={() => setShowModelSelector(true)}
@@ -335,7 +502,6 @@ export default function VideoGenerator() {
         </button>
       </div>
 
-      {/* Model Selector Dropdown */}
       {showModelSelector && (
         <div
           className="absolute inset-0 bg-black/50 flex items-center justify-center z-50"
@@ -356,7 +522,6 @@ export default function VideoGenerator() {
               </button>
             </div>
 
-            {/* Search Input */}
             <div className="mb-4">
               <div className="relative">
                 <svg
@@ -391,7 +556,6 @@ export default function VideoGenerator() {
               </div>
             </div>
 
-            {/* Provider Filter */}
             <div className="mb-4 flex flex-wrap gap-2">
               {gatewayProviders.map((provider) => (
                 <button
@@ -411,13 +575,11 @@ export default function VideoGenerator() {
               ))}
             </div>
 
-            {/* Results count */}
             <p className="text-sm text-gray-400 mb-3">
               {filteredModels.length} model
               {filteredModels.length !== 1 ? "s" : ""} found
             </p>
 
-            {/* Model List */}
             <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
               {filteredModels.length > 0 ? (
                 filteredModels.map((model) => (
@@ -450,9 +612,7 @@ export default function VideoGenerator() {
                 <div className="text-center py-8 text-gray-400">
                   <p>No models found matching "{modelSearch}"</p>
                   <button
-                    onClick={() => {
-                      setModelSearch("");
-                    }}
+                    onClick={() => setModelSearch("")}
                     className="mt-2 text-indigo-400 hover:text-indigo-300"
                   >
                     Clear filters
@@ -466,7 +626,6 @@ export default function VideoGenerator() {
 
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-4xl mx-auto space-y-4">
-          {/* Prompt */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Prompt
@@ -474,54 +633,247 @@ export default function VideoGenerator() {
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the video you want to generate..."
+              placeholder={
+                isWanI2VSelected
+                  ? "Describe motion/style for your input image..."
+                  : "Describe the video you want to generate..."
+              }
               disabled={!isConfigured}
               className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px]"
             />
           </div>
 
-          {/* Advanced Options */}
-          <div>
-            <div className="mt-3 space-y-3 p-3 bg-gray-800 rounded-lg">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-400 mb-1">
-                    Duration (seconds)
+          {isWanI2VSelected ? (
+            <div className="space-y-3 p-3 bg-gray-800 rounded-lg">
+              <h3 className="text-sm font-semibold text-gray-200">
+                Wan 2.2 I2V Controls
+              </h3>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-300">
+                    Image Source
+                  </label>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => {
+                        setWanImageSourceType("upload");
+                        setWanLibraryImageId("");
+                      }}
+                      className={`px-3 py-1.5 rounded text-sm ${
+                        wanImageSourceType === "upload"
+                          ? "bg-indigo-600 text-white"
+                          : "bg-gray-700 text-gray-200"
+                      }`}
+                    >
+                      Upload
+                    </button>
+                    <button
+                      onClick={() => setWanImageSourceType("library")}
+                      className={`px-3 py-1.5 rounded text-sm ${
+                        wanImageSourceType === "library"
+                          ? "bg-indigo-600 text-white"
+                          : "bg-gray-700 text-gray-200"
+                      }`}
+                    >
+                      From Library
+                    </button>
+                  </div>
+
+                  {wanImageSourceType === "upload" && (
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleWanImageUpload}
+                        className="w-full text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white"
+                      />
+                      {wanUploadingImage && (
+                        <p className="text-xs text-gray-400">
+                          Processing image...
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {wanImageSourceType === "library" && (
+                    <select
+                      value={wanLibraryImageId}
+                      onChange={(e) => setWanLibraryImageId(e.target.value)}
+                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Select image from library...</option>
+                      {imageLibraryAssets.map((asset) => (
+                        <option key={asset.id} value={asset.id}>
+                          {asset.title}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {wanImageData && (
+                    <div className="rounded border border-gray-700 overflow-hidden">
+                      <img
+                        src={wanImageData}
+                        alt="Wan input preview"
+                        className="w-full h-40 object-cover"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-300">
+                    Resolution
+                  </label>
+                  <select
+                    value={wanResolution}
+                    onChange={(e) => setWanResolution(e.target.value)}
+                    className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="480p">480p</option>
+                    <option value="720p">720p</option>
+                  </select>
+
+                  <label className="block text-sm text-gray-300 mt-2">
+                    Seed (optional)
                   </label>
                   <input
                     type="number"
-                    value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
-                    min="1"
-                    max="60"
+                    value={wanSeed}
+                    onChange={(e) => setWanSeed(e.target.value)}
+                    placeholder="null/random"
                     className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+
+                  <label className="inline-flex items-center gap-2 mt-2 text-sm text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={wanFast}
+                      onChange={(e) => setWanFast(e.target.checked)}
+                    />
+                    Fast mode
+                  </label>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-400 mb-1">
-                    FPS
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Frames (21-140): {wanFrames}
                   </label>
                   <input
-                    type="number"
-                    value={fps}
-                    onChange={(e) => setFps(Number(e.target.value))}
-                    min="12"
-                    max="60"
-                    className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    type="range"
+                    min="21"
+                    max="140"
+                    value={wanFrames}
+                    onChange={(e) => setWanFrames(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">
+                    FPS (16-24): {wanFps}
+                  </label>
+                  <input
+                    type="range"
+                    min="16"
+                    max="24"
+                    value={wanFps}
+                    onChange={(e) => setWanFps(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Guidance Scale (0-10): {wanGuidanceScale}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value={wanGuidanceScale}
+                    onChange={(e) =>
+                      setWanGuidanceScale(Number(e.target.value))
+                    }
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Guidance Scale 2 (0-10): {wanGuidanceScale2}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value={wanGuidanceScale2}
+                    onChange={(e) =>
+                      setWanGuidanceScale2(Number(e.target.value))
+                    }
+                    className="w-full"
                   />
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Error */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">
+                  Negative Prompt
+                </label>
+                <textarea
+                  value={wanNegativePrompt}
+                  onChange={(e) => setWanNegativePrompt(e.target.value)}
+                  className="w-full bg-gray-700 text-white p-2 rounded resize-y min-h-[90px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="mt-3 space-y-3 p-3 bg-gray-800 rounded-lg">
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      Duration (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                      min="1"
+                      max="60"
+                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      FPS
+                    </label>
+                    <input
+                      type="number"
+                      value={fps}
+                      onChange={(e) => setFps(Number(e.target.value))}
+                      min="12"
+                      max="60"
+                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="p-3 bg-red-900/50 text-red-200 rounded-lg">
               {error}
             </div>
           )}
 
-          {/* Generated Video */}
           {generatedVideo && (
             <div className="space-y-3">
               <div className="relative rounded-lg overflow-hidden bg-gray-800">
@@ -539,22 +891,23 @@ export default function VideoGenerator() {
                   {generatedVideo.id}
                 </p>
               )}
-              <button
-                onClick={handleDownload}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-              >
-                Download Video
-              </button>
-              <button
-                onClick={handleMusicToEditorPipeline}
-                className="ml-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-              >
-                Link Music Pipeline
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleDownload}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                >
+                  Download Video
+                </button>
+                <button
+                  onClick={handleMusicToEditorPipeline}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                >
+                  Link Music Pipeline
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Loading State */}
           {loading && (
             <div className="text-center py-8">
               <div className="animate-spin w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -565,7 +918,6 @@ export default function VideoGenerator() {
             </div>
           )}
 
-          {/* Not Configured */}
           {!isConfigured && (
             <div className="text-center py-8">
               <p className="text-yellow-400 mb-2">API not configured</p>
@@ -577,11 +929,14 @@ export default function VideoGenerator() {
         </div>
       </div>
 
-      {/* Generate Button */}
       <div className="p-4 border-t border-gray-700">
         <button
           onClick={loading ? handleStopGeneration : handleGenerate}
-          disabled={!isConfigured || (!loading && !prompt.trim())}
+          disabled={
+            !isConfigured ||
+            (!loading &&
+              (!prompt.trim() || (isWanI2VSelected && !wanImageData)))
+          }
           className={`w-full px-6 py-3 text-white rounded-lg transition-colors disabled:opacity-50 font-medium ${
             loading
               ? "bg-red-600 hover:bg-red-700 disabled:hover:bg-red-600"

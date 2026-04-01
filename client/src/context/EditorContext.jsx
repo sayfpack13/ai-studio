@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState, useEffect, useRef } from "react";
 
 const EditorContext = createContext(null);
 
@@ -23,6 +23,38 @@ export function EditorProvider({ children }) {
     { id: "preset_retro", name: "Retro Tape", settings: { grain: 0.5, desaturate: 0.2 } },
   ]);
 
+  const lastTimeRef = useRef(Date.now());
+  const requestRef = useRef(null);
+
+  useEffect(() => {
+    const playLoop = () => {
+      const now = Date.now();
+      const dt = (now - lastTimeRef.current) / 1000;
+      lastTimeRef.current = now;
+
+      setPlaybackState((prev) => {
+        let nextTime = prev.currentTime + dt;
+        if (nextTime >= project.duration) {
+          nextTime = 0; // Loop
+        }
+        return { ...prev, currentTime: nextTime };
+      });
+
+      requestRef.current = requestAnimationFrame(playLoop);
+    };
+
+    if (playbackState.playing) {
+      lastTimeRef.current = Date.now();
+      requestRef.current = requestAnimationFrame(playLoop);
+    } else {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    }
+
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [playbackState.playing, project.duration]);
+
   const addTrack = (type) => {
     setTracks((prev) => [
       ...prev,
@@ -34,10 +66,36 @@ export function EditorProvider({ children }) {
     setTracks((prev) =>
       prev.map((track) =>
         track.id === trackId
-          ? { ...track, clips: [...track.clips, { id: `clip_${Date.now()}`, ...clip }] }
+          ? {
+              ...track,
+              clips: [
+                ...track.clips,
+                {
+                  id: `clip_${Date.now()}`,
+                  scale: 1,
+                  x: 0,
+                  y: 0,
+                  rotation: 0,
+                  opacity: 1,
+                  ...clip,
+                },
+              ],
+            }
           : track,
       ),
     );
+  };
+
+  const updateClip = (clipId, updates) => {
+    setTracks((prev) =>
+      prev.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) =>
+          clip.id === clipId ? { ...clip, ...updates } : clip
+        ),
+      }))
+    );
+    setSelectedClip((prev) => (prev && prev.id === clipId ? { ...prev, ...updates } : prev));
   };
 
   const addEffect = (trackId, effect) => {
@@ -72,6 +130,7 @@ export function EditorProvider({ children }) {
       setHistory,
       addTrack,
       addClip,
+      updateClip,
       addEffect,
       addKeyframe,
       templates,

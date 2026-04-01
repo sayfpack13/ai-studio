@@ -5,8 +5,6 @@ import libraryService from "../services/library-service.js";
 const router = express.Router();
 router.use(requireApiKey);
 
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB
-
 function sanitizeName(name = "") {
   return String(name || "")
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
@@ -144,14 +142,6 @@ router.post("/upload", async (req, res) => {
 
     if (!buffer || buffer.length === 0) {
       return res.status(400).json({ error: "Decoded upload is empty" });
-    }
-
-    if (buffer.length > MAX_UPLOAD_BYTES) {
-      return res.status(413).json({
-        error: `File too large. Max ${Math.floor(
-          MAX_UPLOAD_BYTES / (1024 * 1024),
-        )}MB`,
-      });
     }
 
     const resolvedMime =

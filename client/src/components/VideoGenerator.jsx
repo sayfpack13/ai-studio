@@ -12,7 +12,7 @@ const VIDEO_SELECTED_PROVIDER_KEY = "blackbox_ai_video_selected_provider";
 
 const WAN_I2V_MODEL_ID = "chutes/Wan-AI/Wan2.2-I2V-14B-Fast";
 const WAN_DEFAULT_NEGATIVE_PROMPT =
-  "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走";
+  "";
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -99,6 +99,8 @@ export default function VideoGenerator() {
   }, [refreshLibraryAssets]);
 
   useEffect(() => {
+    if (providers.length === 0) return;
+
     const loadVideoModels = async () => {
       try {
         const result = await getModels({ category: "video", provider: "all" });
@@ -115,34 +117,37 @@ export default function VideoGenerator() {
           VIDEO_SELECTED_MODEL_KEY,
         );
 
+        const isProviderMatch = (model, providerId) => 
+          model.provider === providerId || model.configuredProvider === providerId;
+
         const persistedProviderValid =
           persistedProvider &&
           configuredGateways.includes(persistedProvider) &&
-          nextModels.some((model) => model.provider === persistedProvider);
+          nextModels.some((model) => isProviderMatch(model, persistedProvider));
 
         const firstGateway =
           (persistedProviderValid
             ? persistedProvider
             : configuredGateways.find((gatewayId) =>
-                nextModels.some((model) => model.provider === gatewayId),
+                nextModels.some((model) => isProviderMatch(model, gatewayId)),
               )) ||
-          nextModels[0]?.provider ||
+          nextModels[0]?.configuredProvider || nextModels[0]?.provider ||
           "";
 
         setConfiguredProviderFilter(firstGateway);
 
         const persistedModelForGateway =
           persistedModelKey &&
-          nextModels.some(
-            (model) =>
-              model.provider === firstGateway &&
-              model.modelKey === persistedModelKey,
-          )
+            nextModels.some(
+              (model) =>
+                isProviderMatch(model, firstGateway) &&
+                model.modelKey === persistedModelKey,
+            )
             ? persistedModelKey
             : "";
 
         const firstGatewayModel = nextModels.find(
-          (model) => model.provider === firstGateway,
+          (model) => isProviderMatch(model, firstGateway),
         );
 
         setSelectedModel(
@@ -202,7 +207,6 @@ export default function VideoGenerator() {
 
   useEffect(() => {
     if (!configuredProviderFilter || !providerModels.length) {
-      setSelectedModel("");
       return;
     }
 
@@ -389,19 +393,19 @@ export default function VideoGenerator() {
             provider: effectiveProvider,
             ...(isWanI2VSelected
               ? {
-                  wan: {
-                    frames: Number(wanFrames),
-                    fps: Number(wanFps),
-                    fast: Boolean(wanFast),
-                    seed: wanSeed === "" ? null : Number(wanSeed),
-                    resolution: wanResolution,
-                    guidance_scale: Number(wanGuidanceScale),
-                    guidance_scale_2: Number(wanGuidanceScale2),
-                    negative_prompt:
-                      wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
-                    imageSourceType: wanImageSourceType,
-                  },
-                }
+                wan: {
+                  frames: Number(wanFrames),
+                  fps: Number(wanFps),
+                  fast: Boolean(wanFast),
+                  seed: wanSeed === "" ? null : Number(wanSeed),
+                  resolution: wanResolution,
+                  guidance_scale: Number(wanGuidanceScale),
+                  guidance_scale_2: Number(wanGuidanceScale2),
+                  negative_prompt:
+                    wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
+                  imageSourceType: wanImageSourceType,
+                },
+              }
               : {}),
           },
         });
@@ -574,11 +578,10 @@ export default function VideoGenerator() {
                     setConfiguredProviderFilter(provider);
                     localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, provider);
                   }}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    configuredProviderFilter === provider
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${configuredProviderFilter === provider
                       ? "bg-indigo-600 text-white"
                       : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                  }`}
+                    }`}
                 >
                   {providers.find((p) => p.id === provider)?.name || provider}
                 </button>
@@ -596,11 +599,10 @@ export default function VideoGenerator() {
                   <button
                     key={model.uniqueKey || model.id}
                     onClick={() => handleModelSelect(model)}
-                    className={`p-3 rounded-lg text-left transition-colors ${
-                      selectedModel === model.modelKey
+                    className={`p-3 rounded-lg text-left transition-colors ${selectedModel === model.modelKey
                         ? "bg-indigo-600 text-white"
                         : "bg-gray-700 hover:bg-gray-600 text-gray-200"
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-center">
                       <span className="font-medium">{model.name}</span>
@@ -671,21 +673,19 @@ export default function VideoGenerator() {
                         setWanImageSourceType("upload");
                         setWanLibraryImageId("");
                       }}
-                      className={`px-3 py-1.5 rounded text-sm ${
-                        wanImageSourceType === "upload"
+                      className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "upload"
                           ? "bg-indigo-600 text-white"
                           : "bg-gray-700 text-gray-200"
-                      }`}
+                        }`}
                     >
                       Upload
                     </button>
                     <button
                       onClick={() => setWanImageSourceType("library")}
-                      className={`px-3 py-1.5 rounded text-sm ${
-                        wanImageSourceType === "library"
+                      className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "library"
                           ? "bg-indigo-600 text-white"
                           : "bg-gray-700 text-gray-200"
-                      }`}
+                        }`}
                     >
                       From Library
                     </button>
@@ -956,11 +956,10 @@ export default function VideoGenerator() {
             (!loading &&
               (!prompt.trim() || (isWanI2VSelected && !wanImageData)))
           }
-          className={`w-full px-6 py-3 text-white rounded-lg transition-colors disabled:opacity-50 font-medium ${
-            loading
+          className={`w-full px-6 py-3 text-white rounded-lg transition-colors disabled:opacity-50 font-medium ${loading
               ? "bg-red-600 hover:bg-red-700 disabled:hover:bg-red-600"
               : "bg-indigo-600 hover:bg-indigo-700 disabled:hover:bg-indigo-600"
-          }`}
+            }`}
         >
           {loading ? "Stop Generation" : "Generate Video"}
         </button>

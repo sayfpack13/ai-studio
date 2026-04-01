@@ -11,7 +11,7 @@ const WAN_I2V_MODEL_ID = "chutes/Wan-AI/Wan2.2-I2V-14B-Fast";
 const WAN_I2V_ENDPOINT =
   "https://chutes-wan-2-2-i2v-14b-fast.chutes.ai/generate";
 const WAN_DEFAULT_NEGATIVE_PROMPT =
-  "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走";
+  "";
 
 function toNumberOrNull(value) {
   if (value == null || value === "") return null;
@@ -165,8 +165,8 @@ function buildWanI2VArgs(body) {
   );
   const negativePromptInput = ensureString(
     body.wanNegativePrompt ??
-      body.negative_prompt ??
-      WAN_DEFAULT_NEGATIVE_PROMPT,
+    body.negative_prompt ??
+    WAN_DEFAULT_NEGATIVE_PROMPT,
   );
 
   const fps = clamp(fpsInput ?? 16, 16, 24);

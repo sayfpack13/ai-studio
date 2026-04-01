@@ -36,6 +36,8 @@ export default function MusicGenerator() {
   }, [showModelSelector]);
 
   useEffect(() => {
+    if (providers.length === 0) return;
+
     const loadMusicModels = async () => {
       try {
         const result = await getModels({ category: "music", provider: "all" });
@@ -52,18 +54,21 @@ export default function MusicGenerator() {
           MUSIC_SELECTED_MODEL_KEY,
         );
 
+        const isProviderMatch = (model, providerId) => 
+          model.provider === providerId || model.configuredProvider === providerId;
+
         const persistedProviderValid =
           persistedProvider &&
           configuredGateways.includes(persistedProvider) &&
-          nextModels.some((model) => model.provider === persistedProvider);
+          nextModels.some((model) => isProviderMatch(model, persistedProvider));
 
         const firstGateway =
           (persistedProviderValid
             ? persistedProvider
             : configuredGateways.find((gatewayId) =>
-                nextModels.some((model) => model.provider === gatewayId),
+                nextModels.some((model) => isProviderMatch(model, gatewayId)),
               )) ||
-          nextModels[0]?.provider ||
+          nextModels[0]?.configuredProvider || nextModels[0]?.provider ||
           "";
 
         setConfiguredProviderFilter(firstGateway);
@@ -72,14 +77,14 @@ export default function MusicGenerator() {
           persistedModelKey &&
           nextModels.some(
             (model) =>
-              model.provider === firstGateway &&
+              isProviderMatch(model, firstGateway) &&
               model.modelKey === persistedModelKey,
           )
             ? persistedModelKey
             : "";
 
         const firstGatewayModel = nextModels.find(
-          (model) => model.provider === firstGateway,
+          (model) => isProviderMatch(model, firstGateway),
         );
         setSelectedModel(
           persistedModelForGateway || firstGatewayModel?.modelKey || "",
@@ -139,7 +144,6 @@ export default function MusicGenerator() {
 
   useEffect(() => {
     if (!configuredProviderFilter || !providerModels.length) {
-      setSelectedModel("");
       return;
     }
 

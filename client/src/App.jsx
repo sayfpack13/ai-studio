@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import Sidebar from "./components/Sidebar";
@@ -17,7 +17,25 @@ import { getToken } from "./services/api";
 function AppContent() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!getToken());
-  const [historySidebarOpen, setHistorySidebarOpen] = useState(true);
+  const [historySidebarOpen, setHistorySidebarOpen] = useState(() => {
+    try {
+      const stored = localStorage.getItem("blackbox_ai_history_sidebar_open");
+      return stored ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "blackbox_ai_history_sidebar_open",
+        JSON.stringify(historySidebarOpen)
+      );
+    } catch (error) {
+      console.error("Failed to save history sidebar state", error);
+    }
+  }, [historySidebarOpen]);
   const { sidebarOpen, toggleSidebar } = useApp();
 
   const handleAuthChange = (auth) => {

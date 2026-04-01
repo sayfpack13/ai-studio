@@ -58,7 +58,6 @@ export default function AssetPickerDialog({
 
   const handleAssetClick = (asset) => {
     setSelectedAssetId(asset.id);
-    setPreviewAsset(asset);
   };
 
   const formatDate = (timestamp) => {

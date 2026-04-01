@@ -1,0 +1,5 @@
+{
+  "watch": ["*.js", "routes/*.js", "middleware/*.js", "utils/*.js"],
+  "ignore": ["data/*", "config.json", "config.example.json", "*.txt"],
+  "ext": "js"
+}

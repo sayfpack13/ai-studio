@@ -1,0 +1,31 @@
+{
+  "providers": {
+    "blackbox": {
+      "id": "blackbox",
+      "name": "Blackbox AI",
+      "apiBaseUrl": "https://api.blackbox.ai/v1",
+      "apiKey": "",
+      "enabled": true,
+      "modelsFile": "blackbox"
+    },
+    "chutes": {
+      "id": "chutes",
+      "name": "Chutes AI",
+      "apiBaseUrl": "https://chutes.ai/api/v1",
+      "apiKey": "",
+      "enabled": true,
+      "modelsFile": "chutes"
+    },
+    "nanogpt": {
+      "id": "nanogpt",
+      "name": "NanoGPT",
+      "apiBaseUrl": "https://api.nanogpt.com/v1",
+      "apiKey": "",
+      "enabled": true,
+      "modelsFile": "nanogpt"
+    }
+  },
+  "defaultProvider": "blackbox",
+  "defaultModel": "blackboxai/z-ai/glm-5",
+  "adminPasswordHash": ""
+}

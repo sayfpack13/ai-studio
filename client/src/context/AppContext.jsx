@@ -1,0 +1,526 @@
+/* eslint-disable react-refresh/only-export-components */
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import {
+  checkApiStatus,
+  listLibraryAssets,
+  createLibraryAsset,
+  updateLibraryAsset,
+  deleteLibraryAsset,
+  searchLibraryAssets,
+  uploadLibraryFile,
+} from "../services/api";
+
+const AppContext = createContext();
+
+// LocalStorage keys
+const STREAM_ENABLED_KEY = "blackbox_ai_stream_enabled";
+const SIDEBAR_OPEN_KEY = "blackbox_ai_sidebar_open";
+const CHAT_HISTORY_KEY = "blackbox_ai_chat_history";
+const IMAGE_HISTORY_KEY = "blackbox_ai_image_history";
+const VIDEO_HISTORY_KEY = "blackbox_ai_video_history";
+const MUSIC_HISTORY_KEY = "blackbox_ai_music_history";
+const REMIX_HISTORY_KEY = "blackbox_ai_remix_history";
+const EDITOR_PROJECTS_KEY = "blackbox_ai_editor_projects";
+const LIBRARY_FILTERS_KEY = "blackbox_ai_library_filters";
+
+// Helper to load from localStorage
+const loadFromStorage = (key, defaultValue) => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
+// Helper to save to localStorage
+const saveToStorage = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error("Failed to save to localStorage:", error);
+  }
+};
+
+export function AppProvider({ children }) {
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [defaultModel, setDefaultModel] = useState("");
+  const [providers, setProviders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [streamEnabled, setStreamEnabled] = useState(() =>
+    loadFromStorage(STREAM_ENABLED_KEY, false),
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    loadFromStorage(SIDEBAR_OPEN_KEY, true),
+  );
+  const [chatHistory, setChatHistory] = useState(() =>
+    loadFromStorage(CHAT_HISTORY_KEY, {}),
+  );
+  const [imageHistory, setImageHistory] = useState(() =>
+    loadFromStorage(IMAGE_HISTORY_KEY, {}),
+  );
+  const [videoHistory, setVideoHistory] = useState(() =>
+    loadFromStorage(VIDEO_HISTORY_KEY, {}),
+  );
+  const [musicHistory, setMusicHistory] = useState(() =>
+    loadFromStorage(MUSIC_HISTORY_KEY, {}),
+  );
+  const [remixHistory, setRemixHistory] = useState(() =>
+    loadFromStorage(REMIX_HISTORY_KEY, {}),
+  );
+  const [editorProjects, setEditorProjects] = useState(() =>
+    loadFromStorage(EDITOR_PROJECTS_KEY, {}),
+  );
+  const [libraryAssets, setLibraryAssets] = useState([]);
+  const [libraryFilters, setLibraryFilters] = useState(() =>
+    loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "" }),
+  );
+
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  // Persist stream toggle
+  useEffect(() => {
+    saveToStorage(STREAM_ENABLED_KEY, streamEnabled);
+  }, [streamEnabled]);
+
+  // Persist sidebar state
+  useEffect(() => {
+    saveToStorage(SIDEBAR_OPEN_KEY, sidebarOpen);
+  }, [sidebarOpen]);
+
+  // Persist chat history
+  useEffect(() => {
+    saveToStorage(CHAT_HISTORY_KEY, chatHistory);
+  }, [chatHistory]);
+
+  // Persist image history
+  useEffect(() => {
+    saveToStorage(IMAGE_HISTORY_KEY, imageHistory);
+  }, [imageHistory]);
+
+  // Persist video history
+  useEffect(() => {
+    saveToStorage(VIDEO_HISTORY_KEY, videoHistory);
+  }, [videoHistory]);
+
+  // Persist music history
+  useEffect(() => {
+    saveToStorage(MUSIC_HISTORY_KEY, musicHistory);
+  }, [musicHistory]);
+
+  useEffect(() => {
+    saveToStorage(REMIX_HISTORY_KEY, remixHistory);
+  }, [remixHistory]);
+
+  useEffect(() => {
+    saveToStorage(EDITOR_PROJECTS_KEY, editorProjects);
+  }, [editorProjects]);
+  useEffect(() => {
+    saveToStorage(LIBRARY_FILTERS_KEY, libraryFilters);
+  }, [libraryFilters]);
+
+  const checkStatus = async () => {
+    try {
+      const status = await checkApiStatus();
+      setIsConfigured(status.configured);
+      setDefaultModel(status.defaultModel || "blackboxai/z-ai/glm-5");
+      setProviders(status.providers || []);
+    } catch (error) {
+      console.error("Status check failed:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshLibraryAssets = useCallback(async (filters = {}) => {
+    const response = await listLibraryAssets(filters);
+    const assets = response?.assets || [];
+    setLibraryAssets(assets);
+    return assets;
+  }, []);
+
+  const addLibraryAsset = useCallback(async (asset) => {
+    const response = await createLibraryAsset(asset);
+    if (response?.asset) {
+      setLibraryAssets((prev) => [response.asset, ...prev]);
+    }
+    return response;
+  }, []);
+
+  const patchLibraryAsset = useCallback(async (assetId, patch) => {
+    const response = await updateLibraryAsset(assetId, patch);
+    if (response?.asset) {
+      setLibraryAssets((prev) =>
+        prev.map((item) => (item.id === assetId ? response.asset : item)),
+      );
+    }
+    return response;
+  }, []);
+
+  const removeLibraryAsset = useCallback(async (assetId) => {
+    const response = await deleteLibraryAsset(assetId);
+    if (response?.success) {
+      setLibraryAssets((prev) => prev.filter((item) => item.id !== assetId));
+    }
+    return response;
+  }, []);
+
+  const runLibrarySearch = useCallback(async (queryPayload) => {
+    const response = await searchLibraryAssets(queryPayload);
+    const assets = response?.assets || [];
+    setLibraryAssets(assets);
+    return assets;
+  }, []);
+
+  const uploadLibraryAssetFile = useCallback(
+    async ({
+      fileName,
+      fileBase64,
+      mimeType,
+      title,
+      source = "upload",
+      tags = [],
+      folderId = null,
+      metadata = {},
+      type,
+    }) => {
+      const response = await uploadLibraryFile({
+        fileName,
+        fileBase64,
+        mimeType,
+        title,
+        source,
+        tags,
+        folderId,
+        metadata,
+        type,
+      });
+
+      if (response?.asset) {
+        setLibraryAssets((prev) => [response.asset, ...prev]);
+      }
+
+      return response;
+    },
+    [],
+  );
+
+  // Toggle stream setting
+  const toggleStream = useCallback(() => {
+    setStreamEnabled((prev) => !prev);
+  }, []);
+
+  // Toggle sidebar
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
+
+  // ==================== CHAT HISTORY ====================
+
+  const saveChatMessages = useCallback((chatId, messages) => {
+    setChatHistory((prev) => ({
+      ...prev,
+      [chatId]: {
+        messages,
+        lastUpdated: Date.now(),
+      },
+    }));
+  }, []);
+
+  const getChatMessages = useCallback(
+    (chatId) => {
+      return chatHistory[chatId]?.messages || [];
+    },
+    [chatHistory],
+  );
+
+  const deleteChat = useCallback((chatId) => {
+    setChatHistory((prev) => {
+      const newHistory = { ...prev };
+      delete newHistory[chatId];
+      return newHistory;
+    });
+  }, []);
+
+  const clearAllChats = useCallback(() => {
+    setChatHistory({});
+  }, []);
+
+  const getChatIds = useCallback(() => {
+    return Object.keys(chatHistory).sort(
+      (a, b) =>
+        (chatHistory[b]?.lastUpdated || 0) - (chatHistory[a]?.lastUpdated || 0),
+    );
+  }, [chatHistory]);
+
+  // ==================== IMAGE HISTORY ====================
+
+  const saveImage = useCallback(
+    (imageId, prompt, result, model, metadata = null) => {
+      setImageHistory((prev) => ({
+        ...prev,
+        [imageId]: {
+          prompt,
+          result,
+          model,
+          ...(metadata && typeof metadata === "object" ? { metadata } : {}),
+          lastUpdated: Date.now(),
+        },
+      }));
+    },
+    [],
+  );
+
+  const getImage = useCallback(
+    (imageId) => {
+      return imageHistory[imageId];
+    },
+    [imageHistory],
+  );
+
+  const deleteImage = useCallback((imageId) => {
+    setImageHistory((prev) => {
+      const newHistory = { ...prev };
+      delete newHistory[imageId];
+      return newHistory;
+    });
+  }, []);
+
+  const clearAllImages = useCallback(() => {
+    setImageHistory({});
+  }, []);
+
+  const getImageIds = useCallback(() => {
+    return Object.keys(imageHistory).sort(
+      (a, b) =>
+        (imageHistory[b]?.lastUpdated || 0) -
+        (imageHistory[a]?.lastUpdated || 0),
+    );
+  }, [imageHistory]);
+
+  // ==================== VIDEO HISTORY ====================
+
+  const saveVideo = useCallback((videoId, prompt, result, model) => {
+    setVideoHistory((prev) => ({
+      ...prev,
+      [videoId]: {
+        prompt,
+        result,
+        model,
+        lastUpdated: Date.now(),
+      },
+    }));
+  }, []);
+
+  const getVideo = useCallback(
+    (videoId) => {
+      return videoHistory[videoId];
+    },
+    [videoHistory],
+  );
+
+  const deleteVideo = useCallback((videoId) => {
+    setVideoHistory((prev) => {
+      const newHistory = { ...prev };
+      delete newHistory[videoId];
+      return newHistory;
+    });
+  }, []);
+
+  const clearAllVideos = useCallback(() => {
+    setVideoHistory({});
+  }, []);
+
+  const getVideoIds = useCallback(() => {
+    return Object.keys(videoHistory).sort(
+      (a, b) =>
+        (videoHistory[b]?.lastUpdated || 0) -
+        (videoHistory[a]?.lastUpdated || 0),
+    );
+  }, [videoHistory]);
+
+  // ==================== MUSIC HISTORY ====================
+
+  const saveMusic = useCallback((musicId, prompt, result, model) => {
+    setMusicHistory((prev) => ({
+      ...prev,
+      [musicId]: {
+        prompt,
+        result,
+        model,
+        lastUpdated: Date.now(),
+      },
+    }));
+  }, []);
+
+  const getMusic = useCallback(
+    (musicId) => {
+      return musicHistory[musicId];
+    },
+    [musicHistory],
+  );
+
+  const deleteMusic = useCallback((musicId) => {
+    setMusicHistory((prev) => {
+      const newHistory = { ...prev };
+      delete newHistory[musicId];
+      return newHistory;
+    });
+  }, []);
+
+  const clearAllMusic = useCallback(() => {
+    setMusicHistory({});
+  }, []);
+
+  const getMusicIds = useCallback(() => {
+    return Object.keys(musicHistory).sort(
+      (a, b) =>
+        (musicHistory[b]?.lastUpdated || 0) -
+        (musicHistory[a]?.lastUpdated || 0),
+    );
+  }, [musicHistory]);
+
+  const saveRemix = useCallback(
+    (remixId, prompt, result, model, metadata = {}) => {
+      setRemixHistory((prev) => ({
+        ...prev,
+        [remixId]: {
+          prompt,
+          result,
+          model,
+          metadata,
+          lastUpdated: Date.now(),
+        },
+      }));
+    },
+    [],
+  );
+
+  const deleteRemix = useCallback((remixId) => {
+    setRemixHistory((prev) => {
+      const next = { ...prev };
+      delete next[remixId];
+      return next;
+    });
+  }, []);
+
+  const clearAllRemixes = useCallback(() => {
+    setRemixHistory({});
+  }, []);
+
+  const getRemixIds = useCallback(() => {
+    return Object.keys(remixHistory).sort(
+      (a, b) =>
+        (remixHistory[b]?.lastUpdated || 0) -
+        (remixHistory[a]?.lastUpdated || 0),
+    );
+  }, [remixHistory]);
+
+  const saveEditorProject = useCallback((projectId, project) => {
+    setEditorProjects((prev) => ({
+      ...prev,
+      [projectId]: {
+        ...project,
+        lastUpdated: Date.now(),
+      },
+    }));
+  }, []);
+
+  const deleteEditorProject = useCallback((projectId) => {
+    setEditorProjects((prev) => {
+      const next = { ...prev };
+      delete next[projectId];
+      return next;
+    });
+  }, []);
+
+  const getEditorProjectIds = useCallback(() => {
+    return Object.keys(editorProjects).sort(
+      (a, b) =>
+        (editorProjects[b]?.lastUpdated || 0) -
+        (editorProjects[a]?.lastUpdated || 0),
+    );
+  }, [editorProjects]);
+
+  const value = {
+    isConfigured,
+    setIsConfigured,
+    defaultModel,
+    setDefaultModel,
+    providers,
+    loading,
+    refreshStatus: checkStatus,
+    streamEnabled,
+    toggleStream,
+    sidebarOpen,
+    toggleSidebar,
+    setSidebarOpen,
+    // Chat history
+    chatHistory,
+    saveChatMessages,
+    getChatMessages,
+    deleteChat,
+    clearAllChats,
+    getChatIds,
+    // Image history
+    imageHistory,
+    saveImage,
+    getImage,
+    deleteImage,
+    clearAllImages,
+    getImageIds,
+    // Video history
+    videoHistory,
+    saveVideo,
+    getVideo,
+    deleteVideo,
+    clearAllVideos,
+    getVideoIds,
+    // Music history
+    musicHistory,
+    saveMusic,
+    getMusic,
+    deleteMusic,
+    clearAllMusic,
+    getMusicIds,
+    // Remix history
+    remixHistory,
+    saveRemix,
+    deleteRemix,
+    clearAllRemixes,
+    getRemixIds,
+    // Editor projects
+    editorProjects,
+    saveEditorProject,
+    deleteEditorProject,
+    getEditorProjectIds,
+    // Library
+    libraryAssets,
+    libraryFilters,
+    setLibraryFilters,
+    refreshLibraryAssets,
+    addLibraryAsset,
+    patchLibraryAsset,
+    removeLibraryAsset,
+    runLibrarySearch,
+    uploadLibraryAssetFile,
+  };
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+export function useApp() {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error("useApp must be used within AppProvider");
+  }
+  return context;
+}

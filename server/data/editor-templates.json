@@ -1,4 +1,28 @@
 {
-  "updatedAt": "2026-04-01T00:00:00.000Z",
-  "templates": []
+  "updatedAt": "2026-04-02T13:23:14.307Z",
+  "templates": [
+    {
+      "id": "tmpl_1775136194306",
+      "name": "Untitled Project Template",
+      "scene": {
+        "tracks": [
+          {
+            "id": "track_video_1",
+            "type": "video",
+            "clips": [],
+            "effects": [],
+            "keyframes": []
+          },
+          {
+            "id": "track_audio_1",
+            "type": "audio",
+            "clips": [],
+            "effects": [],
+            "keyframes": []
+          }
+        ]
+      },
+      "createdAt": "2026-04-02T13:23:14.306Z"
+    }
+  ]
 }

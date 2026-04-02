@@ -116,6 +116,7 @@ export default function Sidebar({ isOpen, onToggle }) {
         </svg>
       ),
     },
+
     {
       path: "/editor",
       label: "Editor",

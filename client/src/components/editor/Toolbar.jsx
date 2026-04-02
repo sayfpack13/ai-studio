@@ -2,7 +2,6 @@ import { useEditor } from "../../context/EditorContext";
 
 export default function Toolbar({ onExport, onProject }) {
   const {
-    addTrack,
     playbackState,
     selectedClip,
     splitClip,
@@ -62,23 +61,6 @@ export default function Toolbar({ onExport, onProject }) {
               d="M15 14l4-4-4-4M19 10H9a4 4 0 000 8h1"
             />
           </svg>
-        </button>
-      </div>
-
-      <div className="flex items-center gap-1 bg-gray-950/60 border border-gray-800 rounded-lg p-1">
-        <button
-          className="px-3 py-1.5 rounded text-gray-200 hover:bg-gray-700 text-xs"
-          onClick={() => addTrack("video")}
-          title="Add video track"
-        >
-          + Video Track
-        </button>
-        <button
-          className="px-3 py-1.5 rounded text-gray-200 hover:bg-gray-700 text-xs"
-          onClick={() => addTrack("audio")}
-          title="Add audio track"
-        >
-          + Audio Track
         </button>
       </div>
 

@@ -346,6 +346,7 @@ router.post("/generate", async (req, res) => {
       height,
       guidanceScale,
       numInferenceSteps,
+      aspectRatio,
       provider: _requestedProvider,
       allowFallback,
       debug,
@@ -363,6 +364,10 @@ router.post("/generate", async (req, res) => {
     const normalizedHeight = toFiniteNumberOrNull(height);
     const normalizedGuidanceScale = toFiniteNumberOrNull(guidanceScale);
     const normalizedNumInferenceSteps = toFiniteNumberOrNull(numInferenceSteps);
+    const normalizedAspectRatio =
+      typeof aspectRatio === "string" && aspectRatio.trim()
+        ? aspectRatio.trim()
+        : null;
     const fallbackEnabled = allowFallback !== false;
     const debugEnabled = Boolean(debug);
 
@@ -402,46 +407,128 @@ router.post("/generate", async (req, res) => {
       const chutesModel = normalizeChutesImageModel(modelInfo.id || modelId);
       let endpoint = null;
       let requestData = null;
-
       if (CHUTES_DIRECT_ENDPOINT_MODELS[chutesModel]) {
         endpoint = CHUTES_DIRECT_ENDPOINT_MODELS[chutesModel];
-        const directBasePayload =
-          chutesModel === "hunyuan-image-3"
-            ? {
-                input_args: {
-                  prompt: effectivePrompt,
-                  ...(inputArgs && typeof inputArgs === "object"
-                    ? {
-                        ...(inputArgs.seed !== undefined
-                          ? { seed: inputArgs.seed }
-                          : {}),
-                        ...(inputArgs.size !== undefined
-                          ? { size: inputArgs.size }
-                          : {}),
-                        ...(inputArgs.steps !== undefined
-                          ? { steps: inputArgs.steps }
-                          : {}),
-                      }
-                    : {}),
-                },
-              }
-            : {
-                prompt: effectivePrompt,
-              };
 
-        requestData = {
-          ...directBasePayload,
-          ...(negativePrompt && { negative_prompt: negativePrompt }),
-          ...(normalizedGuidanceScale != null && {
-            guidance_scale: normalizedGuidanceScale,
-          }),
-          ...(normalizedWidth != null && { width: normalizedWidth }),
-          ...(normalizedHeight != null && { height: normalizedHeight }),
-          ...(normalizedNumInferenceSteps != null && {
-            num_inference_steps: normalizedNumInferenceSteps,
-          }),
-          ...sanitizedExtraParams,
-        };
+        if (chutesModel === "hunyuan-image-3") {
+          // Hunyuan uses input_args with size parameter
+          requestData = {
+            input_args: {
+              prompt: effectivePrompt,
+              ...(inputArgs && typeof inputArgs === "object"
+                ? {
+                    ...(inputArgs.seed !== undefined
+                      ? { seed: inputArgs.seed }
+                      : {}),
+                    ...(inputArgs.size !== undefined
+                      ? { size: inputArgs.size }
+                      : {}),
+                    ...(inputArgs.steps !== undefined
+                      ? { steps: inputArgs.steps }
+                      : {}),
+                  }
+                : {}),
+            },
+            ...(negativePrompt && { negative_prompt: negativePrompt }),
+            ...(normalizedGuidanceScale != null && {
+              guidance_scale: normalizedGuidanceScale,
+            }),
+            ...(normalizedWidth != null && { width: normalizedWidth }),
+            ...(normalizedHeight != null && { height: normalizedHeight }),
+            ...(normalizedNumInferenceSteps != null && {
+              num_inference_steps: normalizedNumInferenceSteps,
+            }),
+            ...sanitizedExtraParams,
+          };
+        } else if (chutesModel === "z-image-turbo") {
+          // z-image-turbo uses input_args with width/height
+          // guidance_scale max is 5, num_inference_steps max is 100
+          // Read from inputArgs (sent by frontend) or fall back to top-level params
+          const inputArgsObj =
+            inputArgs && typeof inputArgs === "object" ? inputArgs : {};
+
+          const zImageWidth =
+            inputArgsObj.width != null
+              ? Math.min(2048, Math.max(576, Number(inputArgsObj.width)))
+              : normalizedWidth != null
+                ? Math.min(2048, Math.max(576, normalizedWidth))
+                : 1024;
+          const zImageHeight =
+            inputArgsObj.height != null
+              ? Math.min(2048, Math.max(576, Number(inputArgsObj.height)))
+              : normalizedHeight != null
+                ? Math.min(2048, Math.max(576, normalizedHeight))
+                : 1024;
+          const zImageGuidanceScale =
+            inputArgsObj.guidance_scale != null
+              ? Math.min(5, Math.max(0, Number(inputArgsObj.guidance_scale)))
+              : normalizedGuidanceScale != null
+                ? Math.min(5, Math.max(0, normalizedGuidanceScale))
+                : 0;
+          const zImageNumInferenceSteps =
+            inputArgsObj.num_inference_steps != null
+              ? Math.min(
+                  100,
+                  Math.max(1, Number(inputArgsObj.num_inference_steps)),
+                )
+              : normalizedNumInferenceSteps != null
+                ? Math.min(100, Math.max(1, normalizedNumInferenceSteps))
+                : 9;
+          const zImageSeed =
+            inputArgsObj.seed != null
+              ? Math.min(4294967295, Math.max(0, Number(inputArgsObj.seed)))
+              : sanitizedExtraParams.seed != null
+                ? Math.min(4294967295, Math.max(0, sanitizedExtraParams.seed))
+                : undefined;
+          const zImageShift =
+            inputArgsObj.shift != null
+              ? Math.min(10, Math.max(1, Number(inputArgsObj.shift)))
+              : sanitizedExtraParams.shift != null
+                ? Math.min(10, Math.max(1, sanitizedExtraParams.shift))
+                : undefined;
+          const zImageMaxSeqLen =
+            inputArgsObj.max_sequence_length != null
+              ? Math.min(
+                  2048,
+                  Math.max(256, Number(inputArgsObj.max_sequence_length)),
+                )
+              : sanitizedExtraParams.max_sequence_length != null
+                ? Math.min(
+                    2048,
+                    Math.max(256, sanitizedExtraParams.max_sequence_length),
+                  )
+                : undefined;
+
+          requestData = {
+            input_args: {
+              prompt: effectivePrompt,
+              width: zImageWidth,
+              height: zImageHeight,
+              guidance_scale: zImageGuidanceScale,
+              num_inference_steps: zImageNumInferenceSteps,
+              ...(zImageSeed !== undefined && { seed: zImageSeed }),
+              ...(zImageShift !== undefined && { shift: zImageShift }),
+              ...(zImageMaxSeqLen !== undefined && {
+                max_sequence_length: zImageMaxSeqLen,
+              }),
+            },
+          };
+        } else {
+          // Other direct endpoint models
+          requestData = {
+            prompt: effectivePrompt,
+            ...(negativePrompt && { negative_prompt: negativePrompt }),
+            ...(normalizedGuidanceScale != null && {
+              guidance_scale: normalizedGuidanceScale,
+            }),
+            ...(normalizedWidth != null && { width: normalizedWidth }),
+            ...(normalizedHeight != null && { height: normalizedHeight }),
+            ...(normalizedNumInferenceSteps != null && {
+              num_inference_steps: normalizedNumInferenceSteps,
+            }),
+            ...sanitizedExtraParams,
+          };
+        }
       } else if (CHUTES_SHARED_IMAGE_MODELS.has(chutesModel)) {
         endpoint = "https://image.chutes.ai/generate";
         requestData =

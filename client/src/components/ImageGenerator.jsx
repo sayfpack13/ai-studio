@@ -44,9 +44,11 @@ export default function ImageGenerator() {
   const [zImageParams, setZImageParams] = useState({
     seed: "",
     shift: 3,
-    guidanceScale: 9,
+    guidanceScale: 0,
     maxSequenceLength: 512,
-    numInferenceSteps: 50,
+    numInferenceSteps: 9,
+    width: 1024,
+    height: 1024,
   });
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -58,7 +60,16 @@ export default function ImageGenerator() {
 
   const modelParameterHints = useMemo(
     () => ({
-      "chutes/z-image-turbo": ["prompt", "seed", "style", "aspect_ratio"],
+      "chutes/z-image-turbo": [
+        "input_args.prompt",
+        "input_args.seed",
+        "input_args.width",
+        "input_args.height",
+        "input_args.shift",
+        "input_args.guidance_scale",
+        "input_args.max_sequence_length",
+        "input_args.num_inference_steps",
+      ],
       "chutes/hunyuan-image-3": [
         "input_args.prompt",
         "input_args.seed",
@@ -114,8 +125,9 @@ export default function ImageGenerator() {
           IMAGE_SELECTED_MODEL_KEY,
         );
 
-        const isProviderMatch = (model, providerId) => 
-          model.provider === providerId || model.configuredProvider === providerId;
+        const isProviderMatch = (model, providerId) =>
+          model.provider === providerId ||
+          model.configuredProvider === providerId;
 
         const persistedProviderValid =
           persistedProvider &&
@@ -128,7 +140,8 @@ export default function ImageGenerator() {
             : configuredGateways.find((gatewayId) =>
                 nextModels.some((model) => isProviderMatch(model, gatewayId)),
               )) ||
-          nextModels[0]?.configuredProvider || nextModels[0]?.provider ||
+          nextModels[0]?.configuredProvider ||
+          nextModels[0]?.provider ||
           "";
 
         setConfiguredProviderFilter(firstGateway);
@@ -143,8 +156,8 @@ export default function ImageGenerator() {
             ? persistedModelKey
             : "";
 
-        const firstGatewayModel = nextModels.find(
-          (model) => isProviderMatch(model, firstGateway),
+        const firstGatewayModel = nextModels.find((model) =>
+          isProviderMatch(model, firstGateway),
         );
         setSelectedModel(
           persistedModelForGateway || firstGatewayModel?.modelKey || "",
@@ -267,7 +280,9 @@ export default function ImageGenerator() {
     }
 
     const zImageExtraParams = {};
-    if (selectedModelInfo?.id === "chutes/z-image-turbo") {
+    const isZImageTurbo = selectedModelInfo?.id === "chutes/z-image-turbo";
+
+    if (isZImageTurbo) {
       if (zImageParams.seed !== "" && zImageParams.seed != null) {
         zImageExtraParams.seed = Number(zImageParams.seed);
       }
@@ -281,6 +296,13 @@ export default function ImageGenerator() {
         zImageExtraParams.max_sequence_length = Number(
           zImageParams.maxSequenceLength,
         );
+      }
+      // z-image-turbo uses aspect_ratio instead of width/height
+      if (zImageParams.width) {
+        zImageExtraParams.width = Number(zImageParams.width);
+      }
+      if (zImageParams.height) {
+        zImageExtraParams.height = Number(zImageParams.height);
       }
     }
 
@@ -431,26 +453,43 @@ export default function ImageGenerator() {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
+      // Determine if model supports width/height parameters
+      const supportsWidthHeight =
+        !isHunyuanImage3 && !isQwenImage2512 && !isZImageTurbo;
+
       const response = await generateImage(prompt, selectedModelInfo?.id, {
         provider: effectiveProvider,
         modelKey: selectedModelInfo?.modelKey,
         negativePrompt:
-          isHunyuanImage3 || isQwenImage2512 ? undefined : negativePrompt,
-        width: isHunyuanImage3 || isQwenImage2512 ? undefined : width,
-        height: isHunyuanImage3 || isQwenImage2512 ? undefined : height,
-        guidanceScale:
-          selectedModelInfo?.id === "chutes/z-image-turbo"
-            ? Number(zImageParams.guidanceScale)
-            : undefined,
-        numInferenceSteps:
-          selectedModelInfo?.id === "chutes/z-image-turbo"
-            ? Number(zImageParams.numInferenceSteps)
-            : undefined,
+          isHunyuanImage3 || isQwenImage2512 || isZImageTurbo
+            ? undefined
+            : negativePrompt,
+        width: supportsWidthHeight ? width : undefined,
+        height: supportsWidthHeight ? height : undefined,
+        guidanceScale: isZImageTurbo
+          ? Number(zImageParams.guidanceScale)
+          : undefined,
+        numInferenceSteps: isZImageTurbo
+          ? Number(zImageParams.numInferenceSteps)
+          : undefined,
         input_args: isHunyuanImage3
           ? hunyuanInputArgs
           : isQwenImage2512
             ? qwenInputArgs
-            : undefined,
+            : isZImageTurbo
+              ? {
+                  prompt,
+                  width: Number(zImageParams.width) || 1024,
+                  height: Number(zImageParams.height) || 1024,
+                  seed: zImageParams.seed ? Number(zImageParams.seed) : null,
+                  shift: Number(zImageParams.shift) || 3,
+                  guidance_scale: Number(zImageParams.guidanceScale) || 0,
+                  max_sequence_length:
+                    Number(zImageParams.maxSequenceLength) || 512,
+                  num_inference_steps:
+                    Number(zImageParams.numInferenceSteps) || 9,
+                }
+              : undefined,
         debug: debugMode,
         signal: controller.signal,
         extraParams: {
@@ -1047,6 +1086,42 @@ export default function ImageGenerator() {
                         setZImageParams((prev) => ({
                           ...prev,
                           numInferenceSteps: e.target.value,
+                        }))
+                      }
+                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      Width (576-2048)
+                    </label>
+                    <input
+                      type="number"
+                      min="576"
+                      max="2048"
+                      value={zImageParams.width}
+                      onChange={(e) =>
+                        setZImageParams((prev) => ({
+                          ...prev,
+                          width: e.target.value,
+                        }))
+                      }
+                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      Height (576-2048)
+                    </label>
+                    <input
+                      type="number"
+                      min="576"
+                      max="2048"
+                      value={zImageParams.height}
+                      onChange={(e) =>
+                        setZImageParams((prev) => ({
+                          ...prev,
+                          height: e.target.value,
                         }))
                       }
                       className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"

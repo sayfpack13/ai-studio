@@ -13,6 +13,8 @@ const EditorContext = createContext(null);
 
 const MAX_HISTORY = 50;
 
+const AUTOSAVE_KEY = "blackbox_ai_editor_autosave";
+
 const DEFAULT_PROJECT = {
   name: "Untitled Project",
   duration: 30,
@@ -50,14 +52,60 @@ const buildSnapshot = (project, tracks) => ({
   tracks,
 });
 
+// Helper to load autosave from localStorage
+const loadAutosave = () => {
+  try {
+    const stored = localStorage.getItem(AUTOSAVE_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      // Validate the data structure
+      if (data?.project && Array.isArray(data?.tracks)) {
+        return data;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to load autosave:", error);
+  }
+  return null;
+};
+
+// Helper to save autosave to localStorage
+const saveAutosave = (project, tracks, projectMeta) => {
+  try {
+    const data = {
+      project,
+      tracks,
+      projectMeta,
+      autosavedAt: Date.now(),
+    };
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error("Failed to autosave:", error);
+  }
+};
+
 export function EditorProvider({ children }) {
-  const [project, setProjectState] = useState(() => ({ ...DEFAULT_PROJECT }));
-  const [tracks, setTracksState] = useState(() => cloneState(DEFAULT_TRACKS));
+  // Initialize from autosave if available, otherwise use defaults
+  const [project, setProjectState] = useState(() => {
+    const autosave = loadAutosave();
+    return autosave?.project ? { ...autosave.project } : { ...DEFAULT_PROJECT };
+  });
+  const [tracks, setTracksState] = useState(() => {
+    const autosave = loadAutosave();
+    return autosave?.tracks
+      ? cloneState(autosave.tracks)
+      : cloneState(DEFAULT_TRACKS);
+  });
   const [selectedClip, setSelectedClip] = useState(null);
-  const [projectMeta, setProjectMeta] = useState({
-    id: null,
-    lastSavedAt: null,
-    lastSavedSnapshot: null,
+  const [projectMeta, setProjectMeta] = useState(() => {
+    const autosave = loadAutosave();
+    return (
+      autosave?.projectMeta || {
+        id: null,
+        lastSavedAt: null,
+        lastSavedSnapshot: null,
+      }
+    );
   });
   const [playbackState, setPlaybackState] = useState({
     playing: false,
@@ -90,6 +138,26 @@ export function EditorProvider({ children }) {
       JSON.stringify(current) !== JSON.stringify(projectMeta.lastSavedSnapshot)
     );
   }, [project, tracks, projectMeta.lastSavedSnapshot]);
+
+  // Auto-save whenever project or tracks change
+  useEffect(() => {
+    // Debounce auto-save to avoid excessive writes
+    const timeoutId = setTimeout(() => {
+      saveAutosave(project, tracks, projectMeta);
+    }, 1000); // Save after 1 second of inactivity
+
+    return () => clearTimeout(timeoutId);
+  }, [project, tracks, projectMeta]);
+
+  // Load autosave on mount and set up beforeunload handler
+  useEffect(() => {
+    // Save immediately before page unload
+    const handleBeforeUnload = () => {
+      saveAutosave(project, tracks, projectMeta);
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [project, tracks, projectMeta]);
 
   const pushHistory = useCallback(() => {
     if (isRestoringRef.current) return;

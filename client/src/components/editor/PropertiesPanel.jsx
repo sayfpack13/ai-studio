@@ -541,6 +541,16 @@ function ClipSettings() {
                 }
                 className="w-full accent-blue-500"
               />
+              <input
+                type="number"
+                value={selectedClip.x || 0}
+                onChange={(e) =>
+                  updateClip(selectedClip.id, {
+                    x: parseInt(e.target.value, 10) || 0,
+                  })
+                }
+                className="w-full mt-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-[10px] text-gray-500 mb-1.5 flex items-center justify-between">
@@ -559,6 +569,16 @@ function ClipSettings() {
                   updateClip(selectedClip.id, { y: Number(e.target.value) })
                 }
                 className="w-full accent-blue-500"
+              />
+              <input
+                type="number"
+                value={selectedClip.y || 0}
+                onChange={(e) =>
+                  updateClip(selectedClip.id, {
+                    y: parseInt(e.target.value, 10) || 0,
+                  })
+                }
+                className="w-full mt-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
               />
             </div>
           </div>
@@ -583,6 +603,22 @@ function ClipSettings() {
                 }
                 className="w-full accent-blue-500"
               />
+              <input
+                type="number"
+                step="0.01"
+                min="0.1"
+                max="3"
+                value={(selectedClip.scale ?? 1).toFixed(2)}
+                onChange={(e) =>
+                  updateClip(selectedClip.id, {
+                    scale: Math.max(
+                      0.1,
+                      Math.min(3, parseFloat(e.target.value) || 1),
+                    ),
+                  })
+                }
+                className="w-full mt-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-[10px] text-gray-500 mb-1.5 flex items-center justify-between">
@@ -603,6 +639,22 @@ function ClipSettings() {
                   })
                 }
                 className="w-full accent-blue-500"
+              />
+              <input
+                type="number"
+                step="1"
+                min="-180"
+                max="180"
+                value={selectedClip.rotation || 0}
+                onChange={(e) =>
+                  updateClip(selectedClip.id, {
+                    rotation: Math.max(
+                      -180,
+                      Math.min(180, parseInt(e.target.value, 10) || 0),
+                    ),
+                  })
+                }
+                className="w-full mt-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
               />
             </div>
           </div>
@@ -684,6 +736,23 @@ function ClipSettings() {
                 updateClip(selectedClip.id, { opacity: Number(e.target.value) })
               }
               className="w-full accent-blue-500"
+            />
+            <input
+              type="number"
+              step="1"
+              min="0"
+              max="100"
+              value={Math.round((selectedClip.opacity ?? 1) * 100)}
+              onChange={(e) =>
+                updateClip(selectedClip.id, {
+                  opacity:
+                    Math.max(
+                      0,
+                      Math.min(100, parseInt(e.target.value, 10) || 100),
+                    ) / 100,
+                })
+              }
+              className="w-full mt-1.5 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
             />
             <div className="flex gap-1 mt-2">
               {[100, 75, 50, 25].map((val) => (

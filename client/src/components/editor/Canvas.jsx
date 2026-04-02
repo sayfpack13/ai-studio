@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useEditor } from "../../context/EditorContext";
+import { useApp } from "../../context/AppContext";
 
 const HANDLE_SIZE = 12;
 const ROTATION_OFFSET = 35;
@@ -13,6 +14,7 @@ export default function Canvas() {
     setSelectedClip,
     updateClip,
   } = useEditor();
+  const { libraryAssets } = useApp();
 
   const canvasRef = useRef(null);
   const [canvasRect, setCanvasRect] = useState(null);
@@ -241,35 +243,133 @@ export default function Canvas() {
     return cursors[handle] || "pointer";
   };
 
+  // Check if source is valid (not expired blob URL)
+  const isValidSource = (url) => {
+    if (!url) return false;
+    // Blob URLs are temporary and expire when the session ends
+    if (url.startsWith("blob:")) return false;
+    // Check if it's a valid URL
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Render missing asset placeholder
+  const renderMissingPlaceholder = (clip, isSelected, type) => {
+    const isVideo = type === "video";
+    const bgColor = isVideo ? "bg-red-500/20" : "bg-amber-500/20";
+    const borderColor = isVideo ? "border-red-400/50" : "border-amber-400/50";
+    const textColor = isVideo ? "text-red-300" : "text-amber-300";
+    const icon = isVideo ? (
+      <svg
+        className="w-8 h-8"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+        />
+      </svg>
+    ) : (
+      <svg
+        className="w-8 h-8"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+        />
+      </svg>
+    );
+
+    return (
+      <div
+        className={`flex flex-col items-center justify-center p-4 rounded-xl ${bgColor} border-2 ${borderColor} ${textColor}`}
+      >
+        <div className="opacity-50 mb-2">{icon}</div>
+        <div className="text-sm font-medium">Missing Asset</div>
+        <div className="text-xs opacity-75 mt-1">{clip.label || "Unknown"}</div>
+        {clip.assetRef && (
+          <div className="text-[10px] opacity-50 mt-1">
+            ID: {clip.assetRef.slice(-8)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Resolve asset from library if needed
+  const resolveAsset = useCallback(
+    (clip) => {
+      if (clip.sourceUrl && isValidSource(clip.sourceUrl)) {
+        return clip.sourceUrl;
+      }
+      if (clip.assetRef && libraryAssets) {
+        const asset = libraryAssets.find((a) => a.id === clip.assetRef);
+        if (asset?.url) {
+          return asset.url;
+        }
+      }
+      return null;
+    },
+    [libraryAssets],
+  );
+
   // Render media content for clip
   const renderClipContent = (clip, isSelected) => {
-    if (clip.trackType === "video" && clip.sourceUrl) {
-      const url = clip.sourceUrl.toLowerCase();
+    const resolvedUrl = resolveAsset(clip);
+
+    // Check for missing video/image assets
+    if (clip.trackType === "video") {
+      // If no valid source, show placeholder
+      if (!resolvedUrl) {
+        return renderMissingPlaceholder(clip, isSelected, "video");
+      }
+
+      const url = resolvedUrl.toLowerCase();
       const isVideo =
         url.endsWith(".mp4") || url.endsWith(".webm") || url.includes("video");
 
       if (isVideo) {
         return (
           <video
-            src={clip.sourceUrl}
+            src={resolvedUrl}
             className="max-w-full max-h-full object-contain"
             autoPlay
             muted
             loop
+            onError={() => {
+              console.warn("Failed to load video:", resolvedUrl);
+            }}
           />
         );
       }
       return (
         <img
-          src={clip.sourceUrl}
+          src={resolvedUrl}
           className="max-w-full max-h-full object-contain"
           alt={clip.label}
           draggable={false}
+          onError={() => {
+            console.warn("Failed to load image:", resolvedUrl);
+          }}
         />
       );
     }
 
     if (clip.trackType === "audio") {
+      // Audio clips don't need a visible source, just show placeholder
       return (
         <div
           className={`px-4 py-3 rounded-xl border-2 backdrop-blur-sm ${
@@ -548,151 +648,16 @@ export default function Canvas() {
         )}
       </div>
 
-      {/* Transform Controls Panel */}
+      {/* Hints */}
       {selectedClip && (
-        <div className="mt-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700 space-y-3">
-          <div className="text-xs text-gray-400 font-medium mb-2">
-            Transform Controls
-          </div>
-
-          <div className="grid grid-cols-4 gap-2">
-            {/* X Position */}
-            <div>
-              <label className="text-[10px] text-gray-500 block mb-1">X</label>
-              <input
-                type="number"
-                value={getClipTransform(selectedClip).x}
-                onChange={(e) =>
-                  updateClip(selectedClip.id, {
-                    x: parseInt(e.target.value, 10) || 0,
-                  })
-                }
-                className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Y Position */}
-            <div>
-              <label className="text-[10px] text-gray-500 block mb-1">Y</label>
-              <input
-                type="number"
-                value={getClipTransform(selectedClip).y}
-                onChange={(e) =>
-                  updateClip(selectedClip.id, {
-                    y: parseInt(e.target.value, 10) || 0,
-                  })
-                }
-                className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Scale */}
-            <div>
-              <label className="text-[10px] text-gray-500 block mb-1">
-                Scale
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.1"
-                max="5"
-                value={getClipTransform(selectedClip).scale.toFixed(2)}
-                onChange={(e) =>
-                  updateClip(selectedClip.id, {
-                    scale: Math.max(
-                      0.1,
-                      Math.min(5, parseFloat(e.target.value) || 1),
-                    ),
-                  })
-                }
-                className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Rotation */}
-            <div>
-              <label className="text-[10px] text-gray-500 block mb-1">
-                Rotation
-              </label>
-              <input
-                type="number"
-                step="1"
-                min="-180"
-                max="180"
-                value={getClipTransform(selectedClip).rotation}
-                onChange={(e) => {
-                  let val = parseInt(e.target.value, 10) || 0;
-                  while (val > 180) val -= 360;
-                  while (val < -180) val += 360;
-                  updateClip(selectedClip.id, { rotation: val });
-                }}
-                className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white text-center focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => updateClip(selectedClip.id, { x: 0, y: 0 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              Center
-            </button>
-            <button
-              onClick={() => updateClip(selectedClip.id, { scale: 1 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              100%
-            </button>
-            <button
-              onClick={() => updateClip(selectedClip.id, { scale: 1.5 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              150%
-            </button>
-            <button
-              onClick={() => updateClip(selectedClip.id, { scale: 2 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              200%
-            </button>
-            <button
-              onClick={() => updateClip(selectedClip.id, { rotation: 0 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              0°
-            </button>
-            <button
-              onClick={() => updateClip(selectedClip.id, { rotation: 90 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              90°
-            </button>
-            <button
-              onClick={() => updateClip(selectedClip.id, { rotation: -90 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              -90°
-            </button>
-            <button
-              onClick={() => updateClip(selectedClip.id, { rotation: 180 })}
-              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 transition-colors"
-            >
-              180°
-            </button>
-          </div>
-
-          {/* Hints */}
-          <div className="text-[10px] text-gray-500 flex items-center gap-2 flex-wrap justify-center pt-2 border-t border-gray-700">
-            <span>Drag clip to move</span>
-            <span className="text-gray-600">•</span>
-            <span>Handles to scale</span>
-            <span className="text-gray-600">•</span>
-            <span>Circle to rotate</span>
-            <span className="text-gray-600">•</span>
-            <span className="text-gray-400">Shift for snap</span>
-          </div>
+        <div className="mt-2 text-[10px] text-gray-500 flex items-center gap-2 flex-wrap justify-center">
+          <span>Drag clip to move</span>
+          <span className="text-gray-600">•</span>
+          <span>Handles to scale</span>
+          <span className="text-gray-600">•</span>
+          <span>Circle to rotate</span>
+          <span className="text-gray-600">•</span>
+          <span className="text-gray-400">Shift for snap</span>
         </div>
       )}
     </div>

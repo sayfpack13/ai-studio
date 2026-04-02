@@ -424,20 +424,28 @@ export function AppProvider({ children }) {
     );
   }, [remixHistory]);
 
-  const saveEditorProject = useCallback((projectId, project) => {
-    setEditorProjects((prev) => ({
-      ...prev,
-      [projectId]: {
-        ...project,
-        lastUpdated: Date.now(),
-      },
-    }));
-  }, []);
+  const saveEditorProject = useCallback(
+    (projectId, project) => {
+      const updatedProjects = {
+        ...editorProjects,
+        [projectId]: {
+          ...project,
+          lastUpdated: Date.now(),
+        },
+      };
+      setEditorProjects(updatedProjects);
+      // Save directly to localStorage for immediate persistence
+      saveToStorage(EDITOR_PROJECTS_KEY, updatedProjects);
+    },
+    [editorProjects],
+  );
 
   const deleteEditorProject = useCallback((projectId) => {
     setEditorProjects((prev) => {
       const next = { ...prev };
       delete next[projectId];
+      // Save directly to localStorage for immediate persistence
+      saveToStorage(EDITOR_PROJECTS_KEY, next);
       return next;
     });
   }, []);

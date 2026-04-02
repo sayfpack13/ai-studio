@@ -100,6 +100,7 @@ function TrackRow({
   updateClip,
   pxPerSecond,
   onTimelineClick,
+  libraryAssets,
 }) {
   const handleMouseDown = (e, clip, type) => {
     if (track.locked) return;
@@ -172,6 +173,30 @@ function TrackRow({
 
   const colors = clipColors[track.type] || clipColors.video;
 
+  // Check if clip has valid source
+  const hasValidSource = (clip) => {
+    if (!clip.sourceUrl) return false;
+    if (clip.sourceUrl.startsWith("blob:")) return false;
+    try {
+      new URL(clip.sourceUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Check if clip asset is missing
+  const isAssetMissing = (clip) => {
+    if (clip.trackType === "audio") return false; // Audio doesn't need external source
+    if (hasValidSource(clip)) return false;
+    // If we have an assetRef, check if it exists in the library
+    if (clip.assetRef && libraryAssets) {
+      const asset = libraryAssets.find((a) => a.id === clip.assetRef);
+      if (asset?.url) return false; // Asset exists in library
+    }
+    return true;
+  };
+
   return (
     <div
       className={`relative h-14 bg-gray-950/40 border border-gray-800/50 rounded-lg overflow-hidden transition-colors ${
@@ -221,7 +246,22 @@ function TrackRow({
 
             {/* Clip content */}
             <div className="flex-1 px-3 overflow-hidden flex items-center gap-2 pointer-events-none">
-              {track.type === "video" && (
+              {isAssetMissing(clip) ? (
+                // Missing asset indicator
+                <svg
+                  className="w-3.5 h-3.5 flex-shrink-0 text-red-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              ) : track.type === "video" ? (
                 <svg
                   className="w-3.5 h-3.5 flex-shrink-0 opacity-70"
                   fill="none"
@@ -235,8 +275,7 @@ function TrackRow({
                     d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                   />
                 </svg>
-              )}
-              {track.type === "audio" && (
+              ) : (
                 <svg
                   className="w-3.5 h-3.5 flex-shrink-0 opacity-70"
                   fill="none"
@@ -251,9 +290,16 @@ function TrackRow({
                   />
                 </svg>
               )}
-              <span className="truncate font-medium">
+              <span
+                className={`truncate font-medium ${isAssetMissing(clip) ? "text-red-300" : ""}`}
+              >
                 {clip.label || "Clip"}
               </span>
+              {isAssetMissing(clip) && (
+                <span className="text-[9px] text-red-400 bg-red-500/20 px-1 rounded">
+                  missing
+                </span>
+              )}
             </div>
 
             {/* Right resize handle */}
@@ -698,6 +744,7 @@ export default function Timeline() {
                     updateClip={updateClip}
                     pxPerSecond={pxPerSecond}
                     onTimelineClick={handleTimelineClick}
+                    libraryAssets={libraryAssets}
                   />
                   <TrackKeyframesRow track={track} pxPerSecond={pxPerSecond} />
                 </div>

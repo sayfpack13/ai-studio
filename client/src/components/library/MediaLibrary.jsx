@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { uploadLibraryFile } from "../../services/api";
 
@@ -103,6 +103,10 @@ export default function MediaLibrary() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadLibraryAssets();
+  }, []);
 
   const onSearch = async () => {
     setLoading(true);

@@ -1,6 +1,51 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 
+const fallbackTime = 0;
+
+function normalizeHistoryItem(item, id, type, source) {
+  if (!item) return null;
+
+  const titleBase =
+    item.title ||
+    item.prompt ||
+    item.name ||
+    `${type.charAt(0).toUpperCase()}${type.slice(1)} ${id}`;
+
+  const url =
+    item?.url ||
+    item?.result?.url ||
+    item?.result?.video ||
+    item?.result?.audio ||
+    item?.result?.image ||
+    "";
+
+  return {
+    id: `hist_${type}_${id}`,
+    title: String(titleBase).slice(0, 120),
+    type,
+    source,
+    url,
+    metadata: item?.metadata || {},
+    createdAt: item?.createdAt || item?.lastUpdated || fallbackTime,
+    updatedAt:
+      item?.lastUpdated || item?.updatedAt || item?.createdAt || fallbackTime,
+    _origin: "history",
+    _originId: id,
+  };
+}
+
+function normalizeLibraryAsset(asset) {
+  if (!asset) return null;
+  return {
+    ...asset,
+    createdAt: asset.createdAt || asset.updatedAt || fallbackTime,
+    updatedAt: asset.updatedAt || asset.createdAt || fallbackTime,
+    _origin: "library",
+    _originId: asset.id,
+  };
+}
+
 export default function AssetPickerDialog({
   open,
   onClose,
@@ -8,16 +53,73 @@ export default function AssetPickerDialog({
   type = "image",
   title = "Select Asset",
 }) {
-  const { libraryAssets } = useApp();
+  const {
+    libraryAssets,
+    imageHistory,
+    videoHistory,
+    musicHistory,
+    remixHistory,
+    getImageIds,
+    getVideoIds,
+    getMusicIds,
+    getRemixIds,
+  } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
   const [previewAsset, setPreviewAsset] = useState(null);
   const [selectedAssetId, setSelectedAssetId] = useState(null);
 
+  const mergedAssets = useMemo(() => {
+    const apiAssets = (libraryAssets || [])
+      .map(normalizeLibraryAsset)
+      .filter(Boolean);
+
+    const historyAssets = [
+      ...(getImageIds?.() || []).map((id) =>
+        normalizeHistoryItem(imageHistory?.[id], id, "image", "image-history"),
+      ),
+      ...(getVideoIds?.() || []).map((id) =>
+        normalizeHistoryItem(videoHistory?.[id], id, "video", "video-history"),
+      ),
+      ...(getMusicIds?.() || []).map((id) =>
+        normalizeHistoryItem(musicHistory?.[id], id, "audio", "music-history"),
+      ),
+      ...(getRemixIds?.() || []).map((id) =>
+        normalizeHistoryItem(remixHistory?.[id], id, "audio", "remix-history"),
+      ),
+    ].filter(Boolean);
+
+    const byUrlOrId = new Map();
+
+    for (const asset of apiAssets) {
+      const dedupeKey = asset.url ? `url:${asset.url}` : `id:${asset.id}`;
+      byUrlOrId.set(dedupeKey, asset);
+    }
+
+    for (const asset of historyAssets) {
+      const dedupeKey = asset.url ? `url:${asset.url}` : `id:${asset.id}`;
+      if (!byUrlOrId.has(dedupeKey)) {
+        byUrlOrId.set(dedupeKey, asset);
+      }
+    }
+
+    return Array.from(byUrlOrId.values());
+  }, [
+    libraryAssets,
+    imageHistory,
+    videoHistory,
+    musicHistory,
+    remixHistory,
+    getImageIds,
+    getVideoIds,
+    getMusicIds,
+    getRemixIds,
+  ]);
+
   const filteredAssets = useMemo(() => {
-    let assets = libraryAssets || [];
+    let assets = mergedAssets;
 
     // Filter by type
-    if (type) {
+    if (type && type !== "all") {
       assets = assets.filter((asset) => asset.type === type);
     }
 
@@ -25,11 +127,18 @@ export default function AssetPickerDialog({
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       assets = assets.filter((asset) => {
-        return (
-          (asset.title || "").toLowerCase().includes(query) ||
-          (asset.source || "").toLowerCase().includes(query) ||
-          (asset.url || "").toLowerCase().includes(query)
-        );
+        const haystack = [
+          asset.title,
+          asset.source,
+          asset.type,
+          asset.url,
+          JSON.stringify(asset.metadata || {}),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(query);
       });
     }
 
@@ -39,10 +148,10 @@ export default function AssetPickerDialog({
       const bTime = b.updatedAt || b.createdAt || 0;
       return bTime - aTime;
     });
-  }, [libraryAssets, type, searchQuery]);
+  }, [mergedAssets, type, searchQuery]);
 
   const handleSelectClick = () => {
-    const asset = libraryAssets.find((a) => a.id === selectedAssetId);
+    const asset = mergedAssets.find((a) => a.id === selectedAssetId);
     if (asset && onSelect) {
       onSelect(asset);
     }
@@ -84,7 +193,8 @@ export default function AssetPickerDialog({
           <div>
             <h2 className="text-lg font-semibold text-white">{title}</h2>
             <p className="text-sm text-gray-400">
-              {filteredAssets.length} {type} asset{filteredAssets.length !== 1 ? "s" : ""} available
+              {filteredAssets.length} {type !== "all" ? type + " " : ""}asset
+              {filteredAssets.length !== 1 ? "s" : ""} available
             </p>
           </div>
           <button
@@ -123,8 +233,18 @@ export default function AssetPickerDialog({
                 onClick={() => setSearchQuery("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             )}
@@ -149,7 +269,9 @@ export default function AssetPickerDialog({
                 />
               </svg>
               <p className="text-gray-400">
-                {searchQuery ? "No assets match your search" : `No ${type} assets in library`}
+                {searchQuery
+                  ? "No assets match your search"
+                  : `No ${type !== "all" ? type + " " : ""}assets in library`}
               </p>
               {!searchQuery && (
                 <p className="text-sm text-gray-500 mt-1">
@@ -186,7 +308,11 @@ export default function AssetPickerDialog({
                           muted
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <svg className="w-8 h-8 text-white/80" fill="currentColor" viewBox="0 0 24 24">
+                          <svg
+                            className="w-8 h-8 text-white/80"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
                             <path d="M8 5v14l11-7z" />
                           </svg>
                         </div>
@@ -194,15 +320,35 @@ export default function AssetPickerDialog({
                     )}
                     {asset.type === "audio" && asset.url && (
                       <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900 to-gray-800">
-                        <svg className="w-12 h-12 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                        <svg
+                          className="w-12 h-12 text-purple-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                          />
                         </svg>
                       </div>
                     )}
                     {!asset.url && (
                       <div className="w-full h-full flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <svg
+                          className="w-8 h-8 text-gray-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
                         </svg>
                       </div>
                     )}
@@ -214,15 +360,26 @@ export default function AssetPickerDialog({
                       {asset.title}
                     </p>
                     <p className="text-[10px] text-gray-400">
-                      {asset.source} • {formatDate(asset.updatedAt || asset.createdAt)}
+                      {asset.source} •{" "}
+                      {formatDate(asset.updatedAt || asset.createdAt)}
                     </p>
                   </div>
 
                   {/* Selected indicator */}
                   {selectedAssetId === asset.id && (
                     <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      <svg
+                        className="w-4 h-4 text-white"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={3}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
                     </div>
                   )}
@@ -236,7 +393,7 @@ export default function AssetPickerDialog({
         <div className="p-4 border-t border-gray-800 flex items-center justify-between">
           <p className="text-sm text-gray-400">
             {selectedAssetId
-              ? `Selected: ${libraryAssets.find(a => a.id === selectedAssetId)?.title || "Asset"}`
+              ? `Selected: ${mergedAssets.find((a) => a.id === selectedAssetId)?.title || "Asset"}`
               : "Click an asset to select it"}
           </p>
           <button
@@ -291,7 +448,12 @@ export default function AssetPickerDialog({
                 />
               )}
               {previewAsset.type === "audio" && previewAsset.url && (
-                <audio src={previewAsset.url} controls autoPlay className="w-full max-w-md" />
+                <audio
+                  src={previewAsset.url}
+                  controls
+                  autoPlay
+                  className="w-full max-w-md"
+                />
               )}
             </div>
           </div>

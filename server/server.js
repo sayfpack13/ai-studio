@@ -20,6 +20,7 @@ import jobQueue from "./services/jobQueue.js";
 import { normalizeConfig } from "./utils/config.js";
 import { resolveProviderContext } from "./utils/provider-routing.js";
 import libraryService from "./services/library-service.js";
+import { findModel } from "./utils/models.js";
 
 dotenv.config();
 
@@ -184,6 +185,90 @@ function toStandardImageResponse(result, prompt) {
   return null;
 }
 
+function isOllamaProvider(providerContext) {
+  return (
+    providerContext.provider?.apiType === "ollama-native" ||
+    providerContext.providerId === "ollama"
+  );
+}
+
+function buildOllamaChatRequest(messages, model, options = {}) {
+  return {
+    model,
+    messages: transformMessagesForOllamaVision(messages),
+    stream: false,
+    options: {
+      temperature: options.temperature || 0.7,
+      num_ctx: options.max_tokens || 4096,
+      num_predict: options.max_tokens || 2048,
+    },
+  };
+}
+
+function transformOllamaToOpenAI(ollamaResponse, model) {
+  return {
+    id: `ollama-${Date.now()}`,
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: ollamaResponse.message?.role || "assistant",
+          content: ollamaResponse.message?.content || "",
+        },
+        finish_reason: ollamaResponse.done ? "stop" : null,
+      },
+    ],
+    usage: {
+      prompt_tokens: ollamaResponse.prompt_eval_count || 0,
+      completion_tokens: ollamaResponse.eval_count || 0,
+      total_tokens:
+        (ollamaResponse.prompt_eval_count || 0) +
+        (ollamaResponse.eval_count || 0),
+    },
+  };
+}
+
+function transformMessagesForOllamaVision(messages) {
+  if (!Array.isArray(messages)) return messages;
+
+  return messages.map((msg) => {
+    if (!Array.isArray(msg.content)) return msg;
+
+    let textParts = [];
+    const images = [];
+
+    for (const part of msg.content) {
+      if (part.type === "text") {
+        textParts.push(part.text || "");
+      } else if (part.type === "image_url" && part.image_url?.url) {
+        const url = part.image_url.url;
+        if (url.startsWith("data:")) {
+          const base64Match = url.match(/^data:[^;]+;base64,(.+)$/);
+          if (base64Match) {
+            images.push(base64Match[1]);
+          }
+        } else {
+          images.push(url);
+        }
+      }
+    }
+
+    const transformed = {
+      role: msg.role,
+      content: textParts.join("\n") || "",
+    };
+
+    if (images.length > 0) {
+      transformed.images = images;
+    }
+
+    return transformed;
+  });
+}
+
 function buildAxiosError(error, fallbackMessage) {
   const message =
     error?.response?.data?.error?.message ||
@@ -223,22 +308,59 @@ async function processChatJob({ payload, setProgress, isCanceled }) {
     );
   }
 
-  const requestData = {
-    messages: payload.messages,
-    model: modelId,
-    stream: false,
-    ...Object.fromEntries(
-      Object.entries(payload).filter(
-        ([k]) => !["provider", "modelKey"].includes(k),
-      ),
-    ),
-  };
-
   if (isCanceled()) throw new Error("Canceled");
 
   await setProgress(25, { stage: "requesting_provider" });
 
+  // Strip gateway prefix for API call
+  let actualModelId = modelId;
+  if (modelId && modelId.includes("/")) {
+    const parts = modelId.split("/");
+    if (
+      parts.length >= 2 &&
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        parts[0],
+      )
+    ) {
+      actualModelId = parts.slice(1).join("/");
+    }
+  }
+
   try {
+    if (isOllamaProvider(providerContext)) {
+      const ollamaRequest = buildOllamaChatRequest(
+        payload.messages,
+        actualModelId,
+        { temperature: payload?.temperature, max_tokens: payload?.max_tokens },
+      );
+
+      const response = await axios.post(
+        `${providerContext.provider.apiBaseUrl}/api/chat`,
+        ollamaRequest,
+        {
+          headers: {
+            Authorization: `Bearer ${providerContext.provider.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: providerContext.provider.timeout?.chat || 120000,
+        },
+      );
+
+      await setProgress(100, { stage: "completed" });
+      return transformOllamaToOpenAI(response.data, actualModelId);
+    }
+
+    const requestData = {
+      messages: payload.messages,
+      model: actualModelId,
+      stream: false,
+      ...Object.fromEntries(
+        Object.entries(payload).filter(
+          ([k]) => !["provider", "modelKey"].includes(k),
+        ),
+      ),
+    };
+
     const response = await axios.post(
       `${providerContext.provider.apiBaseUrl}/chat/completions`,
       requestData,
@@ -371,11 +493,57 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
     }
   }
 
+  // Strip gateway prefix for API call
+  let actualModelId = modelId;
+  if (modelId && modelId.includes("/")) {
+    const parts = modelId.split("/");
+    if (
+      parts.length >= 2 &&
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        parts[0],
+      )
+    ) {
+      actualModelId = parts.slice(1).join("/");
+    }
+  }
+
+  // Ollama Cloud uses /api/chat — it can describe images (vision) but not generate them
+  if (isOllamaProvider(providerContext)) {
+    const fullPrompt = payload?.negativePrompt
+      ? `${prompt}. Avoid: ${payload.negativePrompt}`
+      : prompt;
+
+    const messages = [{ role: "user", content: fullPrompt }];
+    const ollamaRequest = buildOllamaChatRequest(messages, actualModelId);
+
+    try {
+      const response = await axios.post(
+        `${providerContext.provider.apiBaseUrl}/api/chat`,
+        ollamaRequest,
+        {
+          headers: {
+            Authorization: `Bearer ${providerContext.provider.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: providerContext.provider.timeout?.image || 120000,
+        },
+      );
+
+      const openaiResponse = transformOllamaToOpenAI(response.data, actualModelId);
+      const transformed = toStandardImageResponse(openaiResponse, prompt);
+      const out = transformed || openaiResponse;
+      await setProgress(100, { stage: "completed" });
+      return out;
+    } catch (error) {
+      throw buildAxiosError(error, "Image generation failed (Ollama Cloud)");
+    }
+  }
+
   const fullPrompt = payload?.negativePrompt
     ? `${prompt}. Avoid: ${payload.negativePrompt}`
     : prompt;
   const requestData = {
-    model: modelId,
+    model: actualModelId,
     messages: [{ role: "user", content: fullPrompt }],
     ...(payload?.width ? { width: payload.width } : {}),
     ...(payload?.height ? { height: payload.height } : {}),
@@ -438,6 +606,50 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
     );
   }
 
+  // Strip gateway prefix for API call
+  let actualModelId = modelId;
+  if (modelId && modelId.includes("/")) {
+    const parts = modelId.split("/");
+    if (
+      parts.length >= 2 &&
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        parts[0],
+      )
+    ) {
+      actualModelId = parts.slice(1).join("/");
+    }
+  }
+
+  if (isCanceled()) throw new Error("Canceled");
+
+  await setProgress(20, { stage: "requesting_provider" });
+
+  // Ollama Cloud uses /api/chat — no native video generation
+  if (isOllamaProvider(providerContext)) {
+    const messages = [{ role: "user", content: prompt }];
+    const ollamaRequest = buildOllamaChatRequest(messages, actualModelId);
+
+    try {
+      const response = await axios.post(
+        `${providerContext.provider.apiBaseUrl}/api/chat`,
+        ollamaRequest,
+        {
+          headers: {
+            Authorization: `Bearer ${providerContext.provider.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: providerContext.provider.timeout?.video || 300000,
+        },
+      );
+
+      const openaiResponse = transformOllamaToOpenAI(response.data, actualModelId);
+      await setProgress(100, { stage: "completed" });
+      return openaiResponse;
+    } catch (error) {
+      throw buildAxiosError(error, "Video generation failed (Ollama Cloud)");
+    }
+  }
+
   const content = payload?.image
     ? [
         { type: "text", text: prompt },
@@ -445,15 +657,11 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
       ]
     : prompt;
 
-  if (isCanceled()) throw new Error("Canceled");
-
-  await setProgress(20, { stage: "requesting_provider" });
-
   try {
     const response = await axios.post(
       `${providerContext.provider.apiBaseUrl}/chat/completions`,
       {
-        model: modelId,
+        model: actualModelId,
         messages: [{ role: "user", content }],
         ...(payload?.duration ? { duration: payload.duration } : {}),
         ...(payload?.fps ? { fps: payload.fps } : {}),
@@ -524,15 +732,55 @@ async function processMusicJob({ payload, setProgress, isCanceled }) {
     );
   }
 
+  // Strip gateway prefix for API call
+  let actualModelId = modelId;
+  if (modelId && modelId.includes("/")) {
+    const parts = modelId.split("/");
+    if (
+      parts.length >= 2 &&
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        parts[0],
+      )
+    ) {
+      actualModelId = parts.slice(1).join("/");
+    }
+  }
+
   if (isCanceled()) throw new Error("Canceled");
 
   await setProgress(20, { stage: "requesting_provider" });
+
+  // Ollama Cloud uses /api/chat — no native music generation
+  if (isOllamaProvider(providerContext)) {
+    const messages = [{ role: "user", content: prompt }];
+    const ollamaRequest = buildOllamaChatRequest(messages, actualModelId);
+
+    try {
+      const response = await axios.post(
+        `${providerContext.provider.apiBaseUrl}/api/chat`,
+        ollamaRequest,
+        {
+          headers: {
+            Authorization: `Bearer ${providerContext.provider.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: providerContext.provider.timeout?.video || 300000,
+        },
+      );
+
+      const openaiResponse = transformOllamaToOpenAI(response.data, actualModelId);
+      await setProgress(100, { stage: "completed" });
+      return openaiResponse;
+    } catch (error) {
+      throw buildAxiosError(error, "Music generation failed (Ollama Cloud)");
+    }
+  }
 
   try {
     const response = await axios.post(
       `${providerContext.provider.apiBaseUrl}/chat/completions`,
       {
-        model: modelId,
+        model: actualModelId,
         messages: [{ role: "user", content: prompt }],
         ...(payload?.voice ? { voice: payload.voice } : {}),
         ...(payload?.format ? { format: payload.format } : {}),
@@ -549,6 +797,15 @@ async function processMusicJob({ payload, setProgress, isCanceled }) {
     const result = response.data;
     const content = result?.choices?.[0]?.message?.content;
 
+    if (!content) {
+      await setProgress(100, { stage: "completed" });
+      return result;
+    }
+
+    const urls = String(content)
+      .split(/\s+/)
+      .filter((part) => part.startsWith("http"));
+
     const outputUrl = urls[0] || content || null;
     if (outputUrl) {
       await libraryService.createAsset({
@@ -560,12 +817,6 @@ async function processMusicJob({ payload, setProgress, isCanceled }) {
       });
     }
     await setProgress(100, { stage: "completed" });
-
-    if (!content) return result;
-
-    const urls = String(content)
-      .split(/\s+/)
-      .filter((part) => part.startsWith("http"));
 
     return {
       success: true,

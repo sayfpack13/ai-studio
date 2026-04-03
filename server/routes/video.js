@@ -275,7 +275,7 @@ async function handleWanI2VGeneration({
 // Video generation endpoint - uses chat completions endpoint with video models
 router.post("/generate", async (req, res) => {
   try {
-    const { prompt, model, modelKey, image, duration, fps } = req.body;
+    const { prompt, model, modelKey, image, duration, fps, localOllamaUrl } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ error: "Prompt required" });
@@ -288,16 +288,34 @@ router.post("/generate", async (req, res) => {
     const apiBaseUrl = provider.apiBaseUrl;
     const timeout = provider.timeout?.video || 300000;
 
-    const modelInfo = await findModel(
-      req.config,
-      modelId,
-      providerId,
-      modelKey,
-    );
-    if (!modelInfo || !modelInfo.categories.includes("video")) {
-      return res.status(400).json({
-        error: `Model ${modelId || modelKey} is not available for video generation on gateway ${providerId}`,
-      });
+    const isLocalOllama = !!(localOllamaUrl && providerId === 'ollama');
+
+    if (!isLocalOllama) {
+      const modelInfo = await findModel(
+        req.config,
+        modelId,
+        providerId,
+        modelKey,
+      );
+      if (!modelInfo || !modelInfo.categories.includes("video")) {
+        return res.status(400).json({
+          error: `Model ${modelId || modelKey} is not available for video generation on gateway ${providerId}`,
+        });
+      }
+    }
+
+    // Strip gateway prefix for API call
+    let actualModelId = modelId;
+    if (modelId && modelId.includes("/")) {
+      const parts = modelId.split("/");
+      if (
+        parts.length >= 2 &&
+        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+          parts[0],
+        )
+      ) {
+        actualModelId = parts.slice(1).join("/");
+      }
     }
 
     if (isWanI2VModel(modelId)) {
@@ -309,6 +327,51 @@ router.post("/generate", async (req, res) => {
         providerId,
         apiKey,
         timeout,
+      });
+    }
+
+    const isOllamaNative =
+      isLocalOllama || provider.apiType === "ollama-native" || providerId === "ollama";
+    const effectiveBaseUrl = isLocalOllama
+      ? localOllamaUrl.replace(/\/+$/, '')
+      : apiBaseUrl;
+
+    // Ollama uses /api/chat — no native video generation
+    if (isOllamaNative) {
+      const ollamaRequest = {
+        model: actualModelId,
+        messages: [{ role: "user", content: prompt }],
+        stream: false,
+        options: { temperature: 0.7 },
+      };
+
+      const ollamaHeaders = isLocalOllama
+        ? { "Content-Type": "application/json" }
+        : { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+
+      const response = await axios.post(
+        `${effectiveBaseUrl}/api/chat`,
+        ollamaRequest,
+        {
+          headers: ollamaHeaders,
+          timeout,
+        },
+      );
+
+      const ollamaData = response.data;
+      const content = ollamaData.message?.content || "";
+
+      return res.json({
+        id: `ollama-${Date.now()}`,
+        object: "chat.completion",
+        model: actualModelId,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content },
+            finish_reason: ollamaData.done ? "stop" : null,
+          },
+        ],
       });
     }
 
@@ -332,7 +395,7 @@ router.post("/generate", async (req, res) => {
     }
 
     const requestData = {
-      model: modelId,
+      model: actualModelId,
       messages: [
         {
           role: "user",

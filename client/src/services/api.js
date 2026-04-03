@@ -373,3 +373,19 @@ export const getModelCategories = async () => {
   const response = await fetch(`${API_BASE_URL}/models/categories`);
   return await response.json();
 };
+
+// Fetch models from a local Ollama instance
+export const fetchOllamaLocalModels = async (url) => {
+  const response = await fetch(`${API_BASE_URL}/models/ollama-local`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  return await response.json();
+};
+
+// Get saved local Ollama URL
+export const getOllamaLocalUrl = async () => {
+  const response = await fetch(`${API_BASE_URL}/models/ollama-local-url`);
+  return await response.json();
+};

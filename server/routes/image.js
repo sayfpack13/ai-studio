@@ -351,6 +351,7 @@ router.post("/generate", async (req, res) => {
       allowFallback,
       debug,
       extraParams,
+      localOllamaUrl,
       ...additionalParams
     } = req.body;
 
@@ -391,19 +392,24 @@ router.post("/generate", async (req, res) => {
     const apiBaseUrl = provider.apiBaseUrl;
     const timeout = provider.timeout?.image || 120000;
 
-    const modelInfo = await findModel(
-      req.config,
-      modelId,
-      providerId,
-      modelKey,
-    );
-    if (!modelInfo || !modelInfo.categories.includes("image")) {
-      return res.status(400).json({
-        error: `Model ${modelId || modelKey} is not available for image generation on gateway ${providerId}`,
-      });
+    const isLocalOllama = !!(localOllamaUrl && providerId === 'ollama');
+
+    if (!isLocalOllama) {
+      const modelInfo = await findModel(
+        req.config,
+        modelId,
+        providerId,
+        modelKey,
+      );
+      if (!modelInfo || !modelInfo.categories.includes("image")) {
+        return res.status(400).json({
+          error: `Model ${modelId || modelKey} is not available for image generation on gateway ${providerId}`,
+        });
+      }
     }
 
     if (providerId === "chutes") {
+      const modelInfo = await findModel(req.config, modelId, providerId, modelKey);
       const chutesModel = normalizeChutesImageModel(modelInfo.id || modelId);
       let endpoint = null;
       let requestData = null;
@@ -906,36 +912,98 @@ router.post("/generate", async (req, res) => {
       });
     }
 
-    // Blackbox AI uses the chat completions endpoint for image generation
-    // The prompt goes in the messages array
+    // Determine endpoint and request format
+    const isOllamaNative =
+      isLocalOllama || provider.apiType === "ollama-native" || providerId === "ollama";
+    const effectiveBaseUrl = isLocalOllama
+      ? localOllamaUrl.replace(/\/+$/, '')
+      : apiBaseUrl;
+
     const fullPrompt = negativePrompt
       ? `${effectivePrompt}. Avoid: ${negativePrompt}`
       : effectivePrompt;
 
-    const requestData = {
-      model: modelId,
-      messages: [
-        {
-          role: "user",
-          content: fullPrompt,
-        },
-      ],
-      // Some image models support these parameters
-      ...(width && { width }),
-      ...(height && { height }),
-    };
+    // Strip gateway prefix for API call
+    let actualModelId = modelId;
+    if (modelId && modelId.includes("/")) {
+      const parts = modelId.split("/");
+      if (
+        parts.length >= 2 &&
+        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+          parts[0],
+        )
+      ) {
+        actualModelId = parts.slice(1).join("/");
+      }
+    }
 
-    const response = await axios.post(
-      `${apiBaseUrl}/chat/completions`,
-      requestData,
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
+    let response;
+
+    if (isOllamaNative) {
+      // Ollama Cloud uses /api/chat with native format
+      const ollamaRequest = {
+        model: actualModelId,
+        messages: [{ role: "user", content: fullPrompt }],
+        stream: false,
+        options: { temperature: 0.7 },
+      };
+
+      const ollamaHeaders = isLocalOllama
+        ? { "Content-Type": "application/json" }
+        : { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+
+      response = await axios.post(
+        `${effectiveBaseUrl}/api/chat`,
+        ollamaRequest,
+        {
+          headers: ollamaHeaders,
+          timeout,
         },
-        timeout,
-      },
-    );
+      );
+
+      // Transform Ollama response to OpenAI format for downstream processing
+      const ollamaData = response.data;
+      response.data = {
+        id: `ollama-${Date.now()}`,
+        object: "chat.completion",
+        model: actualModelId,
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: ollamaData.message?.role || "assistant",
+              content: ollamaData.message?.content || "",
+            },
+            finish_reason: ollamaData.done ? "stop" : null,
+          },
+        ],
+      };
+    } else {
+      const requestData = {
+        model: actualModelId,
+        messages: [
+          {
+            role: "user",
+            content: fullPrompt,
+          },
+        ],
+        // Some image models support these parameters
+        ...(width && { width }),
+        ...(height && { height }),
+      };
+
+      response = await axios.post(
+        `${apiBaseUrl}/chat/completions`,
+        requestData,
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout,
+        },
+      );
+    }
 
     const result = response.data;
     const transformed = toStandardImageResponse(result, effectivePrompt);
@@ -943,9 +1011,8 @@ router.post("/generate", async (req, res) => {
       if (debugEnabled) {
         transformed.debug = {
           provider: providerId,
-          model: modelId,
-          endpoint: `${apiBaseUrl}/chat/completions`,
-          requestPayload: sanitizeDebugValue(requestData),
+          model: actualModelId,
+          endpoint: isOllamaNative ? `${apiBaseUrl}/api/chat` : `${apiBaseUrl}/chat/completions`,
           rawResponse: sanitizeDebugValue(result),
         };
       }
@@ -966,9 +1033,8 @@ router.post("/generate", async (req, res) => {
         error: "Image API returned an unsupported response format",
         debug: {
           provider: providerId,
-          model: modelId,
-          endpoint: `${apiBaseUrl}/chat/completions`,
-          requestPayload: sanitizeDebugValue(requestData),
+          model: actualModelId,
+          endpoint: isOllamaNative ? `${apiBaseUrl}/api/chat` : `${apiBaseUrl}/chat/completions`,
           rawResponse: sanitizeDebugValue(result),
         },
       });
@@ -1052,41 +1118,104 @@ router.post("/edit", async (req, res) => {
       });
     }
 
-    // For image editing, we might need to send the image in messages
-    const requestData = {
-      model: modelId,
-      messages: [
+    // Strip gateway prefix for API call
+    let actualModelId = modelId;
+    if (modelId && modelId.includes("/")) {
+      const parts = modelId.split("/");
+      if (
+        parts.length >= 2 &&
+        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+          parts[0],
+        )
+      ) {
+        actualModelId = parts.slice(1).join("/");
+      }
+    }
+
+    const isOllamaNative =
+      provider.apiType === "ollama-native" || providerId === "ollama";
+
+    let result;
+
+    if (isOllamaNative) {
+      // Ollama vision uses images[] field with base64 data
+      const imageData = image.startsWith("data:")
+        ? image.replace(/^data:[^;]+;base64,/, "")
+        : image;
+
+      const ollamaRequest = {
+        model: actualModelId,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+            images: [imageData],
+          },
+        ],
+        stream: false,
+        options: { temperature: 0.7 },
+      };
+
+      const response = await axios.post(
+        `${apiBaseUrl}/api/chat`,
+        ollamaRequest,
         {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: prompt,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout,
+        },
+      );
+
+      const ollamaData = response.data;
+      result = {
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: ollamaData.message?.content || "",
             },
-            {
-              type: "image_url",
-              image_url: {
-                url: image,
+          },
+        ],
+      };
+    } else {
+      // For image editing, we send the image in messages (OpenAI format)
+      const requestData = {
+        model: actualModelId,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: prompt,
               },
-            },
-          ],
-        },
-      ],
-    };
+              {
+                type: "image_url",
+                image_url: {
+                  url: image,
+                },
+              },
+            ],
+          },
+        ],
+      };
 
-    const response = await axios.post(
-      `${apiBaseUrl}/chat/completions`,
-      requestData,
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
+      const response = await axios.post(
+        `${apiBaseUrl}/chat/completions`,
+        requestData,
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout,
         },
-        timeout,
-      },
-    );
+      );
 
-    const result = response.data;
+      result = response.data;
+    }
 
     if (result.choices && result.choices[0]?.message?.content) {
       res.json({

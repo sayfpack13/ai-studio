@@ -1,4 +1,6 @@
 import express from 'express';
+import axios from 'axios';
+import fs from 'fs/promises';
 import { getModelsByCategory, groupModelsByProvider, loadAllModels } from '../utils/models.js';
 
 const router = express.Router();
@@ -59,6 +61,56 @@ router.get('/categories', async (req, res) => {
     console.error('Models categories error:', error);
     res.status(500).json({ error: 'Failed to load model categories' });
   }
+});
+
+// Fetch models from a local Ollama instance
+router.post('/ollama-local', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'Local Ollama URL is required' });
+    }
+
+    // Normalize URL (remove trailing slash)
+    const baseUrl = url.replace(/\/+$/, '');
+
+    const response = await axios.get(`${baseUrl}/api/tags`, {
+      timeout: 10000,
+    });
+
+    const models = (response.data?.models || []).map((m) => ({
+      id: m.name,
+      name: m.name,
+      size: m.size,
+      modifiedAt: m.modified_at,
+      details: m.details || {},
+    }));
+
+    // Save URL to config if successful
+    if (req.config.providers?.ollama) {
+      req.config.providers.ollama.localUrl = baseUrl;
+      await fs.writeFile(req.configPath, JSON.stringify(req.config, null, 2));
+    }
+
+    res.json({ success: true, url: baseUrl, models });
+  } catch (error) {
+    const status = error.response?.status;
+    let message = 'Failed to connect to local Ollama';
+    if (error.code === 'ECONNREFUSED') {
+      message = 'Connection refused — is Ollama running locally?';
+    } else if (status === 404) {
+      message = 'Ollama API not found at this URL';
+    } else if (error.message?.includes('timeout')) {
+      message = 'Connection timed out';
+    }
+    res.status(502).json({ error: message, details: error.message });
+  }
+});
+
+// Get saved local Ollama URL
+router.get('/ollama-local-url', async (req, res) => {
+  const localUrl = req.config.providers?.ollama?.localUrl || '';
+  res.json({ url: localUrl });
 });
 
 export default router;

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useApp } from "../context/AppContext";
 import { sendChatMessage, getModels } from "../services/api";
+import useOllamaLocal from "../hooks/useOllamaLocal";
+import LocalOllamaPanel from "./LocalOllamaPanel";
 
 // Generate unique chat ID
 const generateChatId = () =>
@@ -41,15 +43,21 @@ export default function Chat() {
   const [availableModels, setAvailableModels] = useState([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
+  const [cloudFilter, setCloudFilter] = useState("all");
   const [configuredProviderFilter, setConfiguredProviderFilter] = useState(
     () => localStorage.getItem(CHAT_SELECTED_PROVIDER_KEY) || "",
   );
   const [streamingContent, setStreamingContent] = useState("");
   const [initialized, setInitialized] = useState(false);
+  const [isLocalModelSelected, setIsLocalModelSelected] = useState(false);
   const messagesEndRef = useRef(null);
   const searchInputRef = useRef(null);
   const inputRef = useRef(null);
   const abortControllerRef = useRef(null);
+
+  const isOllamaLocalActive =
+    cloudFilter === "local" && configuredProviderFilter === "ollama";
+  const ollamaLocal = useOllamaLocal(isOllamaLocalActive);
 
   // On initial mount, load the last chat or most recent one
   useEffect(() => {
@@ -211,7 +219,7 @@ export default function Chat() {
 
   const providerModels = useMemo(() => availableModels, [availableModels]);
 
-  // Filter models based on search and selected gateway
+  // Filter models based on search, selected gateway, and cloud/local filter
   const filteredModels = useMemo(() => {
     return providerModels.filter((model) => {
       const matchesSearch =
@@ -223,9 +231,23 @@ export default function Chat() {
           .includes(modelSearch.toLowerCase()) ||
         model.id.toLowerCase().includes(modelSearch.toLowerCase());
 
-      return matchesSearch;
+      const matchesCloud =
+        cloudFilter === "all" ||
+        (cloudFilter === "cloud" && model.isCloud) ||
+        (cloudFilter === "local" && !model.isCloud);
+
+      return matchesSearch && matchesCloud;
     });
-  }, [providerModels, modelSearch]);
+  }, [providerModels, modelSearch, cloudFilter]);
+
+  const hasCloudModels = useMemo(
+    () => providerModels.some((m) => m.isCloud),
+    [providerModels],
+  );
+  const hasLocalModels = useMemo(
+    () => providerModels.some((m) => !m.isCloud),
+    [providerModels],
+  );
 
   useEffect(() => {
     if (!configuredProviderFilter || !providerModels.length) {
@@ -268,7 +290,15 @@ export default function Chat() {
     const effectiveProvider =
       configuredProviderFilter || selectedModelInfo?.provider;
 
-    if (!selectedModelInfo || !effectiveProvider) {
+    // For local Ollama models, selectedModelInfo won't exist in availableModels
+    const modelIdToSend = isLocalModelSelected
+      ? selectedModel
+      : selectedModelInfo?.id;
+    const effectiveProviderForSend = isLocalModelSelected
+      ? "ollama"
+      : effectiveProvider;
+
+    if ((!selectedModelInfo && !isLocalModelSelected) || !effectiveProviderForSend) {
       setMessages((prev) => [
         ...prev,
         {
@@ -281,19 +311,25 @@ export default function Chat() {
       return;
     }
 
+    // Extra options for local Ollama
+    const localOpts = isLocalModelSelected
+      ? { localOllamaUrl: ollamaLocal.localUrl }
+      : {};
+
     try {
       if (streamEnabled) {
         // Streaming mode
         let fullContent = "";
         const controller = new AbortController();
         abortControllerRef.current = controller;
-        await sendChatMessage(newMessages, selectedModelInfo?.id, {
+        await sendChatMessage(newMessages, modelIdToSend, {
           temperature: 0.7,
           maxTokens: 2048,
-          provider: effectiveProvider,
-          modelKey: selectedModelInfo?.modelKey,
+          provider: effectiveProviderForSend,
+          modelKey: isLocalModelSelected ? undefined : selectedModelInfo?.modelKey,
           stream: true,
           signal: controller.signal,
+          ...localOpts,
           onChunk: (chunk) => {
             fullContent += chunk;
             setStreamingContent(fullContent);
@@ -314,13 +350,14 @@ export default function Chat() {
         abortControllerRef.current = controller;
         const response = await sendChatMessage(
           newMessages,
-          selectedModelInfo?.id,
+          modelIdToSend,
           {
             temperature: 0.7,
             maxTokens: 2048,
-            provider: effectiveProvider,
-            modelKey: selectedModelInfo?.modelKey,
+            provider: effectiveProviderForSend,
+            modelKey: isLocalModelSelected ? undefined : selectedModelInfo?.modelKey,
             signal: controller.signal,
+            ...localOpts,
           },
         );
 
@@ -392,6 +429,7 @@ export default function Chat() {
 
   const handleModelSelect = (model) => {
     setSelectedModel(model.modelKey);
+    setIsLocalModelSelected(false);
 
     const nextProvider =
       model.provider ||
@@ -407,6 +445,16 @@ export default function Chat() {
       localStorage.setItem(CHAT_SELECTED_PROVIDER_KEY, nextProvider);
     }
 
+    setShowModelSelector(false);
+    setModelSearch("");
+  };
+
+  const handleLocalModelSelect = (model) => {
+    setSelectedModel(model.id);
+    setIsLocalModelSelected(true);
+    setConfiguredProviderFilter("ollama");
+    localStorage.setItem(CHAT_SELECTED_MODEL_KEY, model.id);
+    localStorage.setItem(CHAT_SELECTED_PROVIDER_KEY, "ollama");
     setShowModelSelector(false);
     setModelSearch("");
   };
@@ -427,7 +475,7 @@ export default function Chat() {
         <div>
           <h2 className="text-xl font-semibold text-white">Chat</h2>
           <p className="text-sm text-gray-400">
-            Model: {selectedModelInfo?.name || "Select a model"}
+            Model: {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -531,6 +579,29 @@ export default function Chat() {
               </div>
             </div>
 
+            {/* Cloud/Local Filter */}
+            {hasCloudModels && hasLocalModels && (
+              <div className="mb-3 flex gap-2">
+                {["all", "cloud", "local"].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setCloudFilter(filter)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      cloudFilter === filter
+                        ? filter === "cloud"
+                          ? "bg-purple-600 text-white"
+                          : filter === "local"
+                            ? "bg-emerald-600 text-white"
+                            : "bg-blue-600 text-white"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    }`}
+                  >
+                    {filter === "all" ? "All" : filter === "cloud" ? "☁ Cloud" : "💻 Local"}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Provider Filter */}
             <div className="mb-4 flex flex-wrap gap-2">
               {gatewayProviders.slice(0, 8).map((provider) => (
@@ -575,13 +646,30 @@ export default function Chat() {
               )}
             </div>
 
-            {/* Results count */}
-            <p className="text-sm text-gray-400 mb-3">
-              {filteredModels.length} model
-              {filteredModels.length !== 1 ? "s" : ""} found
-            </p>
+            {/* Local Ollama Panel */}
+            {isOllamaLocalActive && (
+              <LocalOllamaPanel
+                localUrl={ollamaLocal.localUrl}
+                setLocalUrl={ollamaLocal.setLocalUrl}
+                localModels={ollamaLocal.localModels}
+                localLoading={ollamaLocal.localLoading}
+                localError={ollamaLocal.localError}
+                fetchModels={ollamaLocal.fetchModels}
+                onSelectModel={handleLocalModelSelect}
+                selectedModelId={isLocalModelSelected ? selectedModel : ""}
+              />
+            )}
 
-            {/* Model List */}
+            {/* Results count — hide when showing local panel */}
+            {!isOllamaLocalActive && (
+              <p className="text-sm text-gray-400 mb-3">
+                {filteredModels.length} model
+                {filteredModels.length !== 1 ? "s" : ""} found
+              </p>
+            )}
+
+            {/* Model List — hide when showing local panel */}
+            {!isOllamaLocalActive && (
             <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
               {filteredModels.length > 0 ? (
                 filteredModels.map((model) => (
@@ -597,6 +685,15 @@ export default function Chat() {
                     <div className="flex justify-between items-center">
                       <span className="font-medium">{model.name}</span>
                       <div className="flex items-center gap-2">
+                        {model.isCloud ? (
+                          <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
+                            Cloud
+                          </span>
+                        ) : configuredProviderFilter === "ollama" ? (
+                          <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
+                            Local
+                          </span>
+                        ) : null}
                         {model.free && (
                           <span className="text-xs px-2 py-0.5 bg-green-600 rounded">
                             Free
@@ -629,6 +726,7 @@ export default function Chat() {
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
       )}

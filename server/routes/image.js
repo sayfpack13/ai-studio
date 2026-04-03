@@ -421,35 +421,54 @@ router.post("/generate", async (req, res) => {
         endpoint = CHUTES_DIRECT_ENDPOINT_MODELS[chutesModel];
 
         if (chutesModel === "hunyuan-image-3") {
-          // Hunyuan uses input_args with size parameter
+          // Hunyuan uses DIRECT parameters (NOT wrapped in input_args)
+          // Same as z-image-turbo - Chutes API expects direct parameters
+          const hunyuanInputArgsObj =
+            inputArgs && typeof inputArgs === "object" ? inputArgs : {};
+
           requestData = {
-            input_args: {
-              prompt: effectivePrompt,
-              ...(inputArgs && typeof inputArgs === "object"
-                ? {
-                    ...(inputArgs.seed !== undefined
-                      ? { seed: inputArgs.seed }
-                      : {}),
-                    ...(inputArgs.size !== undefined
-                      ? { size: inputArgs.size }
-                      : {}),
-                    ...(inputArgs.steps !== undefined
-                      ? { steps: inputArgs.steps }
-                      : {}),
-                  }
-                : {}),
-            },
-            ...(negativePrompt && { negative_prompt: negativePrompt }),
-            ...(normalizedGuidanceScale != null && {
-              guidance_scale: normalizedGuidanceScale,
-            }),
-            ...(normalizedWidth != null && { width: normalizedWidth }),
-            ...(normalizedHeight != null && { height: normalizedHeight }),
-            ...(normalizedNumInferenceSteps != null && {
-              num_inference_steps: normalizedNumInferenceSteps,
-            }),
-            ...sanitizedExtraParams,
+            prompt: effectivePrompt,
+            // Hunyuan uses size parameter (e.g., "1920x1080")
+            // Hunyuan size format: can be "auto", "WxH", "W:H" (aspect ratio), or single number
+            // Try aspect ratio format for widescreen: "16:9" instead of "1920x1080"
+            size:
+              hunyuanInputArgsObj.size != null
+                ? (() => {
+                    const sizeVal = String(hunyuanInputArgsObj.size);
+                    // Convert WxH to aspect ratio if it's widescreen
+                    if (sizeVal === "1920x1080" || sizeVal === "1280x720") {
+                      return "16:9";
+                    } else if (
+                      sizeVal === "1080x1920" ||
+                      sizeVal === "720x1280"
+                    ) {
+                      return "9:16";
+                    } else if (sizeVal === "1920x1200") {
+                      return "16:10";
+                    }
+                    return sizeVal;
+                  })()
+                : "1024x1024",
+            steps:
+              hunyuanInputArgsObj.steps != null
+                ? Math.min(100, Math.max(10, Number(hunyuanInputArgsObj.steps)))
+                : 20,
+            ...(hunyuanInputArgsObj.seed != null &&
+              hunyuanInputArgsObj.seed !== "" && {
+                seed: Math.min(
+                  4294967295,
+                  Math.max(0, Number(hunyuanInputArgsObj.seed)),
+                ),
+              }),
           };
+
+          console.log(
+            "[hunyuan-image-3] Building request (NO input_args wrapper):",
+          );
+          console.log(
+            "  - Final requestData:",
+            JSON.stringify(requestData, null, 2),
+          );
         } else if (chutesModel === "z-image-turbo") {
           // z-image-turbo uses input_args with width/height
           // guidance_scale max is 5, num_inference_steps max is 100

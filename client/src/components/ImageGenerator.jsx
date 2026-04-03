@@ -481,13 +481,17 @@ export default function ImageGenerator() {
                   prompt,
                   width: Number(zImageParams.width) || 1024,
                   height: Number(zImageParams.height) || 1024,
-                  seed: zImageParams.seed ? Number(zImageParams.seed) : null,
                   shift: Number(zImageParams.shift) || 3,
                   guidance_scale: Number(zImageParams.guidanceScale) || 0,
                   max_sequence_length:
                     Number(zImageParams.maxSequenceLength) || 512,
                   num_inference_steps:
                     Number(zImageParams.numInferenceSteps) || 9,
+                  // Only include seed if provided (don't send null)
+                  ...(zImageParams.seed &&
+                    zImageParams.seed !== "" && {
+                      seed: Number(zImageParams.seed),
+                    }),
                 }
               : undefined,
         debug: debugMode,
@@ -980,7 +984,8 @@ export default function ImageGenerator() {
                   </div>
                 )}
               {selectedModelInfo?.id !== "chutes/hunyuan-image-3" &&
-                selectedModelInfo?.id !== "chutes/Qwen-Image-2512" && (
+                selectedModelInfo?.id !== "chutes/Qwen-Image-2512" &&
+                selectedModelInfo?.id !== "chutes/z-image-turbo" && (
                   <div className="flex gap-4">
                     <div className="flex-1">
                       <label className="block text-sm font-medium text-gray-400 mb-1">

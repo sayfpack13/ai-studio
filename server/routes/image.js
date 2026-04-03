@@ -407,6 +407,16 @@ router.post("/generate", async (req, res) => {
       const chutesModel = normalizeChutesImageModel(modelInfo.id || modelId);
       let endpoint = null;
       let requestData = null;
+
+      // Declare z-image-turbo variables at higher scope for retry logic
+      let zImageWidth = 1024;
+      let zImageHeight = 1024;
+      let zImageGuidanceScale = 0;
+      let zImageNumInferenceSteps = 9;
+      let zImageSeed = undefined;
+      let zImageShift = undefined;
+      let zImageMaxSeqLen = undefined;
+
       if (CHUTES_DIRECT_ENDPOINT_MODELS[chutesModel]) {
         endpoint = CHUTES_DIRECT_ENDPOINT_MODELS[chutesModel];
 
@@ -447,25 +457,26 @@ router.post("/generate", async (req, res) => {
           const inputArgsObj =
             inputArgs && typeof inputArgs === "object" ? inputArgs : {};
 
-          const zImageWidth =
+          // Assign to higher-scoped let variables for retry logic access
+          zImageWidth =
             inputArgsObj.width != null
               ? Math.min(2048, Math.max(576, Number(inputArgsObj.width)))
               : normalizedWidth != null
                 ? Math.min(2048, Math.max(576, normalizedWidth))
                 : 1024;
-          const zImageHeight =
+          zImageHeight =
             inputArgsObj.height != null
               ? Math.min(2048, Math.max(576, Number(inputArgsObj.height)))
               : normalizedHeight != null
                 ? Math.min(2048, Math.max(576, normalizedHeight))
                 : 1024;
-          const zImageGuidanceScale =
+          zImageGuidanceScale =
             inputArgsObj.guidance_scale != null
               ? Math.min(5, Math.max(0, Number(inputArgsObj.guidance_scale)))
               : normalizedGuidanceScale != null
                 ? Math.min(5, Math.max(0, normalizedGuidanceScale))
                 : 0;
-          const zImageNumInferenceSteps =
+          zImageNumInferenceSteps =
             inputArgsObj.num_inference_steps != null
               ? Math.min(
                   100,
@@ -474,19 +485,19 @@ router.post("/generate", async (req, res) => {
               : normalizedNumInferenceSteps != null
                 ? Math.min(100, Math.max(1, normalizedNumInferenceSteps))
                 : 9;
-          const zImageSeed =
+          zImageSeed =
             inputArgsObj.seed != null
               ? Math.min(4294967295, Math.max(0, Number(inputArgsObj.seed)))
               : sanitizedExtraParams.seed != null
                 ? Math.min(4294967295, Math.max(0, sanitizedExtraParams.seed))
                 : undefined;
-          const zImageShift =
+          zImageShift =
             inputArgsObj.shift != null
               ? Math.min(10, Math.max(1, Number(inputArgsObj.shift)))
               : sanitizedExtraParams.shift != null
                 ? Math.min(10, Math.max(1, sanitizedExtraParams.shift))
                 : undefined;
-          const zImageMaxSeqLen =
+          zImageMaxSeqLen =
             inputArgsObj.max_sequence_length != null
               ? Math.min(
                   2048,
@@ -499,20 +510,33 @@ router.post("/generate", async (req, res) => {
                   )
                 : undefined;
 
+          // z-image-turbo uses DIRECT parameters (NOT wrapped in input_args)
+          // See curl example: https://chutes-z-image-turbo.chutes.ai/generate with {"prompt": "..."}
           requestData = {
-            input_args: {
-              prompt: effectivePrompt,
-              width: zImageWidth,
-              height: zImageHeight,
-              guidance_scale: zImageGuidanceScale,
-              num_inference_steps: zImageNumInferenceSteps,
-              ...(zImageSeed !== undefined && { seed: zImageSeed }),
-              ...(zImageShift !== undefined && { shift: zImageShift }),
-              ...(zImageMaxSeqLen !== undefined && {
-                max_sequence_length: zImageMaxSeqLen,
-              }),
-            },
+            prompt: effectivePrompt,
+            width: zImageWidth,
+            height: zImageHeight,
+            guidance_scale: zImageGuidanceScale,
+            num_inference_steps: zImageNumInferenceSteps,
+            ...(zImageSeed !== undefined && { seed: zImageSeed }),
+            ...(zImageShift !== undefined && { shift: zImageShift }),
+            ...(zImageMaxSeqLen !== undefined && {
+              max_sequence_length: zImageMaxSeqLen,
+            }),
           };
+
+          // Debug logging for z-image-turbo
+          console.log(
+            "[z-image-turbo] Building request (NO input_args wrapper):",
+          );
+          console.log(
+            "  - inputArgs from frontend:",
+            JSON.stringify(inputArgs, null, 2),
+          );
+          console.log(
+            "  - Final requestData:",
+            JSON.stringify(requestData, null, 2),
+          );
         } else {
           // Other direct endpoint models
           requestData = {
@@ -599,6 +623,13 @@ router.post("/generate", async (req, res) => {
       let fallbackUsed = false;
       let chutesResponse;
 
+      // Debug logging before API call
+      console.log("[Chutes API] Sending request to:", endpoint);
+      console.log(
+        "[Chutes API] Request payload:",
+        JSON.stringify(effectiveRequestData, null, 2),
+      );
+
       try {
         chutesResponse = await axios.post(endpoint, effectiveRequestData, {
           headers: {
@@ -609,7 +640,22 @@ router.post("/generate", async (req, res) => {
           responseType: "arraybuffer",
           transformResponse: [(data) => data],
         });
+
+        console.log("[Chutes API] Response status:", chutesResponse.status);
+        console.log(
+          "[Chutes API] Response content-type:",
+          chutesResponse.headers["content-type"],
+        );
       } catch (requestError) {
+        console.log(
+          "[Chutes API] Error status:",
+          requestError.response?.status,
+        );
+        console.log(
+          "[Chutes API] Error data:",
+          requestError.response?.data?.toString?.() || requestError.message,
+        );
+
         const parsedRequestError = parseProviderErrorPayload(
           requestError.response?.data,
         );
@@ -718,37 +764,6 @@ router.post("/generate", async (req, res) => {
                         : {}),
                     },
                   },
-                  {
-                    model: chutesModel,
-                    input_args: {
-                      prompt: effectivePrompt,
-                      ...(negativePrompt
-                        ? { negative_prompt: negativePrompt }
-                        : {}),
-                      ...(normalizedWidth != null
-                        ? { width: normalizedWidth }
-                        : {}),
-                      ...(normalizedHeight != null
-                        ? { height: normalizedHeight }
-                        : {}),
-                      ...(normalizedGuidanceScale != null
-                        ? { true_cfg_scale: normalizedGuidanceScale }
-                        : {}),
-                      ...(normalizedNumInferenceSteps != null
-                        ? { num_inference_steps: normalizedNumInferenceSteps }
-                        : {}),
-                    },
-                  },
-                  {
-                    model: chutesModel,
-                    input_args: {
-                      prompt: effectivePrompt,
-                    },
-                  },
-                  {
-                    model: chutesModel,
-                    prompt: effectivePrompt,
-                  },
                 ]
               : [{ model: chutesModel, prompt: effectivePrompt }]
             : chutesModel === "hunyuan-image-3"
@@ -759,7 +774,38 @@ router.post("/generate", async (req, res) => {
                     },
                   },
                 ]
-              : [{ prompt: effectivePrompt }];
+              : chutesModel === "z-image-turbo"
+                ? [
+                    {
+                      input_args: {
+                        prompt: effectivePrompt,
+                        width: zImageWidth,
+                        height: zImageHeight,
+                        guidance_scale: zImageGuidanceScale,
+                        num_inference_steps: zImageNumInferenceSteps,
+                        ...(zImageSeed !== undefined && { seed: zImageSeed }),
+                        ...(zImageShift !== undefined && {
+                          shift: zImageShift,
+                        }),
+                        ...(zImageMaxSeqLen !== undefined && {
+                          max_sequence_length: zImageMaxSeqLen,
+                        }),
+                      },
+                    },
+                    {
+                      input_args: {
+                        prompt: effectivePrompt,
+                        width: zImageWidth,
+                        height: zImageHeight,
+                      },
+                    },
+                    {
+                      input_args: {
+                        prompt: effectivePrompt,
+                      },
+                    },
+                  ]
+                : [{ prompt: effectivePrompt }];
 
           let lastRetryError = null;
           for (const candidate of retryPayloadCandidates) {

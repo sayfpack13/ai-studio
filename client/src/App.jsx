@@ -12,6 +12,7 @@ import VideoEditor from "./components/VideoEditor";
 import Dashboard from "./components/Dashboard";
 import MediaLibrary from "./components/library/MediaLibrary";
 import AdminPanel from "./components/AdminPanel";
+import { ChutesPage } from "./components/Chutes";
 import { getToken } from "./services/api";
 
 function AppContent() {
@@ -141,6 +142,7 @@ function AppContent() {
             <Route path="/remix" element={<MusicRemix />} />
             <Route path="/editor" element={<VideoEditor />} />
             <Route path="/library" element={<MediaLibrary />} />
+            <Route path="/chutes" element={<ChutesPage />} />
           </Routes>
         </main>
 

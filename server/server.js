@@ -16,6 +16,7 @@ import jobsRoutes from "./routes/jobs.js";
 import libraryRoutes from "./routes/library.js";
 import pipelinesRoutes from "./routes/pipelines.js";
 import editorRoutes from "./routes/editor.js";
+import chutesRoutes from "./routes/chutes.js";
 import jobQueue from "./services/jobQueue.js";
 import { normalizeConfig } from "./utils/config.js";
 import { resolveProviderContext } from "./utils/provider-routing.js";
@@ -864,6 +865,7 @@ app.use("/api/jobs", jobsRoutes);
 app.use("/api/library", libraryRoutes);
 app.use("/api/pipelines", pipelinesRoutes);
 app.use("/api/editor", editorRoutes);
+app.use("/api/chutes", chutesRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

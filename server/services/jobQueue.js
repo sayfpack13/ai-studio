@@ -286,6 +286,67 @@ class JobQueueService {
     return this.#clone(job);
   }
 
+  async deleteJob(jobId) {
+    await this.ready;
+    const job = this.jobs.get(jobId);
+    if (!job) return false;
+
+    // Remove from jobs map
+    this.jobs.delete(jobId);
+
+    // Remove from order array
+    const index = this.order.indexOf(jobId);
+    if (index > -1) {
+      this.order.splice(index, 1);
+    }
+
+    await this.#persist();
+    return true;
+  }
+
+  async deleteJobs(jobIds) {
+    await this.ready;
+    let deleted = 0;
+    for (const jobId of jobIds) {
+      if (this.jobs.delete(jobId)) {
+        const index = this.order.indexOf(jobId);
+        if (index > -1) {
+          this.order.splice(index, 1);
+        }
+        deleted++;
+      }
+    }
+    if (deleted > 0) {
+      await this.#persist();
+    }
+    return deleted;
+  }
+
+  async clearCompletedJobs() {
+    await this.ready;
+    const terminalStatuses = [STATUS.COMPLETED, STATUS.FAILED, STATUS.CANCELED];
+    const toDelete = [];
+
+    for (const id of this.order) {
+      const job = this.jobs.get(id);
+      if (job && terminalStatuses.includes(job.status)) {
+        toDelete.push(id);
+      }
+    }
+
+    for (const id of toDelete) {
+      this.jobs.delete(id);
+    }
+
+    this.order = this.order.filter((id) => !toDelete.includes(id));
+
+    if (toDelete.length > 0) {
+      await this.#persist();
+    }
+
+    return toDelete.length;
+  }
+
   async updateProgress(jobId, progress = 0, details = null) {
     const job = this.jobs.get(jobId);
     if (!job || job.status !== STATUS.PROCESSING) return null;

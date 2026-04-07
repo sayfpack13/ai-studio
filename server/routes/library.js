@@ -59,19 +59,28 @@ function toBase64Payload(input = "") {
   };
 }
 
-function buildDataUrl(mimeType, base64) {
-  return `data:${mimeType};base64,${base64}`;
-}
-
+// GET /api/library/assets - List assets with pagination
 router.get("/assets", async (req, res) => {
   try {
-    const assets = libraryService.listAssets({
+    const limit = Math.max(1, Math.min(1000, Number(req.query?.limit) || 100));
+    const offset = Math.max(0, Number(req.query?.offset) || 0);
+
+    const result = libraryService.listAssets({
       type: req.query?.type || null,
       folderId: req.query?.folderId || null,
       tag: req.query?.tag || null,
       query: req.query?.query || null,
+      limit,
+      offset,
     });
-    return res.json({ success: true, assets });
+
+    return res.json({
+      success: true,
+      items: result.items,
+      total: result.total,
+      limit: result.limit,
+      offset: result.offset,
+    });
   } catch (error) {
     return res
       .status(500)
@@ -79,6 +88,7 @@ router.get("/assets", async (req, res) => {
   }
 });
 
+// POST /api/library/assets - Create asset
 router.post("/assets", async (req, res) => {
   try {
     const asset = await libraryService.createAsset(req.body || {});
@@ -90,21 +100,7 @@ router.post("/assets", async (req, res) => {
   }
 });
 
-/**
- * Upload endpoint that stores content directly as data URL in asset.url
- * Body:
- * {
- *   "fileName": "example.png",
- *   "fileBase64": "<base64 or data URL>",
- *   "mimeType": "image/png",            // optional
- *   "type": "image|video|audio|project",// optional
- *   "title": "Optional title",          // optional
- *   "source": "upload",                 // optional
- *   "tags": ["tag1"],                   // optional
- *   "folderId": "folder_x",             // optional
- *   "metadata": { "foo": "bar" }        // optional
- * }
- */
+// POST /api/library/upload - Upload file
 router.post("/upload", async (req, res) => {
   try {
     const {
@@ -151,26 +147,25 @@ router.post("/upload", async (req, res) => {
       "application/octet-stream";
 
     const assetType = ["image", "video", "audio", "project"].includes(
-      providedType,
+      providedType
     )
       ? providedType
       : mimeToType(resolvedMime);
 
     const safeTitle =
       title || sanitizeName(fileName) || `uploaded-${Date.now()}`;
-    const dataUrl = buildDataUrl(resolvedMime, base64);
 
+    // Create asset - the library service will handle file storage
     const asset = await libraryService.createAsset({
       type: assetType,
       source: source || "upload",
       title: safeTitle,
-      url: dataUrl,
+      url: fileBase64, // Pass data URL, service will convert to file
       metadata: {
         ...(metadata && typeof metadata === "object" ? metadata : {}),
         mimeType: resolvedMime,
         originalFileName: fileName,
         sizeBytes: buffer.length,
-        storage: "data-url",
       },
       tags: Array.isArray(tags) ? tags : [],
       folderId: folderId || null,
@@ -182,7 +177,7 @@ router.post("/upload", async (req, res) => {
       file: {
         mimeType: resolvedMime,
         sizeBytes: buffer.length,
-        mode: "data-url",
+        storage: "local",
       },
     });
   } catch (error) {
@@ -192,11 +187,27 @@ router.post("/upload", async (req, res) => {
   }
 });
 
+// GET /api/library/assets/:id - Get single asset
+router.get("/assets/:id", async (req, res) => {
+  try {
+    const asset = libraryService.getAsset(req.params.id);
+    if (!asset) {
+      return res.status(404).json({ error: "Asset not found" });
+    }
+    return res.json({ success: true, asset });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: error.message || "Failed to get asset" });
+  }
+});
+
+// PATCH /api/library/assets/:id - Update asset
 router.patch("/assets/:id", async (req, res) => {
   try {
     const asset = await libraryService.updateAsset(
       req.params.id,
-      req.body || {},
+      req.body || {}
     );
     if (!asset) return res.status(404).json({ error: "Asset not found" });
     return res.json({ success: true, asset });
@@ -207,6 +218,7 @@ router.patch("/assets/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/library/assets/:id - Delete asset
 router.delete("/assets/:id", async (req, res) => {
   try {
     const deleted = await libraryService.deleteAsset(req.params.id);
@@ -219,17 +231,74 @@ router.delete("/assets/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/library/assets - Delete multiple assets
+router.delete("/assets", async (req, res) => {
+  try {
+    const ids = req.body?.ids;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "ids array is required" });
+    }
+    const deleted = await libraryService.deleteAssets(ids);
+    return res.json({ success: true, deleted });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: error.message || "Failed to delete assets" });
+  }
+});
+
+// POST /api/library/search - Search assets
 router.post("/search", async (req, res) => {
   try {
-    const assets = libraryService.listAssets({
+    const limit = Math.max(1, Math.min(1000, Number(req.body?.limit) || 100));
+    const offset = Math.max(0, Number(req.body?.offset) || 0);
+
+    const result = libraryService.listAssets({
       query: req.body?.query || "",
       type: req.body?.type || null,
       folderId: req.body?.folderId || null,
       tag: req.body?.tag || null,
+      limit,
+      offset,
     });
-    return res.json({ success: true, assets });
+
+    return res.json({
+      success: true,
+      items: result.items,
+      total: result.total,
+      limit: result.limit,
+      offset: result.offset,
+    });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Search failed" });
+  }
+});
+
+// POST /api/library/assets/:id/cache - Cache external asset locally
+router.post("/assets/:id/cache", async (req, res) => {
+  try {
+    const asset = await libraryService.cacheExternalAsset(req.params.id);
+    if (!asset) {
+      return res.status(404).json({ error: "Asset not found" });
+    }
+    return res.json({ success: true, asset });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: error.message || "Failed to cache asset" });
+  }
+});
+
+// POST /api/library/cleanup - Cleanup old assets
+router.post("/cleanup", async (req, res) => {
+  try {
+    const maxAgeDays = Math.max(1, Math.min(365, Number(req.body?.maxAgeDays) || 30));
+    const deleted = await libraryService.cleanupOldAssets(maxAgeDays);
+    return res.json({ success: true, deleted });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: error.message || "Cleanup failed" });
   }
 });
 

@@ -1,16 +1,13 @@
-import fs from "fs/promises";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 import crypto from "crypto";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const DATA_DIR = join(__dirname, "..", "data");
-const LIBRARY_PATH = join(DATA_DIR, "library-assets.json");
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
+import { stmts, insertMany, db } from "./db.js";
+import {
+  saveBase64,
+  downloadAndSave,
+  deleteFile,
+  isDataUrl,
+  isLocalUrl,
+  getFilenameFromUrl,
+} from "./file-storage.js";
 
 function nowIso() {
   return new Date().toISOString();
@@ -20,121 +17,302 @@ function createId(prefix = "asset") {
   return `${prefix}_${Date.now()}_${crypto.randomBytes(5).toString("hex")}`;
 }
 
+// Parse JSON safely
+function parseJson(str, fallback) {
+  try {
+    return JSON.parse(str || fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+// Convert database row to asset object
+function rowToAsset(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    type: row.type,
+    source: row.source,
+    title: row.title,
+    url: row.url,
+    filePath: row.file_path,
+    metadata: parseJson(row.metadata, {}),
+    tags: parseJson(row.tags, []),
+    folderId: row.folder_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// Convert asset object to database parameters
+function assetToParams(asset) {
+  return {
+    id: asset.id || createId("asset"),
+    type: asset.type || "project",
+    source: asset.source || "pipeline",
+    title: asset.title || `${asset.type}-${Date.now()}`,
+    url: asset.url || null,
+    file_path: asset.filePath || asset.file_path || null,
+    metadata: JSON.stringify(asset.metadata || {}),
+    tags: JSON.stringify(asset.tags || []),
+    folder_id: asset.folderId || asset.folder_id || null,
+    created_at: asset.createdAt || nowIso(),
+    updated_at: nowIso(),
+  };
+}
+
 class LibraryService {
   constructor() {
-    this.assets = new Map();
-    this.order = [];
-    this.ready = this.load();
+    // Initialize migration from old JSON if needed
+    this.ready = this.migrateFromJson();
   }
 
-  async ensureDataDir() {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  }
+  // Migrate from old JSON format to SQLite
+  async migrateFromJson() {
+    const { DATA_DIR } = await import("./db.js");
+    const fs = await import("fs/promises");
+    const { join } = await import("path");
 
-  async load() {
-    await this.ensureDataDir();
+    const JSON_PATH = join(DATA_DIR, "library-assets.json");
+    const MIGRATED_FLAG = join(DATA_DIR, ".migrated-to-sqlite");
+
+    // Check if already migrated
     try {
-      const raw = await fs.readFile(LIBRARY_PATH, "utf-8");
+      await fs.access(MIGRATED_FLAG);
+      return; // Already migrated
+    } catch {
+      // Not migrated yet
+    }
+
+    try {
+      const raw = await fs.readFile(JSON_PATH, "utf-8");
       const parsed = JSON.parse(raw);
       const assets = Array.isArray(parsed?.assets) ? parsed.assets : [];
-      this.assets.clear();
-      this.order = [];
-      for (const asset of assets) {
-        if (!asset?.id) continue;
-        this.assets.set(asset.id, asset);
-        this.order.push(asset.id);
+
+      if (assets.length > 0) {
+        console.log(`[Library] Migrating ${assets.length} assets from JSON to SQLite...`);
+
+        const params = assets.map((asset) => assetToParams(asset));
+        insertMany(params);
+
+        console.log(`[Library] Migration complete`);
+
+        // Mark as migrated
+        await fs.writeFile(MIGRATED_FLAG, new Date().toISOString());
       }
-    } catch {
-      await this.persist();
+    } catch (err) {
+      // No old JSON file, nothing to migrate
+      if (err.code !== "ENOENT") {
+        console.error("[Library] Migration error:", err.message);
+      }
     }
   }
 
-  async persist() {
-    await this.ensureDataDir();
-    const payload = {
-      updatedAt: nowIso(),
-      assets: this.order.map((id) => this.assets.get(id)).filter(Boolean),
-    };
-    await fs.writeFile(LIBRARY_PATH, JSON.stringify(payload, null, 2), "utf-8");
-  }
-
-  normalizeAsset(input = {}) {
-    const type = ["image", "video", "audio", "project"].includes(input.type)
-      ? input.type
-      : "project";
-    const source = input.source || "pipeline";
-    return {
-      id: input.id || createId("asset"),
-      type,
-      source,
-      title: input.title || `${type}-${Date.now()}`,
-      url: input.url || null,
-      blobRef: input.blobRef || null,
-      metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
-      tags: Array.isArray(input.tags) ? input.tags.slice(0, 20) : [],
-      folderId: input.folderId || null,
-      projectIds: Array.isArray(input.projectIds) ? input.projectIds : [],
-      createdAt: input.createdAt || nowIso(),
-      updatedAt: nowIso(),
-    };
-  }
-
-  async createAsset(assetInput) {
+  // Create a new asset
+  async createAsset(input = {}) {
     await this.ready;
-    const asset = this.normalizeAsset(assetInput);
-    this.assets.set(asset.id, asset);
-    this.order.unshift(asset.id);
-    await this.persist();
-    return clone(asset);
-  }
 
-  listAssets({ type, folderId, tag, query } = {}) {
-    let assets = this.order.map((id) => this.assets.get(id)).filter(Boolean);
-    if (type) assets = assets.filter((asset) => asset.type === type);
-    if (folderId) assets = assets.filter((asset) => asset.folderId === folderId);
-    if (tag) assets = assets.filter((asset) => asset.tags.includes(tag));
-    if (query) {
-      const q = String(query).toLowerCase();
-      assets = assets.filter((asset) =>
-        [asset.title, asset.source, asset.url, ...(asset.tags || [])]
-          .filter(Boolean)
-          .some((part) => String(part).toLowerCase().includes(q)),
-      );
+    const asset = assetToParams(input);
+
+    // If URL is a data URL, save to file
+    if (isDataUrl(input.url)) {
+      try {
+        const result = await saveBase64(input.url, input.metadata?.mimeType, "asset");
+        asset.url = result.url;
+        asset.file_path = result.filepath;
+        asset.metadata = JSON.stringify({
+          ...input.metadata,
+          sizeBytes: result.size,
+          storage: "local",
+        });
+      } catch (err) {
+        console.error("[Library] Failed to save file:", err.message);
+        // Keep the data URL if saving fails
+      }
     }
-    return clone(assets);
+
+    stmts.insert.run(asset);
+    return rowToAsset(stmts.getById.get(asset.id));
   }
 
+  // List assets with pagination and filtering
+  listAssets({
+    type,
+    folderId,
+    tag,
+    query,
+    limit = 100,
+    offset = 0,
+  } = {}) {
+    let rows;
+    let countResult;
+
+    if (query) {
+      // Full-text search
+      rows = stmts.search.all(query, limit, offset);
+      countResult = { count: rows.length }; // Approximate for search
+    } else if (folderId) {
+      rows = stmts.listByFolder.all(folderId, limit, offset);
+      countResult = stmts.countByFolder.get(folderId);
+    } else if (type) {
+      rows = stmts.listByType.all(type, limit, offset);
+      countResult = stmts.countByType.get(type);
+    } else {
+      rows = stmts.listAll.all(limit, offset);
+      countResult = stmts.countAll.get();
+    }
+
+    // Filter by tag if specified (SQLite doesn't have array contains)
+    let assets = rows.map(rowToAsset);
+    if (tag) {
+      assets = assets.filter((a) => a.tags && a.tags.includes(tag));
+    }
+
+    return {
+      items: assets,
+      total: countResult?.count || assets.length,
+      limit,
+      offset,
+    };
+  }
+
+  // Get single asset by ID
   getAsset(id) {
-    const asset = this.assets.get(id);
-    return asset ? clone(asset) : null;
+    const row = stmts.getById.get(id);
+    return rowToAsset(row);
   }
 
+  // Update asset
   async updateAsset(id, patch = {}) {
     await this.ready;
-    const current = this.assets.get(id);
-    if (!current) return null;
-    const next = {
-      ...current,
+
+    const existing = this.getAsset(id);
+    if (!existing) return null;
+
+    const updated = {
+      ...existing,
       ...patch,
       metadata: {
-        ...(current.metadata || {}),
-        ...(patch.metadata && typeof patch.metadata === "object" ? patch.metadata : {}),
+        ...(existing.metadata || {}),
+        ...(patch.metadata || {}),
       },
       updatedAt: nowIso(),
     };
-    this.assets.set(id, next);
-    await this.persist();
-    return clone(next);
+
+    stmts.update.run(assetToParams(updated));
+    return this.getAsset(id);
   }
 
+  // Delete asset
   async deleteAsset(id) {
     await this.ready;
-    const existed = this.assets.has(id);
-    if (!existed) return false;
-    this.assets.delete(id);
-    this.order = this.order.filter((item) => item !== id);
-    await this.persist();
+
+    const asset = this.getAsset(id);
+    if (!asset) return false;
+
+    // Delete associated file if local
+    if (asset.filePath || (asset.url && isLocalUrl(asset.url))) {
+      const filename = asset.filePath ? asset.filePath.split("/").pop() : getFilenameFromUrl(asset.url);
+      if (filename) {
+        await deleteFile(filename);
+      }
+    }
+
+    stmts.delete.run(id);
     return true;
+  }
+
+  // Delete multiple assets
+  async deleteAssets(ids) {
+    await this.ready;
+    let deleted = 0;
+
+    for (const id of ids) {
+      if (await this.deleteAsset(id)) {
+        deleted++;
+      }
+    }
+
+    return deleted;
+  }
+
+  // Clear all completed/terminal assets
+  async clearCompleted() {
+    await this.ready;
+
+    const toDelete = db
+      .prepare(
+        `SELECT id, url, file_path FROM assets 
+         WHERE type IN ('image', 'video', 'audio') 
+         AND source IN ('image', 'video', 'music', 'pipeline')`
+      )
+      .all();
+
+    let deleted = 0;
+    for (const row of toDelete) {
+      if (row.file_path || (row.url && isLocalUrl(row.url))) {
+        const filename = row.file_path ? row.file_path.split("/").pop() : getFilenameFromUrl(row.url);
+        if (filename) {
+          await deleteFile(filename);
+        }
+      }
+      stmts.delete.run(row.id);
+      deleted++;
+    }
+
+    return deleted;
+  }
+
+  // Cleanup old assets
+  async cleanupOldAssets(maxAgeDays = 30) {
+    await this.ready;
+
+    const toDelete = stmts.deleteOld.all(`-${maxAgeDays} days`);
+
+    for (const row of toDelete) {
+      if (row.file_path || (row.url && isLocalUrl(row.url))) {
+        const filename = row.file_path ? row.file_path.split("/").pop() : getFilenameFromUrl(row.url);
+        if (filename) {
+          await deleteFile(filename);
+        }
+      }
+    }
+
+    return toDelete.length;
+  }
+
+  // Download external URL and save locally
+  async cacheExternalAsset(id) {
+    const asset = this.getAsset(id);
+    if (!asset) return null;
+
+    if (isLocalUrl(asset.url)) {
+      return asset; // Already cached
+    }
+
+    if (!asset.url || isDataUrl(asset.url)) {
+      return asset; // Nothing to cache
+    }
+
+    try {
+      const result = await downloadAndSave(asset.url, asset.metadata?.mimeType, "cached");
+      
+      await this.updateAsset(id, {
+        url: result.url,
+        filePath: result.filepath,
+        metadata: {
+          ...asset.metadata,
+          originalUrl: asset.url,
+          sizeBytes: result.size,
+          storage: "cached",
+        },
+      });
+
+      return this.getAsset(id);
+    } catch (err) {
+      console.error("[Library] Failed to cache asset:", err.message);
+      return asset;
+    }
   }
 }
 

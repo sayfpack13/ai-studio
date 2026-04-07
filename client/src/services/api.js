@@ -130,6 +130,11 @@ export const listLibraryAssets = async (filters = {}) => {
   return await response.json();
 };
 
+export const getLibraryAsset = async (assetId) => {
+  const response = await fetch(`${API_BASE_URL}/library/assets/${assetId}`);
+  return await response.json();
+};
+
 export const createLibraryAsset = async (asset) => {
   const response = await fetch(`${API_BASE_URL}/library/assets`, {
     method: "POST",
@@ -155,11 +160,36 @@ export const deleteLibraryAsset = async (assetId) => {
   return await response.json();
 };
 
+export const deleteLibraryAssets = async (assetIds) => {
+  const response = await fetch(`${API_BASE_URL}/library/assets`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: assetIds }),
+  });
+  return await response.json();
+};
+
 export const searchLibraryAssets = async (payload) => {
   const response = await fetch(`${API_BASE_URL}/library/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload || {}),
+  });
+  return await response.json();
+};
+
+export const cacheLibraryAsset = async (assetId) => {
+  const response = await fetch(`${API_BASE_URL}/library/assets/${assetId}/cache`, {
+    method: "POST",
+  });
+  return await response.json();
+};
+
+export const cleanupLibraryAssets = async (maxAgeDays = 30) => {
+  const response = await fetch(`${API_BASE_URL}/library/cleanup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ maxAgeDays }),
   });
   return await response.json();
 };
@@ -213,6 +243,29 @@ export const getJobs = async (filters = {}) => {
 
 export const getJobEvents = async (jobId) => {
   const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/events`);
+  return await response.json();
+};
+
+export const cancelServerJob = async (jobId, reason = "Canceled by user") => {
+  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  return await response.json();
+};
+
+export const deleteServerJob = async (jobId) => {
+  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+    method: "DELETE",
+  });
+  return await response.json();
+};
+
+export const clearServerJobs = async () => {
+  const response = await fetch(`${API_BASE_URL}/jobs`, {
+    method: "DELETE",
+  });
   return await response.json();
 };
 

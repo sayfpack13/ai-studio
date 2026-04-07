@@ -1,2 +1,5 @@
 library-assets.json
 generation-jobs.json
+uploads
+assets.db
+assets.db-wal

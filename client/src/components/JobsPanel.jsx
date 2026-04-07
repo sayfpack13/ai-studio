@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -61,6 +61,12 @@ const STATUS_CONFIG = {
     label: "Cancelled",
   },
 };
+
+const TABS = [
+  { id: "in-progress", label: "In Progress", statuses: ["running", "pending"] },
+  { id: "completed", label: "Completed", statuses: ["completed"] },
+  { id: "failed", label: "Failed", statuses: ["failed", "cancelled"] },
+];
 
 function JobItem({ job, onCancel, onRetry, onRemove, onClick }) {
   const config = STATUS_CONFIG[job.status];
@@ -126,16 +132,16 @@ function JobItem({ job, onCancel, onRetry, onRemove, onClick }) {
         </div>
 
         <div className="flex-shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          {job.status === "running" && (
+          {(job.status === "running" || job.status === "pending") && (
             <button
               onClick={() => onCancel(job.id)}
               className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-              title="Cancel"
+              title={job.status === "running" ? "Stop" : "Cancel"}
             >
               <X className="w-4 h-4" />
             </button>
           )}
-          {job.status === "failed" && (
+          {job.status === "failed" && !job.isServerJob && (
             <button
               onClick={() => onRetry(job.id)}
               className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
@@ -176,9 +182,22 @@ export default function JobsPanel() {
     setSelectedJob,
   } = useJobs();
 
+  const [activeTab, setActiveTab] = useState("in-progress");
+
   const activeJobs = getActiveJobs();
   const pendingJobs = getPendingJobs();
   const activeCount = activeJobs.length + pendingJobs.length;
+
+  // Count jobs per tab
+  const tabCounts = TABS.reduce((acc, tab) => {
+    acc[tab.id] = jobs.filter((j) => tab.statuses.includes(j.status)).length;
+    return acc;
+  }, {});
+
+  // Filter jobs by active tab
+  const filteredJobs = jobs.filter((job) =>
+    TABS.find((t) => t.id === activeTab)?.statuses.includes(job.status)
+  );
 
   // Track if user manually closed the sidebar
   const userClosedRef = useRef(false);
@@ -207,6 +226,7 @@ export default function JobsPanel() {
   const handleJobClick = (job) => {
     const route = TYPE_ROUTES[job.type];
     if (route) {
+      userClosedRef.current = true; // Prevent sidebar from reopening
       setSelectedJob(job);
       setSidebarOpen(false);
       navigate(route);
@@ -252,42 +272,89 @@ export default function JobsPanel() {
               </button>
             </div>
 
-            {/* Clear button */}
-            {jobs.some((j) => j.status === "completed" || j.status === "failed" || j.status === "cancelled") && (
-              <div className="px-4 py-2 border-b border-gray-700">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-700">
+              {TABS.map((tab) => (
                 <button
-                  onClick={clearCompleted}
-                  className="w-full py-2 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition-colors"
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 py-2.5 px-2 text-sm font-medium transition-colors relative ${
+                    activeTab === tab.id
+                      ? "text-white"
+                      : "text-gray-400 hover:text-gray-300"
+                  }`}
                 >
-                  Clear completed
+                  <span className="flex items-center justify-center gap-1.5">
+                    {tab.label}
+                    {tabCounts[tab.id] > 0 && (
+                      <span
+                        className={`text-xs px-1.5 py-0.5 rounded-full ${
+                          activeTab === tab.id
+                            ? "bg-gray-600 text-gray-200"
+                            : "bg-gray-700 text-gray-400"
+                        }`}
+                      >
+                        {tabCounts[tab.id]}
+                      </span>
+                    )}
+                  </span>
+                  {activeTab === tab.id && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
+                    />
+                  )}
                 </button>
-              </div>
-            )}
+              ))}
+            </div>
+
+            {/* Clear button - only show for completed/failed tabs */}
+            {(activeTab === "completed" || activeTab === "failed") &&
+              tabCounts[activeTab] > 0 && (
+                <div className="px-4 py-2 border-b border-gray-700">
+                  <button
+                    onClick={clearCompleted}
+                    className="w-full py-2 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition-colors"
+                  >
+                    Clear {activeTab === "completed" ? "completed" : "failed & cancelled"}
+                  </button>
+                </div>
+              )}
 
             {/* Jobs List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {jobs.length === 0 ? (
+              {filteredJobs.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">No jobs in queue</p>
-                  <p className="text-xs mt-1">Generate something to see jobs here</p>
+                  <p className="text-sm">
+                    {activeTab === "in-progress"
+                      ? "No jobs in progress"
+                      : activeTab === "completed"
+                      ? "No completed jobs"
+                      : "No failed jobs"}
+                  </p>
+                  {activeTab === "in-progress" && (
+                    <p className="text-xs mt-1">Generate something to see jobs here</p>
+                  )}
                 </div>
               ) : (
-                jobs
-                  .sort((a, b) => {
-                    const order = { running: 0, pending: 1, completed: 2, failed: 3, cancelled: 4 };
-                    return (order[a.status] || 5) - (order[b.status] || 5);
-                  })
-                  .map((job) => (
-                    <JobItem
-                      key={job.id}
-                      job={job}
-                      onCancel={cancelJob}
-                      onRetry={retryJob}
-                      onRemove={removeJob}
-                      onClick={handleJobClick}
-                    />
-                  ))
+                <AnimatePresence mode="popLayout">
+                  {filteredJobs
+                    .sort((a, b) => {
+                      const order = { running: 0, pending: 1, completed: 2, failed: 3, cancelled: 4 };
+                      return (order[a.status] || 5) - (order[b.status] || 5);
+                    })
+                    .map((job) => (
+                      <JobItem
+                        key={job.id}
+                        job={job}
+                        onCancel={cancelJob}
+                        onRetry={retryJob}
+                        onRemove={removeJob}
+                        onClick={handleJobClick}
+                      />
+                    ))}
+                </AnimatePresence>
               )}
             </div>
           </motion.div>

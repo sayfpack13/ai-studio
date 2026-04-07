@@ -7,13 +7,13 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { generateImage, generateVideo, generateMusic } from "../services/api";
+import { generateImage, generateVideo, generateMusic, getJobs, cancelServerJob, deleteServerJob, clearServerJobs } from "../services/api";
 
 const JobContext = createContext();
 
 const JOBS_STORAGE_KEY = "blackbox_ai_jobs";
-const MAX_COMPLETED_JOBS = 200; // Increased from 50
-const COMPLETED_JOB_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days instead of 24 hours
+const MAX_COMPLETED_JOBS = 200;
+const COMPLETED_JOB_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Helper to load from localStorage
 const loadJobsFromStorage = () => {
@@ -36,7 +36,6 @@ const loadJobsFromStorage = () => {
 // Helper to save to localStorage
 const saveJobsToStorage = (jobs) => {
   try {
-    // Keep only recent completed jobs
     const trimmedJobs = jobs.slice(-MAX_COMPLETED_JOBS);
     localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(trimmedJobs));
   } catch (error) {
@@ -46,50 +45,144 @@ const saveJobsToStorage = (jobs) => {
 
 const MAX_CONCURRENT_JOBS = 3;
 
-export function JobProvider({ children }) {
+// Map server status to client status
+const mapServerStatus = (status) => {
+  const statusMap = {
+    queued: "pending",
+    processing: "running",
+    completed: "completed",
+    failed: "failed",
+    canceled: "cancelled",
+  };
+  return statusMap[status] || status;
+};
+
+// Convert server job to client job format
+const serverJobToClient = (serverJob) => ({
+  id: serverJob.id,
+  type: serverJob.type,
+  status: mapServerStatus(serverJob.status),
+  prompt: serverJob.metadata?.promptPreview || serverJob.payload?.prompt || "",
+  model: serverJob.metadata?.model || "",
+  progress: serverJob.progress || 0,
+  createdAt: new Date(serverJob.createdAt).getTime(),
+  completedAt: serverJob.completedAt ? new Date(serverJob.completedAt).getTime() : null,
+  error: serverJob.error?.message || serverJob.error || null,
+  result: serverJob.result || null,
+  params: serverJob.payload || {},
+  isServerJob: true,
+});
+
+export function JobProvider({ children}) {
   const [jobs, setJobs] = useState(() => {
     const loaded = loadJobsFromStorage();
     // Reset any stuck running jobs to pending on load
-    return loaded.map(job =>
-      job.status === "running" ? { ...job, status: "pending", progress: 0 } : job
-    );
+    // Also clear old "connection lost" errors from previous bug
+    return loaded
+      .map(job => {
+        if (job.status === "running") {
+          return { ...job, status: "pending", progress: 0 };
+        }
+        // Clear the old "Connection lost" error message from previous bug
+        if (job.status === "failed" && job.error === "Connection lost - job interrupted") {
+          return { ...job, status: "pending", error: null, progress: 0 };
+        }
+        return job;
+      })
+      .filter(job => {
+        // Filter out jobs that are too old and still pending (stale jobs)
+        const MAX_PENDING_AGE_MS = 5 * 60 * 1000; // 5 minutes
+        if (job.status === "pending" && Date.now() - job.createdAt > MAX_PENDING_AGE_MS) {
+          return false;
+        }
+        return true;
+      });
   });
+  const [serverJobs, setServerJobs] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const activeJobIdsRef = useRef(new Set());
   const abortControllersRef = useRef({});
-  // Holds the latest save functions registered by generator components
+  const processingRef = useRef(false);
   const saveFnsRef = useRef({ image: null, video: null, music: null });
 
-  // Allow generators to register their save functions
   const registerSaveFns = useCallback((type, fn) => {
     saveFnsRef.current[type] = fn;
   }, []);
 
-  // Persist jobs to localStorage (strip non-serializable fields)
+  // Persist jobs to localStorage
   useEffect(() => {
     const serializable = jobs.map(({ onSave, ...rest }) => rest);
     saveJobsToStorage(serializable);
   }, [jobs]);
 
+  // Fetch server jobs on mount and periodically
+  useEffect(() => {
+    const fetchServerJobs = async () => {
+      try {
+        const result = await getJobs({ limit: 100 });
+        if (result.success && result.items) {
+          setServerJobs(result.items.map(serverJobToClient));
+        }
+      } catch (error) {
+        console.error("Failed to fetch server jobs:", error);
+      }
+    };
+
+    fetchServerJobs();
+    const interval = setInterval(fetchServerJobs, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   // Get jobs by status
   const getActiveJobs = useCallback(() => {
-    return jobs.filter((job) => job.status === "running");
-  }, [jobs]);
+    const localActive = jobs.filter((job) => job.status === "running");
+    const serverActive = serverJobs.filter(
+      (job) => job.status === "running" || job.status === "pending"
+    );
+    // Merge, preferring local jobs for duplicates
+    const merged = [...localActive, ...serverActive.filter(j => !jobs.some(l => l.id === j.id))];
+    return merged;
+  }, [jobs, serverJobs]);
 
   const getPendingJobs = useCallback(() => {
-    return jobs.filter((job) => job.status === "pending");
-  }, [jobs]);
+    const localPending = jobs.filter((job) => job.status === "pending");
+    const serverPending = serverJobs.filter((job) => job.status === "pending");
+    return [...localPending, ...serverPending.filter(j => !jobs.some(l => l.id === j.id))];
+  }, [jobs, serverJobs]);
 
   const getCompletedJobs = useCallback(() => {
-    return jobs.filter((job) => job.status === "completed" || job.status === "failed");
-  }, [jobs]);
+    const localCompleted = jobs.filter(
+      (job) => job.status === "completed" || job.status === "failed" || job.status === "cancelled"
+    );
+    const serverCompleted = serverJobs.filter(
+      (job) => job.status === "completed" || job.status === "failed" || job.status === "cancelled"
+    );
+    // Merge, avoiding duplicates
+    const merged = [...localCompleted];
+    for (const sj of serverCompleted) {
+      if (!merged.some(lj => lj.id === sj.id)) {
+        merged.push(sj);
+      }
+    }
+    // Sort by completedAt descending
+    return merged.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+  }, [jobs, serverJobs]);
 
   const getJobsByType = useCallback(
     (type) => {
-      return jobs.filter((job) => job.type === type);
+      const local = jobs.filter((job) => job.type === type);
+      const server = serverJobs.filter((job) => job.type === type);
+      // Merge, avoiding duplicates
+      const merged = [...local];
+      for (const sj of server) {
+        if (!merged.some(lj => lj.id === sj.id)) {
+          merged.push(sj);
+        }
+      }
+      return merged;
     },
-    [jobs]
+    [jobs, serverJobs]
   );
 
   // Enqueue a new job
@@ -119,29 +212,58 @@ export function JobProvider({ children }) {
     );
   }, []);
 
-  // Cancel a job
-  const cancelJob = useCallback((jobId) => {
-    // Abort if running
-    if (abortControllersRef.current[jobId]) {
-      abortControllersRef.current[jobId].abort();
-      delete abortControllersRef.current[jobId];
-    }
-    activeJobIdsRef.current.delete(jobId);
+  // Cancel a job (works for both local and server jobs)
+  const cancelJob = useCallback(async (jobId) => {
+    // Check if it's a local job
+    const localJob = jobs.find(j => j.id === jobId);
+    
+    if (localJob) {
+      // Abort if running
+      if (abortControllersRef.current[jobId]) {
+        abortControllersRef.current[jobId].abort();
+        delete abortControllersRef.current[jobId];
+      }
+      activeJobIdsRef.current.delete(jobId);
 
-    setJobs((prev) =>
-      prev.map((job) =>
-        job.id === jobId
-          ? { ...job, status: "cancelled", completedAt: Date.now() }
-          : job
-      )
-    );
-  }, []);
+      setJobs((prev) =>
+        prev.map((job) =>
+          job.id === jobId
+            ? { ...job, status: "cancelled", completedAt: Date.now() }
+            : job
+        )
+      );
+    }
+
+    // Check if it's a server job
+    const serverJob = serverJobs.find(j => j.id === jobId);
+    if (serverJob && (serverJob.status === "running" || serverJob.status === "pending")) {
+      try {
+        await cancelServerJob(jobId);
+        // Update local server jobs state
+        setServerJobs((prev) =>
+          prev.map((job) =>
+            job.id === jobId
+              ? { ...job, status: "cancelled", completedAt: Date.now() }
+              : job
+          )
+        );
+      } catch (error) {
+        console.error("Failed to cancel server job:", error);
+      }
+    }
+  }, [jobs, serverJobs]);
 
   // Cancel all jobs of a specific type
-  const cancelAllJobsByType = useCallback((type) => {
-    const jobsOfType = jobs.filter((job) => job.type === type && (job.status === "running" || job.status === "pending"));
+  const cancelAllJobsByType = useCallback(async (type) => {
+    const localJobsOfType = jobs.filter(
+      (job) => job.type === type && (job.status === "running" || job.status === "pending")
+    );
+    const serverJobsOfType = serverJobs.filter(
+      (job) => job.type === type && (job.status === "running" || job.status === "pending")
+    );
 
-    jobsOfType.forEach((job) => {
+    // Cancel local jobs
+    localJobsOfType.forEach((job) => {
       if (abortControllersRef.current[job.id]) {
         abortControllersRef.current[job.id].abort();
         delete abortControllersRef.current[job.id];
@@ -156,9 +278,25 @@ export function JobProvider({ children }) {
           : job
       )
     );
-  }, [jobs]);
 
-  // Retry a failed job
+    // Cancel server jobs
+    for (const job of serverJobsOfType) {
+      try {
+        await cancelServerJob(job.id);
+      } catch (error) {
+        console.error("Failed to cancel server job:", error);
+      }
+    }
+    setServerJobs((prev) =>
+      prev.map((job) =>
+        job.type === type && (job.status === "running" || job.status === "pending")
+          ? { ...job, status: "cancelled", completedAt: Date.now() }
+          : job
+      )
+    );
+  }, [jobs, serverJobs]);
+
+  // Retry a failed job (only works for local jobs)
   const retryJob = useCallback((jobId) => {
     setJobs((prev) =>
       prev.map((job) =>
@@ -169,19 +307,59 @@ export function JobProvider({ children }) {
     );
   }, []);
 
-  // Clear completed jobs
-  const clearCompleted = useCallback(() => {
-    setJobs((prev) => prev.filter((job) => job.status !== "completed" && job.status !== "failed" && job.status !== "cancelled"));
+  // Clear completed jobs (both local and server)
+  const clearCompleted = useCallback(async () => {
+    // Clear from server
+    try {
+      await clearServerJobs();
+    } catch (error) {
+      console.error("Failed to clear server jobs:", error);
+    }
+
+    // Clear from local state
+    setJobs((prev) =>
+      prev.filter(
+        (job) =>
+          job.status !== "completed" &&
+          job.status !== "failed" &&
+          job.status !== "cancelled"
+      )
+    );
+    setServerJobs((prev) =>
+      prev.filter(
+        (job) =>
+          job.status !== "completed" &&
+          job.status !== "failed" &&
+          job.status !== "cancelled"
+      )
+    );
   }, []);
 
-  // Remove a specific job
-  const removeJob = useCallback((jobId) => {
+  // Remove a specific job (works for both local and server jobs)
+  const removeJob = useCallback(async (jobId) => {
+    // Abort if running
     if (abortControllersRef.current[jobId]) {
       abortControllersRef.current[jobId].abort();
       delete abortControllersRef.current[jobId];
     }
+    activeJobIdsRef.current.delete(jobId);
+
+    // Check if it's a server job and delete from server
+    const serverJob = serverJobs.find(j => j.id === jobId);
+    if (serverJob) {
+      try {
+        await deleteServerJob(jobId);
+      } catch (error) {
+        console.error("Failed to delete server job:", error);
+      }
+    }
+
+    // Remove from local jobs
     setJobs((prev) => prev.filter((job) => job.id !== jobId));
-  }, []);
+
+    // Remove from server jobs
+    setServerJobs((prev) => prev.filter((job) => job.id !== jobId));
+  }, [serverJobs]);
 
   // Process a single job
   const processJob = useCallback(async (job, saveResult) => {
@@ -253,69 +431,30 @@ export function JobProvider({ children }) {
     }
   }, [updateJob]);
 
-  // Job processor loop
-  const processQueue = useCallback(
-    async (saveImage, saveVideo, saveMusic) => {
-      if (processingRef.current) return;
-      processingRef.current = true;
-
-      try {
-        while (true) {
-          // Get next pending job
-          const pendingJobs = jobs.filter((job) => job.status === "pending");
-          if (pendingJobs.length === 0) break;
-
-          const job = pendingJobs[0];
-
-          // Get the appropriate save function
-          let saveResult;
-          if (job.type === "image") {
-            saveResult = (data) => saveImage(job.params.imageId, job.params.prompt, data, job.params.model, job.params.metadata);
-          } else if (job.type === "video") {
-            saveResult = (data) => saveVideo(job.params.videoId, job.params.prompt, data, job.params.model);
-          } else if (job.type === "music") {
-            saveResult = (data) => saveMusic(job.params.musicId, job.params.prompt, data, job.params.model);
-          }
-
-          const outcome = await processJob(job, saveResult);
-
-          if (outcome.cancelled) {
-            updateJob(job.id, { status: "cancelled", completedAt: Date.now() });
-          } else if (outcome.error) {
-            updateJob(job.id, {
-              status: "failed",
-              error: outcome.error,
-              completedAt: Date.now(),
-            });
-          } else {
-            updateJob(job.id, {
-              status: "completed",
-              result: outcome.result,
-              progress: 100,
-              completedAt: Date.now(),
-            });
-          }
-        }
-      } finally {
-        processingRef.current = false;
-      }
-    },
-    [jobs, processJob, updateJob]
-  );
-
   // Auto-process pending jobs with parallel execution
   useEffect(() => {
     const pendingJobs = jobs.filter((job) => job.status === "pending");
     const activeCount = activeJobIdsRef.current.size;
 
-    // Check if we can start more jobs
     if (pendingJobs.length === 0 || activeCount >= MAX_CONCURRENT_JOBS) return;
 
-    // Start jobs up to the limit
     const jobsToStart = pendingJobs.slice(0, MAX_CONCURRENT_JOBS - activeCount);
+    const now = Date.now();
+    const MAX_JOB_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
     jobsToStart.forEach((job) => {
       if (activeJobIdsRef.current.has(job.id)) return;
+
+      // Skip jobs that are too old (likely stale from a page refresh)
+      // They will be marked as failed in the next poll
+      if (now - job.createdAt > MAX_JOB_AGE_MS) {
+        updateJob(job.id, {
+          status: "failed",
+          error: "Job timed out - refresh page to generate again",
+          completedAt: now
+        });
+        return;
+      }
 
       activeJobIdsRef.current.add(job.id);
 
@@ -325,11 +464,30 @@ export function JobProvider({ children }) {
         const saveFn = saveFnsRef.current[job.type];
         if (saveFn) {
           if (job.type === "image") {
-            saveResult = (data) => saveFn(job.params.imageId, job.params.prompt, data, job.params.model, job.params.metadata);
+            saveResult = (data) =>
+              saveFn(
+                job.params.imageId,
+                job.params.prompt,
+                data,
+                job.params.model,
+                job.params.metadata
+              );
           } else if (job.type === "video") {
-            saveResult = (data) => saveFn(job.params.videoId, job.params.prompt, data, job.params.model, job.params.metadata);
+            saveResult = (data) =>
+              saveFn(
+                job.params.videoId,
+                job.params.prompt,
+                data,
+                job.params.model
+              );
           } else if (job.type === "music") {
-            saveResult = (data) => saveFn(job.params.musicId, job.params.prompt, data, job.params.model, job.params.metadata);
+            saveResult = (data) =>
+              saveFn(
+                job.params.musicId,
+                job.params.prompt,
+                data,
+                job.params.model
+              );
           }
         }
       }
@@ -358,8 +516,16 @@ export function JobProvider({ children }) {
     });
   }, [jobs, processJob, updateJob]);
 
+  // Combined jobs list for display
+  const allJobs = [...jobs];
+  for (const sj of serverJobs) {
+    if (!allJobs.some(lj => lj.id === sj.id)) {
+      allJobs.push(sj);
+    }
+  }
+
   const value = {
-    jobs,
+    jobs: allJobs,
     enqueueJob,
     cancelJob,
     cancelAllJobsByType,
@@ -371,7 +537,6 @@ export function JobProvider({ children }) {
     getCompletedJobs,
     getJobsByType,
     updateJob,
-    processQueue,
     registerSaveFns,
     sidebarOpen,
     setSidebarOpen,

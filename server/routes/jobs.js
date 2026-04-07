@@ -3,7 +3,6 @@ import { requireApiKey } from "../middleware/auth.js";
 import jobQueue, { JOB_STATUS } from "../services/jobQueue.js";
 
 const router = express.Router();
-router.use(requireApiKey);
 
 const ALLOWED_TYPES = new Set(["chat", "image", "video", "music", "pipeline"]);
 
@@ -25,15 +24,8 @@ function safePromptPreview(payload) {
   return typeof prompt === "string" ? prompt.slice(0, 200) : "";
 }
 
-// POST /api/jobs/enqueue
-// Body:
-// {
-//   "type": "image|video|music|chat",
-//   "payload": { ...request payload for that type... },
-//   "priority": 0,
-//   "metadata": { ...optional }
-// }
-router.post("/enqueue", async (req, res) => {
+// POST /api/jobs/enqueue - requires API key
+router.post("/enqueue", requireApiKey, async (req, res) => {
   try {
     const type = normalizeType(req.body?.type);
     const payload = req.body?.payload;
@@ -86,7 +78,7 @@ router.post("/enqueue", async (req, res) => {
   }
 });
 
-router.post("/pipeline", async (req, res) => {
+router.post("/pipeline", requireApiKey, async (req, res) => {
   try {
     const root = await jobQueue.enqueue({
       type: "pipeline",
@@ -103,7 +95,7 @@ router.post("/pipeline", async (req, res) => {
   }
 });
 
-// GET /api/jobs
+// GET /api/jobs - public, no auth required (just listing history)
 // Query: ?type=image&status=queued&limit=50&offset=0
 router.get("/", async (req, res) => {
   try {
@@ -128,7 +120,7 @@ router.get("/", async (req, res) => {
     const result = jobQueue.listJobs({
       type,
       status,
-      requestedBy: req.query?.allUsers === "true" ? null : getRequestedBy(req),
+      requestedBy: null, // Show all jobs
       limit,
       offset,
     });
@@ -144,16 +136,12 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /api/jobs/:id
+// GET /api/jobs/:id - public
 router.get("/:id", async (req, res) => {
   try {
     const job = jobQueue.getJob(req.params.id);
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
-    }
-
-    if (job.requestedBy && job.requestedBy !== getRequestedBy(req)) {
-      return res.status(403).json({ error: "Forbidden" });
     }
 
     return res.json({
@@ -171,9 +159,6 @@ router.get("/:id/events", async (req, res) => {
   try {
     const job = jobQueue.getJob(req.params.id);
     if (!job) return res.status(404).json({ error: "Job not found" });
-    if (job.requestedBy && job.requestedBy !== getRequestedBy(req)) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
     const events = jobQueue.getJobEvents(req.params.id) || [];
     return res.json({ success: true, events });
   } catch (error) {
@@ -181,16 +166,12 @@ router.get("/:id/events", async (req, res) => {
   }
 });
 
-// POST /api/jobs/:id/cancel
-router.post("/:id/cancel", async (req, res) => {
+// POST /api/jobs/:id/cancel - requires API key
+router.post("/:id/cancel", requireApiKey, async (req, res) => {
   try {
     const existing = jobQueue.getJob(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: "Job not found" });
-    }
-
-    if (existing.requestedBy && existing.requestedBy !== getRequestedBy(req)) {
-      return res.status(403).json({ error: "Forbidden" });
     }
 
     const reason =
@@ -205,6 +186,33 @@ router.post("/:id/cancel", async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       error: error.message || "Failed to cancel job",
+    });
+  }
+});
+
+// DELETE /api/jobs/:id - public (for removing from history)
+router.delete("/:id", async (req, res) => {
+  try {
+    const deleted = await jobQueue.deleteJob(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message || "Failed to delete job",
+    });
+  }
+});
+
+// DELETE /api/jobs - clear all completed jobs
+router.delete("/", async (req, res) => {
+  try {
+    const count = await jobQueue.clearCompletedJobs();
+    return res.json({ success: true, deleted: count });
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message || "Failed to clear jobs",
     });
   }
 });

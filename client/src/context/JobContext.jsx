@@ -12,8 +12,8 @@ import { generateImage, generateVideo, generateMusic } from "../services/api";
 const JobContext = createContext();
 
 const JOBS_STORAGE_KEY = "blackbox_ai_jobs";
-const MAX_COMPLETED_JOBS = 50;
-const COMPLETED_JOB_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_COMPLETED_JOBS = 200; // Increased from 50
+const COMPLETED_JOB_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days instead of 24 hours
 
 // Helper to load from localStorage
 const loadJobsFromStorage = () => {
@@ -44,14 +44,32 @@ const saveJobsToStorage = (jobs) => {
   }
 };
 
-export function JobProvider({ children }) {
-  const [jobs, setJobs] = useState(() => loadJobsFromStorage());
-  const processingRef = useRef(false);
-  const abortControllersRef = useRef({});
+const MAX_CONCURRENT_JOBS = 3;
 
-  // Persist jobs to localStorage
+export function JobProvider({ children }) {
+  const [jobs, setJobs] = useState(() => {
+    const loaded = loadJobsFromStorage();
+    // Reset any stuck running jobs to pending on load
+    return loaded.map(job =>
+      job.status === "running" ? { ...job, status: "pending", progress: 0 } : job
+    );
+  });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const activeJobIdsRef = useRef(new Set());
+  const abortControllersRef = useRef({});
+  // Holds the latest save functions registered by generator components
+  const saveFnsRef = useRef({ image: null, video: null, music: null });
+
+  // Allow generators to register their save functions
+  const registerSaveFns = useCallback((type, fn) => {
+    saveFnsRef.current[type] = fn;
+  }, []);
+
+  // Persist jobs to localStorage (strip non-serializable fields)
   useEffect(() => {
-    saveJobsToStorage(jobs);
+    const serializable = jobs.map(({ onSave, ...rest }) => rest);
+    saveJobsToStorage(serializable);
   }, [jobs]);
 
   // Get jobs by status
@@ -108,7 +126,8 @@ export function JobProvider({ children }) {
       abortControllersRef.current[jobId].abort();
       delete abortControllersRef.current[jobId];
     }
-    
+    activeJobIdsRef.current.delete(jobId);
+
     setJobs((prev) =>
       prev.map((job) =>
         job.id === jobId
@@ -117,6 +136,27 @@ export function JobProvider({ children }) {
       )
     );
   }, []);
+
+  // Cancel all jobs of a specific type
+  const cancelAllJobsByType = useCallback((type) => {
+    const jobsOfType = jobs.filter((job) => job.type === type && (job.status === "running" || job.status === "pending"));
+
+    jobsOfType.forEach((job) => {
+      if (abortControllersRef.current[job.id]) {
+        abortControllersRef.current[job.id].abort();
+        delete abortControllersRef.current[job.id];
+      }
+      activeJobIdsRef.current.delete(job.id);
+    });
+
+    setJobs((prev) =>
+      prev.map((job) =>
+        job.type === type && (job.status === "running" || job.status === "pending")
+          ? { ...job, status: "cancelled", completedAt: Date.now() }
+          : job
+      )
+    );
+  }, [jobs]);
 
   // Retry a failed job
   const retryJob = useCallback((jobId) => {
@@ -263,20 +303,40 @@ export function JobProvider({ children }) {
     [jobs, processJob, updateJob]
   );
 
-  // Auto-process pending jobs
+  // Auto-process pending jobs with parallel execution
   useEffect(() => {
     const pendingJobs = jobs.filter((job) => job.status === "pending");
-    if (pendingJobs.length === 0 || processingRef.current) return;
+    const activeCount = activeJobIdsRef.current.size;
 
-    const processNextJob = async () => {
-      if (processingRef.current) return;
-      processingRef.current = true;
+    // Check if we can start more jobs
+    if (pendingJobs.length === 0 || activeCount >= MAX_CONCURRENT_JOBS) return;
 
-      try {
-        const job = jobs.find((j) => j.status === "pending");
-        if (!job) return;
+    // Start jobs up to the limit
+    const jobsToStart = pendingJobs.slice(0, MAX_CONCURRENT_JOBS - activeCount);
 
-        const outcome = await processJob(job, job.onSave);
+    jobsToStart.forEach((job) => {
+      if (activeJobIdsRef.current.has(job.id)) return;
+
+      activeJobIdsRef.current.add(job.id);
+
+      // Build saveResult from registered save functions (works after page reload)
+      let saveResult = job.onSave || null;
+      if (!saveResult) {
+        const saveFn = saveFnsRef.current[job.type];
+        if (saveFn) {
+          if (job.type === "image") {
+            saveResult = (data) => saveFn(job.params.imageId, job.params.prompt, data, job.params.model, job.params.metadata);
+          } else if (job.type === "video") {
+            saveResult = (data) => saveFn(job.params.videoId, job.params.prompt, data, job.params.model, job.params.metadata);
+          } else if (job.type === "music") {
+            saveResult = (data) => saveFn(job.params.musicId, job.params.prompt, data, job.params.model, job.params.metadata);
+          }
+        }
+      }
+
+      // Process job asynchronously
+      processJob(job, saveResult).then((outcome) => {
+        activeJobIdsRef.current.delete(job.id);
 
         if (outcome.cancelled) {
           updateJob(job.id, { status: "cancelled", completedAt: Date.now() });
@@ -294,18 +354,15 @@ export function JobProvider({ children }) {
             completedAt: Date.now(),
           });
         }
-      } finally {
-        processingRef.current = false;
-      }
-    };
-
-    processNextJob();
+      });
+    });
   }, [jobs, processJob, updateJob]);
 
   const value = {
     jobs,
     enqueueJob,
     cancelJob,
+    cancelAllJobsByType,
     retryJob,
     removeJob,
     clearCompleted,
@@ -315,6 +372,12 @@ export function JobProvider({ children }) {
     getJobsByType,
     updateJob,
     processQueue,
+    registerSaveFns,
+    sidebarOpen,
+    setSidebarOpen,
+    selectedJob,
+    setSelectedJob,
+    maxConcurrentJobs: MAX_CONCURRENT_JOBS,
   };
 
   return <JobContext.Provider value={value}>{children}</JobContext.Provider>;

@@ -6,7 +6,7 @@ import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
 import { LoadingSpinner, GenerationProgress, ImagePresetPanel, MediaOutputPanel, getModelConfig } from "./shared";
-import { Image, Sparkles, Download, RefreshCw, Film, Settings } from "lucide-react";
+import { Image, Sparkles, Download, RefreshCw, Film, Settings, X } from "lucide-react";
 
 // Generate unique image ID
 const generateImageId = () =>
@@ -27,7 +27,7 @@ export default function ImageGenerator() {
     getImageIds,
     deleteImage,
   } = useApp();
-  const { enqueueJob, getJobsByType, processQueue, updateJob } = useJobs();
+  const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, registerSaveFns, maxConcurrentJobs } = useJobs();
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
@@ -35,9 +35,24 @@ export default function ImageGenerator() {
   );
   const [availableModels, setAvailableModels] = useState([]);
   const imageJobs = getJobsByType("image");
-  const loading = imageJobs.some(job => job.status === "running" || job.status === "pending");
+  const runningJobs = imageJobs.filter(job => job.status === "running");
+  const pendingJobs = imageJobs.filter(job => job.status === "pending");
+  const failedJobs = imageJobs.filter(job => job.status === "failed");
+  const runningCount = runningJobs.length;
+  const pendingCount = pendingJobs.length;
+  const hasActiveJobs = runningCount > 0 || pendingCount > 0;
   const [generatedImage, setGeneratedImage] = useState(null);
-  const [error, setError] = useState("");
+  const [localError, setLocalError] = useState("");
+  const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
+
+  // Get the most recent failed job error
+  const latestFailedJob = failedJobs.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
+  const jobError = latestFailedJob?.error || "";
+  const error = localError || jobError;
+
+  // Get the selected running job for progress display
+  const selectedRunningJob = imageJobs.find(job => job.id === selectedRunningJobId);
+  const selectedJobProgress = selectedRunningJob?.progress || 0;
 
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
@@ -271,6 +286,11 @@ export default function ImageGenerator() {
     }
   }, [selectedModel]);
 
+  // Register save function so jobs can save results after page reload
+  useEffect(() => {
+    registerSaveFns("image", saveImage);
+  }, [registerSaveFns, saveImage]);
+
   useEffect(() => {
     if (configuredProviderFilter) {
       localStorage.setItem(
@@ -280,10 +300,191 @@ export default function ImageGenerator() {
     }
   }, [configuredProviderFilter]);
 
+  // Load prompt data from selected job
+  useEffect(() => {
+    if (selectedJob && selectedJob.type === "image") {
+      setPrompt(selectedJob.prompt || "");
+      setDebugDetails(null);
+
+      // Handle failed job - show error
+      if (selectedJob.status === "failed") {
+        setLocalError(selectedJob.error || "Generation failed");
+        setGeneratedImage(null);
+        setSelectedRunningJobId(null);
+      } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
+        // Track running/pending job to show progress
+        setSelectedRunningJobId(selectedJob.id);
+        setLocalError("");
+        setGeneratedImage(null);
+
+        const metadata = selectedJob.params?.metadata;
+        const resolvedProvider = metadata?.provider || "";
+        // Prioritize modelKey from metadata, then check job.model
+        let resolvedModelKey = metadata?.modelKey || "";
+
+        // If no modelKey, try to find modelKey from availableModels using model ID
+        if (!resolvedModelKey && selectedJob.model) {
+          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          if (matchingModel) {
+            resolvedModelKey = matchingModel.modelKey;
+          } else {
+            resolvedModelKey = selectedJob.model;
+          }
+        }
+
+        // Set provider
+        if (resolvedProvider) {
+          setConfiguredProviderFilter(resolvedProvider);
+          localStorage.setItem(IMAGE_SELECTED_PROVIDER_KEY, resolvedProvider);
+        }
+
+        // Set model
+        if (resolvedModelKey) {
+          setSelectedModel(resolvedModelKey);
+          localStorage.setItem(IMAGE_SELECTED_MODEL_KEY, resolvedModelKey);
+        }
+
+        // Load all metadata params
+        if (metadata) {
+          if (typeof metadata.negativePrompt === "string") {
+            setNegativePrompt(metadata.negativePrompt);
+          }
+
+          if (metadata.width != null) {
+            setWidth(Number(metadata.width));
+          }
+
+          if (metadata.height != null) {
+            setHeight(Number(metadata.height));
+          }
+
+          if (metadata.hunyuanParams && typeof metadata.hunyuanParams === "object") {
+            setHunyuanParams((prev) => ({ ...prev, ...metadata.hunyuanParams }));
+          }
+
+          if (metadata.qwenImageParams && typeof metadata.qwenImageParams === "object") {
+            setQwenImageParams((prev) => ({ ...prev, ...metadata.qwenImageParams }));
+          }
+
+          if (metadata.zImageParams && typeof metadata.zImageParams === "object") {
+            setZImageParams((prev) => ({ ...prev, ...metadata.zImageParams }));
+          }
+
+          if (typeof metadata.customParamsText === "string") {
+            setCustomParamsText(metadata.customParamsText);
+          }
+        }
+      } else {
+        setLocalError("");
+        setSelectedRunningJobId(null);
+
+        const metadata = selectedJob.params?.metadata;
+        const resolvedProvider = metadata?.provider || "";
+        // Prioritize modelKey from metadata, then check job.model
+        let resolvedModelKey = metadata?.modelKey || "";
+
+        // If no modelKey, try to find modelKey from availableModels using model ID
+        if (!resolvedModelKey && selectedJob.model) {
+          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          if (matchingModel) {
+            resolvedModelKey = matchingModel.modelKey;
+          } else {
+            resolvedModelKey = selectedJob.model;
+          }
+        }
+
+        // Set provider
+        if (resolvedProvider) {
+          setConfiguredProviderFilter(resolvedProvider);
+          localStorage.setItem(IMAGE_SELECTED_PROVIDER_KEY, resolvedProvider);
+        }
+
+        // Set model
+        if (resolvedModelKey) {
+          setSelectedModel(resolvedModelKey);
+          localStorage.setItem(IMAGE_SELECTED_MODEL_KEY, resolvedModelKey);
+        }
+
+        // Load all metadata params
+        if (metadata) {
+          if (typeof metadata.negativePrompt === "string") {
+            setNegativePrompt(metadata.negativePrompt);
+          }
+
+          if (metadata.width != null) {
+            setWidth(Number(metadata.width));
+          }
+
+          if (metadata.height != null) {
+            setHeight(Number(metadata.height));
+          }
+
+          if (metadata.hunyuanParams && typeof metadata.hunyuanParams === "object") {
+            setHunyuanParams((prev) => ({ ...prev, ...metadata.hunyuanParams }));
+          }
+
+          if (metadata.qwenImageParams && typeof metadata.qwenImageParams === "object") {
+            setQwenImageParams((prev) => ({ ...prev, ...metadata.qwenImageParams }));
+          }
+
+          if (metadata.zImageParams && typeof metadata.zImageParams === "object") {
+            setZImageParams((prev) => ({ ...prev, ...metadata.zImageParams }));
+          }
+
+          if (typeof metadata.customParamsText === "string") {
+            setCustomParamsText(metadata.customParamsText);
+          }
+        }
+
+        // If job is completed, try to load result from history
+        if (selectedJob.status === "completed" && selectedJob.params?.imageId) {
+          const historyItem = getImage(selectedJob.params.imageId);
+          if (historyItem) {
+            setGeneratedImage(historyItem.result || null);
+          }
+        } else {
+          setGeneratedImage(null);
+        }
+      }
+
+      // Clear selected job after loading
+      setSelectedJob(null);
+    }
+  }, [selectedJob, setSelectedJob, getImage, availableModels]);
+
+  // Auto-load result when selected running job completes
+  useEffect(() => {
+    if (selectedRunningJobId) {
+      const job = imageJobs.find(j => j.id === selectedRunningJobId);
+      if (!job) {
+        // Job was removed
+        setSelectedRunningJobId(null);
+        return;
+      }
+
+      if (job.status === "completed") {
+        // Load the result from history
+        if (job.params?.imageId) {
+          const historyItem = getImage(job.params.imageId);
+          if (historyItem) {
+            setGeneratedImage(historyItem.result || null);
+          }
+        }
+        setSelectedRunningJobId(null);
+      } else if (job.status === "failed" || job.status === "cancelled") {
+        // Show error or clear
+        if (job.status === "failed") {
+          setLocalError(job.error || "Generation failed");
+        }
+        setSelectedRunningJobId(null);
+      }
+    }
+  }, [selectedRunningJobId, imageJobs, getImage]);
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    setError("");
+    setLocalError("");
 
     const selectedModelInfo = availableModels.find(
       (m) => m.modelKey === selectedModel,
@@ -293,7 +494,7 @@ export default function ImageGenerator() {
       : configuredProviderFilter || selectedModelInfo?.provider;
 
     if ((!selectedModelInfo && !isLocalModelSelected) || !effectiveProvider) {
-      setError("Please select a gateway and model first");
+      setLocalError("Please select a gateway and model first");
       return;
     }
 
@@ -302,12 +503,12 @@ export default function ImageGenerator() {
       try {
         const parsed = JSON.parse(customParamsText);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          setError("Custom parameters must be a JSON object");
+          setLocalError("Custom parameters must be a JSON object");
           return;
         }
         parsedCustomParams = parsed;
       } catch {
-        setError("Custom parameters JSON is invalid");
+        setLocalError("Custom parameters JSON is invalid");
         return;
       }
     }
@@ -346,7 +547,7 @@ export default function ImageGenerator() {
         normalizedSteps < 10 ||
         normalizedSteps > 100
       ) {
-        setError("Hunyuan steps must be an integer between 10 and 100");
+        setLocalError("Hunyuan steps must be an integer between 10 and 100");
         return;
       }
 
@@ -361,7 +562,7 @@ export default function ImageGenerator() {
           normalizedSeed < 0 ||
           normalizedSeed > maxSeed
         ) {
-          setError(
+          setLocalError(
             "Hunyuan seed must be an integer between 0 and 4294967295, or empty for random",
           );
           return;
@@ -373,7 +574,7 @@ export default function ImageGenerator() {
 
       const sizePattern = /^(auto|\d+x\d+|\d+:\d+|\d+)$/i;
       if (!sizePattern.test(normalizedSize)) {
-        setError(
+        setLocalError(
           "Hunyuan size must be one of: 'auto', 'WxH' (e.g. 1280x768), 'W:H' (e.g. 16:9), or square pixels (e.g. 1024)",
         );
         return;
@@ -407,7 +608,7 @@ export default function ImageGenerator() {
           normalizedSeed < 0 ||
           normalizedSeed > maxSeed
         ) {
-          setError(
+          setLocalError(
             "Qwen seed must be an integer between 0 and 4294967295, or empty for random",
           );
           return;
@@ -420,7 +621,7 @@ export default function ImageGenerator() {
         normalizedWidth < 128 ||
         normalizedWidth > 2048
       ) {
-        setError("Qwen width must be an integer between 128 and 2048");
+        setLocalError("Qwen width must be an integer between 128 and 2048");
         return;
       }
 
@@ -430,7 +631,7 @@ export default function ImageGenerator() {
         normalizedHeight < 128 ||
         normalizedHeight > 2048
       ) {
-        setError("Qwen height must be an integer between 128 and 2048");
+        setLocalError("Qwen height must be an integer between 128 and 2048");
         return;
       }
 
@@ -440,7 +641,7 @@ export default function ImageGenerator() {
         normalizedTrueCfgScale < 0 ||
         normalizedTrueCfgScale > 10
       ) {
-        setError("Qwen true_cfg_scale must be between 0 and 10");
+        setLocalError("Qwen true_cfg_scale must be between 0 and 10");
         return;
       }
 
@@ -452,7 +653,7 @@ export default function ImageGenerator() {
         normalizedNumInferenceSteps < 5 ||
         normalizedNumInferenceSteps > 75
       ) {
-        setError(
+        setLocalError(
           "Qwen num_inference_steps must be an integer between 5 and 75",
         );
         return;
@@ -585,7 +786,7 @@ export default function ImageGenerator() {
 
       setPrompt(historyItem.prompt || "");
       setGeneratedImage(historyItem.result || null);
-      setError("");
+      setLocalError("");
       setDebugDetails(null);
 
       const metadata =
@@ -598,12 +799,22 @@ export default function ImageGenerator() {
           ? legacyModel.split(":")[0]
           : "";
 
-      const resolvedModelKey =
-        (metadata && typeof metadata.modelKey === "string"
-          ? metadata.modelKey
-          : "") ||
-        legacyModel ||
-        "";
+      // Resolve modelKey - prioritize metadata.modelKey, then look up from availableModels
+      let resolvedModelKey = "";
+      const rawModelKey = metadata?.modelKey || legacyModel || "";
+
+      if (rawModelKey && rawModelKey.includes(":")) {
+        // Already a full modelKey with provider prefix
+        resolvedModelKey = rawModelKey;
+      } else if (rawModelKey) {
+        // Just a model ID - look up the modelKey from availableModels
+        const matchingModel = availableModels.find(m => m.id === rawModelKey || m.modelKey === rawModelKey);
+        if (matchingModel) {
+          resolvedModelKey = matchingModel.modelKey;
+        } else {
+          resolvedModelKey = rawModelKey;
+        }
+      }
 
       const resolvedProvider =
         (metadata && typeof metadata.provider === "string"
@@ -732,7 +943,7 @@ export default function ImageGenerator() {
         }
       }
     },
-    [getImage],
+    [getImage, availableModels],
   );
 
   useEffect(() => {
@@ -1135,25 +1346,69 @@ export default function ImageGenerator() {
 
           {/* Generate Button */}
           <div className="p-4 border-t border-gray-700">
-            {loading ? (
-              <Button
-                variant="danger"
-                onClick={handleStopGeneration}
-                className="w-full"
-              >
-                Stop Generation
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                onClick={handleGenerate}
-                disabled={!isConfigured || !prompt.trim()}
-                leftIcon={<Sparkles className="w-4 h-4" />}
-                className="w-full bg-purple-600 hover:bg-purple-500"
-              >
-                Generate Image
-              </Button>
+            {/* Queue Status */}
+            {hasActiveJobs && (
+              <div className="mb-3 p-2 bg-gray-800 rounded-lg">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">
+                    {runningCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <LoadingSpinner size="sm" />
+                        {runningCount} running
+                      </span>
+                    )}
+                    {runningCount > 0 && pendingCount > 0 && <span className="mx-1">,</span>}
+                    {pendingCount > 0 && (
+                      <span className="text-gray-500">{pendingCount} queued</span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => cancelAllJobsByType("image")}
+                    className="text-red-400 hover:text-red-300 text-xs"
+                  >
+                    Stop All
+                  </button>
+                </div>
+                {runningJobs.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {runningJobs.slice(0, 3).map(job => (
+                      <div key={job.id} className="flex items-center justify-between text-xs text-gray-500">
+                        <span className="truncate max-w-[180px]">{job.prompt?.slice(0, 40) || "Generating..."}</span>
+                        <div className="flex items-center gap-2">
+                          <span>{job.progress || 10}%</span>
+                          <button
+                            onClick={() => cancelJob(job.id)}
+                            className="text-red-400 hover:text-red-300"
+                            title="Stop this job"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {pendingJobs.length > 0 && runningJobs.length < 3 && (
+                  <div className="mt-1 text-xs text-gray-600">
+                    Next: {pendingJobs.slice(0, 2).map(j => j.prompt?.slice(0, 30) || "Queued").join(", ")}
+                  </div>
+                )}
+              </div>
             )}
+
+            {/* Generate Button - Always available */}
+            <Button
+              variant="primary"
+              onClick={handleGenerate}
+              disabled={!isConfigured || !prompt.trim()}
+              leftIcon={<Sparkles className="w-4 h-4" />}
+              className="w-full bg-purple-600 hover:bg-purple-500"
+            >
+              Generate Image
+              {hasActiveJobs && pendingCount >= maxConcurrentJobs - runningCount && (
+                <span className="ml-2 text-xs opacity-75">(Queued)</span>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -1191,7 +1446,15 @@ export default function ImageGenerator() {
               }
             }}
             onDeleteMedia={deleteImage}
-            loading={loading}
+            loading={hasActiveJobs || selectedRunningJobId !== null}
+            error={error}
+            progress={selectedRunningJobId !== null ? selectedJobProgress : null}
+            onClearError={() => {
+              setLocalError("");
+              if (latestFailedJob) {
+                removeJob(latestFailedJob.id);
+              }
+            }}
           />
         </div>
       </div>

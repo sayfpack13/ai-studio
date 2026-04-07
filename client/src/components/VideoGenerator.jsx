@@ -7,7 +7,7 @@ import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
 import { LoadingSpinner, VideoPresetPanel, MediaOutputPanel } from "./shared";
-import { Film, Sparkles, Download, Music, Settings } from "lucide-react";
+import { Film, Sparkles, Download, Music, Settings, X } from "lucide-react";
 
 // Generate unique video ID
 const generateVideoId = () =>
@@ -47,7 +47,7 @@ export default function VideoGenerator() {
     deleteVideo,
   } = useApp();
 
-  const { enqueueJob, getJobsByType, processQueue, updateJob } = useJobs();
+  const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, maxConcurrentJobs } = useJobs();
 
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
@@ -55,9 +55,24 @@ export default function VideoGenerator() {
   );
   const [availableModels, setAvailableModels] = useState([]);
   const videoJobs = getJobsByType("video");
-  const loading = videoJobs.some(job => job.status === "running" || job.status === "pending");
+  const runningJobs = videoJobs.filter(job => job.status === "running");
+  const pendingJobs = videoJobs.filter(job => job.status === "pending");
+  const failedJobs = videoJobs.filter(job => job.status === "failed");
+  const runningCount = runningJobs.length;
+  const pendingCount = pendingJobs.length;
+  const hasActiveJobs = runningCount > 0 || pendingCount > 0;
   const [generatedVideo, setGeneratedVideo] = useState(null);
-  const [error, setError] = useState("");
+  const [localError, setLocalError] = useState("");
+  const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
+
+  // Get the most recent failed job error
+  const latestFailedJob = failedJobs.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
+  const jobError = latestFailedJob?.error || "";
+  const error = localError || jobError;
+
+  // Get the selected running job for progress display
+  const selectedRunningJob = videoJobs.find(job => job.id === selectedRunningJobId);
+  const selectedJobProgress = selectedRunningJob?.progress || 0;
 
   const [duration, setDuration] = useState(5);
   const [fps, setFps] = useState(24);
@@ -262,6 +277,168 @@ export default function VideoGenerator() {
     }
   }, [configuredProviderFilter]);
 
+  // Load prompt data from selected job
+  useEffect(() => {
+    if (selectedJob && selectedJob.type === "video") {
+      setPrompt(selectedJob.prompt || "");
+
+      // Handle failed job - show error
+      if (selectedJob.status === "failed") {
+        setLocalError(selectedJob.error || "Generation failed");
+        setGeneratedVideo(null);
+        setSelectedRunningJobId(null);
+      } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
+        // Track running/pending job to show progress
+        setSelectedRunningJobId(selectedJob.id);
+        setLocalError("");
+        setGeneratedVideo(null);
+
+        const metadata = selectedJob.params?.metadata;
+        const options = selectedJob.params?.options || {};
+        const resolvedProvider = metadata?.provider || options.provider || "";
+
+        // Prioritize modelKey from metadata, then check job.model
+        let resolvedModelKey = metadata?.modelKey || "";
+
+        // If no modelKey, try to find modelKey from availableModels using model ID
+        if (!resolvedModelKey && selectedJob.model) {
+          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          if (matchingModel) {
+            resolvedModelKey = matchingModel.modelKey;
+          } else {
+            resolvedModelKey = selectedJob.model;
+          }
+        }
+
+        // Set provider
+        if (resolvedProvider) {
+          setConfiguredProviderFilter(resolvedProvider);
+          localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, resolvedProvider);
+        }
+
+        // Set model
+        if (resolvedModelKey) {
+          setSelectedModel(resolvedModelKey);
+          localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, resolvedModelKey);
+        }
+
+        // Load options
+        if (options.duration != null) {
+          setDuration(Number(options.duration));
+        }
+        if (options.fps != null) {
+          setFps(Number(options.fps));
+        }
+
+        // Load Wan-specific params
+        if (options.wan) {
+          if (options.wan.frames != null) setWanFrames(Number(options.wan.frames));
+          if (options.wan.fps != null) setWanFps(Number(options.wan.fps));
+          if (options.wan.fast != null) setWanFast(Boolean(options.wan.fast));
+          if (options.wan.seed != null) setWanSeed(String(options.wan.seed));
+          if (options.wan.resolution) setWanResolution(options.wan.resolution);
+          if (options.wan.guidance_scale != null) setWanGuidanceScale(Number(options.wan.guidance_scale));
+          if (options.wan.guidance_scale_2 != null) setWanGuidanceScale2(Number(options.wan.guidance_scale_2));
+          if (options.wan.negative_prompt) setWanNegativePrompt(options.wan.negative_prompt);
+        }
+      } else {
+        setLocalError("");
+        setSelectedRunningJobId(null);
+
+        const metadata = selectedJob.params?.metadata;
+        const options = selectedJob.params?.options || {};
+        const resolvedProvider = metadata?.provider || options.provider || "";
+
+        // Prioritize modelKey from metadata, then check job.model
+        let resolvedModelKey = metadata?.modelKey || "";
+
+        // If no modelKey, try to find modelKey from availableModels using model ID
+        if (!resolvedModelKey && selectedJob.model) {
+          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          if (matchingModel) {
+            resolvedModelKey = matchingModel.modelKey;
+          } else {
+            resolvedModelKey = selectedJob.model;
+          }
+        }
+
+        // Set provider
+        if (resolvedProvider) {
+          setConfiguredProviderFilter(resolvedProvider);
+          localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, resolvedProvider);
+        }
+
+        // Set model
+        if (resolvedModelKey) {
+          setSelectedModel(resolvedModelKey);
+          localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, resolvedModelKey);
+        }
+
+        // Load options
+        if (options.duration != null) {
+          setDuration(Number(options.duration));
+        }
+        if (options.fps != null) {
+          setFps(Number(options.fps));
+        }
+
+        // Load Wan-specific params
+        if (options.wan) {
+          if (options.wan.frames != null) setWanFrames(Number(options.wan.frames));
+          if (options.wan.fps != null) setWanFps(Number(options.wan.fps));
+          if (options.wan.fast != null) setWanFast(Boolean(options.wan.fast));
+          if (options.wan.seed != null) setWanSeed(String(options.wan.seed));
+          if (options.wan.resolution) setWanResolution(options.wan.resolution);
+          if (options.wan.guidance_scale != null) setWanGuidanceScale(Number(options.wan.guidance_scale));
+          if (options.wan.guidance_scale_2 != null) setWanGuidanceScale2(Number(options.wan.guidance_scale_2));
+          if (options.wan.negative_prompt) setWanNegativePrompt(options.wan.negative_prompt);
+        }
+
+        // If job is completed, try to load result from history
+        if (selectedJob.status === "completed" && selectedJob.params?.videoId) {
+          const historyItem = getVideo(selectedJob.params.videoId);
+          if (historyItem) {
+            setGeneratedVideo(historyItem.result || null);
+          }
+        } else {
+          setGeneratedVideo(null);
+        }
+      }
+
+      // Clear selected job after loading
+      setSelectedJob(null);
+    }
+  }, [selectedJob, setSelectedJob, getVideo, availableModels]);
+
+  // Auto-load result when selected running job completes
+  useEffect(() => {
+    if (selectedRunningJobId) {
+      const job = videoJobs.find(j => j.id === selectedRunningJobId);
+      if (!job) {
+        // Job was removed
+        setSelectedRunningJobId(null);
+        return;
+      }
+
+      if (job.status === "completed") {
+        // Load the result from history
+        if (job.params?.videoId) {
+          const historyItem = getVideo(job.params.videoId);
+          if (historyItem) {
+            setGeneratedVideo(historyItem.result || null);
+          }
+        }
+        setSelectedRunningJobId(null);
+      } else if (job.status === "failed" || job.status === "cancelled") {
+        // Show error or clear
+        if (job.status === "failed") {
+          setLocalError(job.error || "Generation failed");
+        }
+        setSelectedRunningJobId(null);
+      }
+    }
+  }, [selectedRunningJobId, videoJobs, getVideo]);
+
   useEffect(() => {
     if (!isWanI2VSelected) return;
 
@@ -291,14 +468,14 @@ export default function VideoGenerator() {
     if (!file) return;
 
     setWanUploadingImage(true);
-    setError("");
+    setLocalError("");
     try {
       const dataUrl = await fileToDataUrl(file);
       setWanImageData(dataUrl);
       setWanImageSourceType("upload");
       setWanLibraryImageId("");
     } catch (err) {
-      setError(err.message || "Failed to process image file");
+      setLocalError(err.message || "Failed to process image file");
     } finally {
       setWanUploadingImage(false);
     }
@@ -343,7 +520,7 @@ export default function VideoGenerator() {
     if (!prompt.trim()) return;
 
     
-    setError("");
+    setLocalError("");
     setGeneratedVideo(null);
 
     const selectedInfo = availableModels.find(
@@ -354,7 +531,7 @@ export default function VideoGenerator() {
       : configuredProviderFilter || selectedInfo?.provider;
 
     if ((!selectedInfo && !isLocalModelSelected) || !effectiveProvider) {
-      setError("Please select a gateway and model first");
+      setLocalError("Please select a gateway and model first");
       
       return;
     }
@@ -362,7 +539,7 @@ export default function VideoGenerator() {
     if (isWanI2VSelected) {
       const validationError = validateWanInputs();
       if (validationError) {
-        setError(validationError);
+        setLocalError(validationError);
         
         return;
       }
@@ -447,15 +624,15 @@ export default function VideoGenerator() {
           },
         });
       } else if (response.error) {
-        setError(response.error);
+        setLocalError(response.error);
       } else {
-        setError("Unexpected response format");
+        setLocalError("Unexpected response format");
       }
     } catch (err) {
       if (err?.name === "AbortError") {
-        setError("Video generation stopped.");
+        setLocalError("Video generation stopped.");
       } else {
-        setError(err.message || "Failed to generate video");
+        setLocalError(err.message || "Failed to generate video");
       }
     } finally {
       abortControllerRef.current = null;
@@ -527,9 +704,52 @@ export default function VideoGenerator() {
 
       setGeneratedVideo(videoItem.result || null);
       setPrompt(videoItem.prompt || "");
-      setError("");
+      setLocalError("");
+
+      const metadata = videoItem?.metadata && typeof videoItem.metadata === "object"
+        ? videoItem.metadata
+        : null;
+      const legacyModel = videoItem?.model || "";
+      const legacyProvider =
+        typeof legacyModel === "string" && legacyModel.includes(":")
+          ? legacyModel.split(":")[0]
+          : "";
+
+      // Resolve modelKey - prioritize metadata.modelKey, then look up from availableModels
+      let resolvedModelKey = "";
+      const rawModelKey = metadata?.modelKey || legacyModel || "";
+
+      if (rawModelKey && rawModelKey.includes(":")) {
+        // Already a full modelKey with provider prefix
+        resolvedModelKey = rawModelKey;
+      } else if (rawModelKey) {
+        // Just a model ID - look up the modelKey from availableModels
+        const matchingModel = availableModels.find(m => m.id === rawModelKey || m.modelKey === rawModelKey);
+        if (matchingModel) {
+          resolvedModelKey = matchingModel.modelKey;
+        } else {
+          resolvedModelKey = rawModelKey;
+        }
+      }
+
+      const resolvedProvider =
+        (metadata && typeof metadata.provider === "string"
+          ? metadata.provider
+          : "") ||
+        legacyProvider ||
+        "";
+
+      if (resolvedProvider) {
+        setConfiguredProviderFilter(resolvedProvider);
+        localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, resolvedProvider);
+      }
+
+      if (resolvedModelKey) {
+        setSelectedModel(resolvedModelKey);
+        localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, resolvedModelKey);
+      }
     },
-    [getVideo],
+    [getVideo, availableModels],
   );
 
   useEffect(() => {
@@ -954,25 +1174,69 @@ export default function VideoGenerator() {
 
           {/* Generate Button */}
           <div className="p-4 border-t border-gray-700">
-            {loading ? (
-              <Button
-                variant="danger"
-                onClick={handleStopGeneration}
-                className="w-full"
-              >
-                Stop Generation
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                onClick={handleGenerate}
-                disabled={!isConfigured || !prompt.trim() || (isWanI2VSelected && !wanImageData)}
-                leftIcon={<Sparkles className="w-4 h-4" />}
-                className="w-full bg-indigo-600 hover:bg-indigo-500"
-              >
-                Generate Video
-              </Button>
+            {/* Queue Status */}
+            {hasActiveJobs && (
+              <div className="mb-3 p-2 bg-gray-800 rounded-lg">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">
+                    {runningCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <LoadingSpinner size="sm" />
+                        {runningCount} running
+                      </span>
+                    )}
+                    {runningCount > 0 && pendingCount > 0 && <span className="mx-1">,</span>}
+                    {pendingCount > 0 && (
+                      <span className="text-gray-500">{pendingCount} queued</span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => cancelAllJobsByType("video")}
+                    className="text-red-400 hover:text-red-300 text-xs"
+                  >
+                    Stop All
+                  </button>
+                </div>
+                {runningJobs.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {runningJobs.slice(0, 3).map(job => (
+                      <div key={job.id} className="flex items-center justify-between text-xs text-gray-500">
+                        <span className="truncate max-w-[180px]">{job.prompt?.slice(0, 40) || "Generating..."}</span>
+                        <div className="flex items-center gap-2">
+                          <span>{job.progress || 10}%</span>
+                          <button
+                            onClick={() => cancelJob(job.id)}
+                            className="text-red-400 hover:text-red-300"
+                            title="Stop this job"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {pendingJobs.length > 0 && runningJobs.length < 3 && (
+                  <div className="mt-1 text-xs text-gray-600">
+                    Next: {pendingJobs.slice(0, 2).map(j => j.prompt?.slice(0, 30) || "Queued").join(", ")}
+                  </div>
+                )}
+              </div>
             )}
+
+            {/* Generate Button - Always available */}
+            <Button
+              variant="primary"
+              onClick={handleGenerate}
+              disabled={!isConfigured || !prompt.trim() || (isWanI2VSelected && !wanImageData)}
+              leftIcon={<Sparkles className="w-4 h-4" />}
+              className="w-full bg-indigo-600 hover:bg-indigo-500"
+            >
+              Generate Video
+              {hasActiveJobs && pendingCount >= maxConcurrentJobs - runningCount && (
+                <span className="ml-2 text-xs opacity-75">(Queued)</span>
+              )}
+            </Button>
           </div>
         </div>
 
@@ -1009,7 +1273,15 @@ export default function VideoGenerator() {
               }
             }}
             onDeleteMedia={deleteVideo}
-            loading={loading}
+            loading={hasActiveJobs || selectedRunningJobId !== null}
+            error={error}
+            progress={selectedRunningJobId !== null ? selectedJobProgress : null}
+            onClearError={() => {
+              setLocalError("");
+              if (latestFailedJob) {
+                removeJob(latestFailedJob.id);
+              }
+            }}
           />
         </div>
       </div>

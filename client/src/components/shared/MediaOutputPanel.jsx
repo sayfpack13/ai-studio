@@ -1,23 +1,24 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Image as ImageIcon, 
+import {
+  Image as ImageIcon,
   Video as VideoIcon,
   Music as MusicIcon,
-  History, 
-  GitCompare, 
-  Download, 
-  Film, 
-  Share2, 
-  Copy, 
-  Check, 
-  Maximize2, 
-  X, 
+  History,
+  GitCompare,
+  Download,
+  Film,
+  Share2,
+  Copy,
+  Check,
+  Maximize2,
+  X,
   Play,
   Pause,
   RefreshCw,
   Sparkles,
-  Volume2
+  Volume2,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "../ui";
 import MediaGalleryGrid from "./MediaGalleryGrid";
@@ -58,6 +59,9 @@ export default function MediaOutputPanel({
   onPreview,
   onDeleteMedia,
   loading,
+  error,
+  progress,
+  onClearError,
   className = "",
 }) {
   const config = MEDIA_CONFIG[mediaType];
@@ -252,7 +256,28 @@ export default function MediaOutputPanel({
                     <RefreshCw className="w-10 h-10 text-purple-400 animate-spin" />
                   </div>
                   <p className="text-gray-400 font-medium">{config.loadingMessage}</p>
+                  {progress !== null && progress !== undefined && (
+                    <p className="text-xs text-gray-500 mt-1">{progress}% complete</p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">This may take a moment</p>
+                </div>
+              ) : error ? (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <div className="w-20 h-20 rounded-2xl bg-red-600/20 flex items-center justify-center mb-4">
+                    <AlertCircle className="w-10 h-10 text-red-400" />
+                  </div>
+                  <p className="text-red-400 font-medium text-center px-4">Generation Failed</p>
+                  <div className="mt-3 p-3 bg-red-900/20 border border-red-700/50 rounded-lg max-w-md mx-4">
+                    <p className="text-sm text-red-300 break-words">{error}</p>
+                  </div>
+                  {onClearError && (
+                    <button
+                      onClick={onClearError}
+                      className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      Clear Error
+                    </button>
+                  )}
                 </div>
               ) : generatedMedia ? (
                 <div className="space-y-4">

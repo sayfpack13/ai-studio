@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
-import { JobProvider } from "./context/JobContext";
+import { JobProvider, useJobs } from "./context/JobContext";
 import { ToastProvider } from "./context/ToastContext";
 import Sidebar from "./components/Sidebar";
 import JobsPanel from "./components/JobsPanel";
@@ -21,6 +21,11 @@ function AppContent() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!getToken());
   const { sidebarOpen, toggleSidebar } = useApp();
+  const { sidebarOpen: jobsSidebarOpen, setSidebarOpen: setJobsSidebarOpen, getActiveJobs, getPendingJobs } = useJobs();
+
+  const activeJobs = getActiveJobs();
+  const pendingJobs = getPendingJobs();
+  const activeCount = activeJobs.length + pendingJobs.length;
 
   const handleAuthChange = (auth) => {
     setIsAuthenticated(auth);
@@ -62,6 +67,36 @@ function AppContent() {
 
           {/* Header Actions */}
           <div className="flex items-center gap-2">
+            {/* Jobs Button */}
+            <button
+              onClick={() => setJobsSidebarOpen(!jobsSidebarOpen)}
+              className={`relative p-2 rounded-lg transition-colors ${
+                jobsSidebarOpen
+                  ? "bg-blue-700 text-white"
+                  : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              }`}
+              title="Jobs"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              {activeCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center animate-pulse">
+                  {activeCount}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={() => setShowAdmin(true)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${

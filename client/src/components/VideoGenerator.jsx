@@ -1,11 +1,12 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
-import { enqueuePipeline, generateVideo, getModels } from "../services/api";
+import { useJobs } from "../context/JobContext";
+import { enqueuePipeline, getModels } from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
-import { LoadingSpinner, VideoPresetPanel } from "./shared";
+import { LoadingSpinner, VideoPresetPanel, MediaOutputPanel } from "./shared";
 import { Film, Sparkles, Download, Music, Settings } from "lucide-react";
 
 // Generate unique video ID
@@ -41,14 +42,20 @@ export default function VideoGenerator() {
     addLibraryAsset,
     libraryAssets,
     refreshLibraryAssets,
+    videoHistory,
+    getVideoIds,
+    deleteVideo,
   } = useApp();
+
+  const { enqueueJob, getJobsByType, processQueue, updateJob } = useJobs();
 
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem(VIDEO_SELECTED_MODEL_KEY) || "",
   );
   const [availableModels, setAvailableModels] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const videoJobs = getJobsByType("video");
+  const loading = videoJobs.some(job => job.status === "running" || job.status === "pending");
   const [generatedVideo, setGeneratedVideo] = useState(null);
   const [error, setError] = useState("");
 
@@ -333,9 +340,9 @@ export default function VideoGenerator() {
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || loading) return;
+    if (!prompt.trim()) return;
 
-    setLoading(true);
+    
     setError("");
     setGeneratedVideo(null);
 
@@ -348,7 +355,7 @@ export default function VideoGenerator() {
 
     if ((!selectedInfo && !isLocalModelSelected) || !effectiveProvider) {
       setError("Please select a gateway and model first");
-      setLoading(false);
+      
       return;
     }
 
@@ -356,7 +363,7 @@ export default function VideoGenerator() {
       const validationError = validateWanInputs();
       if (validationError) {
         setError(validationError);
-        setLoading(false);
+        
         return;
       }
     }
@@ -452,7 +459,7 @@ export default function VideoGenerator() {
       }
     } finally {
       abortControllerRef.current = null;
-      setLoading(false);
+      
     }
   };
 
@@ -735,321 +742,276 @@ export default function VideoGenerator() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="max-w-4xl mx-auto space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Prompt
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                isWanI2VSelected
-                  ? "Describe motion/style for your input image..."
-                  : "Describe the video you want to generate..."
-              }
-              disabled={!isConfigured}
-              className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px]"
-            />
-          </div>
-
-          {isWanI2VSelected ? (
-            <div className="space-y-3 p-3 bg-gray-800 rounded-lg">
-              <h3 className="text-sm font-semibold text-gray-200">
-                Wan 2.2 I2V Controls
-              </h3>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="block text-sm text-gray-300">
-                    Image Source
-                  </label>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => {
-                        setWanImageSourceType("upload");
-                        setWanLibraryImageId("");
-                      }}
-                      className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "upload"
-                          ? "bg-indigo-600 text-white"
-                          : "bg-gray-700 text-gray-200"
-                        }`}
-                    >
-                      Upload
-                    </button>
-                    <button
-                      onClick={() => setWanImageSourceType("library")}
-                      className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "library"
-                          ? "bg-indigo-600 text-white"
-                          : "bg-gray-700 text-gray-200"
-                        }`}
-                    >
-                      From Library
-                    </button>
-                  </div>
-
-                  {wanImageSourceType === "upload" && (
-                    <div className="space-y-2">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleWanImageUpload}
-                        className="w-full text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white"
-                      />
-                      {wanUploadingImage && (
-                        <p className="text-xs text-gray-400">
-                          Processing image...
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {wanImageSourceType === "library" && (
-                    <button
-                      onClick={() => setShowAssetPicker(true)}
-                      className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                      {wanLibraryImageId
-                        ? "Change Image from Library"
-                        : "Select Image from Library"}
-                    </button>
-                  )}
-
-                  {wanImageData && (
-                    <div className="rounded border border-gray-700 overflow-hidden">
-                      <img
-                        src={wanImageData}
-                        alt="Wan input preview"
-                        className="w-full h-40 object-cover"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm text-gray-300">
-                    Resolution
-                  </label>
-                  <select
-                    value={wanResolution}
-                    onChange={(e) => setWanResolution(e.target.value)}
-                    className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="480p">480p</option>
-                    <option value="720p">720p</option>
-                  </select>
-
-                  <label className="block text-sm text-gray-300 mt-2">
-                    Seed (optional)
-                  </label>
-                  <input
-                    type="number"
-                    value={wanSeed}
-                    onChange={(e) => setWanSeed(e.target.value)}
-                    placeholder="null/random"
-                    className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-
-                  <label className="inline-flex items-center gap-2 mt-2 text-sm text-gray-300">
-                    <input
-                      type="checkbox"
-                      checked={wanFast}
-                      onChange={(e) => setWanFast(e.target.checked)}
-                    />
-                    Fast mode
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    Frames (21-140): {wanFrames}
-                  </label>
-                  <input
-                    type="range"
-                    min="21"
-                    max="140"
-                    value={wanFrames}
-                    onChange={(e) => setWanFrames(Number(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    FPS (16-24): {wanFps}
-                  </label>
-                  <input
-                    type="range"
-                    min="16"
-                    max="24"
-                    value={wanFps}
-                    onChange={(e) => setWanFps(Number(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    Guidance Scale (0-10): {wanGuidanceScale}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    value={wanGuidanceScale}
-                    onChange={(e) =>
-                      setWanGuidanceScale(Number(e.target.value))
-                    }
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-300 mb-1">
-                    Guidance Scale 2 (0-10): {wanGuidanceScale2}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    value={wanGuidanceScale2}
-                    onChange={(e) =>
-                      setWanGuidanceScale2(Number(e.target.value))
-                    }
-                    className="w-full"
-                  />
-                </div>
-              </div>
-
+      {/* Main Content - Split Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Panel - Controls */}
+        <div className="w-full lg:w-[45%] flex flex-col border-r border-gray-700">
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-4">
+              {/* Prompt */}
               <div>
-                <label className="block text-sm text-gray-300 mb-1">
-                  Negative Prompt
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Prompt
                 </label>
                 <textarea
-                  value={wanNegativePrompt}
-                  onChange={(e) => setWanNegativePrompt(e.target.value)}
-                  className="w-full bg-gray-700 text-white p-2 rounded resize-y min-h-[90px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={
+                    isWanI2VSelected
+                      ? "Describe motion/style for your input image..."
+                      : "Describe the video you want to generate..."
+                  }
+                  disabled={!isConfigured}
+                  className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[120px]"
                 />
               </div>
-            </div>
-          ) : (
-            <VideoPresetPanel
-              duration={duration}
-              onDurationChange={setDuration}
-              fps={fps}
-              onFpsChange={setFps}
-              minDuration={1}
-              maxDuration={60}
-              minFps={12}
-              maxFps={60}
-            />
-          )}
 
-          {error && (
-            <div className="p-3 bg-red-900/50 text-red-200 rounded-lg">
-              {error}
-            </div>
-          )}
+              {/* Wan I2V Controls or Video Preset Panel */}
+              {isWanI2VSelected ? (
+                <div className="space-y-3 p-3 bg-gray-800 rounded-lg">
+                  <h3 className="text-sm font-semibold text-gray-200">
+                    Wan 2.2 I2V Controls
+                  </h3>
 
-          {generatedVideo && (
-            <div className="space-y-3">
-              <div className="relative rounded-xl overflow-hidden bg-gray-800 border border-gray-700">
-                <video
-                  src={generatedVideo.url}
-                  controls
-                  className="w-full h-auto"
-                >
-                  Your browser does not support the video tag.
-                </video>
-              </div>
-              {generatedVideo.id && (
-                <p className="text-sm text-gray-400 bg-gray-800/50 p-3 rounded-lg border border-gray-700">
-                  <span className="font-medium text-gray-300">Video ID:</span>{" "}
-                  {generatedVideo.id}
-                </p>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="space-y-2">
+                      <label className="block text-sm text-gray-300">
+                        Image Source
+                      </label>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => {
+                            setWanImageSourceType("upload");
+                            setWanLibraryImageId("");
+                          }}
+                          className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "upload"
+                              ? "bg-indigo-600 text-white"
+                              : "bg-gray-700 text-gray-200"
+                            }`}
+                        >
+                          Upload
+                        </button>
+                        <button
+                          onClick={() => setWanImageSourceType("library")}
+                          className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "library"
+                              ? "bg-indigo-600 text-white"
+                              : "bg-gray-700 text-gray-200"
+                            }`}
+                        >
+                          From Library
+                        </button>
+                      </div>
+
+                      {wanImageSourceType === "upload" && (
+                        <div className="space-y-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleWanImageUpload}
+                            className="w-full text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white"
+                          />
+                          {wanUploadingImage && (
+                            <p className="text-xs text-gray-400">
+                              Processing image...
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {wanImageSourceType === "library" && (
+                        <button
+                          onClick={() => setShowAssetPicker(true)}
+                          className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            />
+                          </svg>
+                          {wanLibraryImageId
+                            ? "Change Image from Library"
+                            : "Select Image from Library"}
+                        </button>
+                      )}
+
+                      {wanImageData && (
+                        <div className="rounded border border-gray-700 overflow-hidden">
+                          <img
+                            src={wanImageData}
+                            alt="Wan input preview"
+                            className="w-full h-32 object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Resolution</label>
+                        <select
+                          value={wanResolution}
+                          onChange={(e) => setWanResolution(e.target.value)}
+                          className="w-full bg-gray-700 text-white p-2 rounded text-sm"
+                        >
+                          <option value="480p">480p</option>
+                          <option value="720p">720p</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Frames: {wanFrames}</label>
+                        <input
+                          type="range"
+                          min="25"
+                          max="200"
+                          value={wanFrames}
+                          onChange={(e) => setWanFrames(Number(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">FPS: {wanFps}</label>
+                        <input
+                          type="range"
+                          min="8"
+                          max="24"
+                          value={wanFps}
+                          onChange={(e) => setWanFps(Number(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Guidance: {wanGuidanceScale}</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="10"
+                          step="0.1"
+                          value={wanGuidanceScale}
+                          onChange={(e) => setWanGuidanceScale(Number(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Seed (optional)</label>
+                      <input
+                        type="text"
+                        value={wanSeed}
+                        onChange={(e) => setWanSeed(e.target.value)}
+                        placeholder="Random"
+                        className="w-full bg-gray-700 text-white p-2 rounded text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <VideoPresetPanel
+                  duration={duration}
+                  onDurationChange={setDuration}
+                  fps={fps}
+                  onFpsChange={setFps}
+                  minDuration={1}
+                  maxDuration={60}
+                  minFps={12}
+                  maxFps={60}
+                />
               )}
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="success"
-                  onClick={handleDownload}
-                  leftIcon={<Download className="w-4 h-4" />}
-                >
-                  Download Video
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleMusicToEditorPipeline}
-                  leftIcon={<Music className="w-4 h-4" />}
-                >
-                  Link Music Pipeline
-                </Button>
-              </div>
-            </div>
-          )}
 
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 flex items-center justify-center mb-4">
-                <LoadingSpinner size="lg" className="text-indigo-400" />
-              </div>
-              <p className="text-gray-400 font-medium">Generating video...</p>
-              <p className="text-xs text-gray-500 mt-1">This may take a while</p>
-            </div>
-          )}
+              {/* Error */}
+              {error && (
+                <div className="p-3 bg-red-900/50 text-red-200 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
 
-          {!isConfigured && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-yellow-600/20 flex items-center justify-center mb-4">
-                <Settings className="w-8 h-8 text-yellow-500" />
-              </div>
-              <h3 className="text-lg font-medium text-white mb-2">API Not Configured</h3>
-              <p className="text-gray-400 text-center max-w-sm">
-                Please configure your API keys in the Admin panel to start generating videos.
-              </p>
+              {/* Not Configured Warning */}
+              {!isConfigured && (
+                <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-400">
+                    <Settings className="w-4 h-4" />
+                    <span className="text-sm font-medium">API Not Configured</span>
+                  </div>
+                  <p className="text-xs text-yellow-300/70 mt-1">
+                    Configure API keys in Admin panel to generate videos.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Generate Button */}
+          <div className="p-4 border-t border-gray-700">
+            {loading ? (
+              <Button
+                variant="danger"
+                onClick={handleStopGeneration}
+                className="w-full"
+              >
+                Stop Generation
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onClick={handleGenerate}
+                disabled={!isConfigured || !prompt.trim() || (isWanI2VSelected && !wanImageData)}
+                leftIcon={<Sparkles className="w-4 h-4" />}
+                className="w-full bg-indigo-600 hover:bg-indigo-500"
+              >
+                Generate Video
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="p-4 border-t border-gray-700">
-        {loading ? (
-          <Button
-            variant="danger"
-            onClick={handleStopGeneration}
-            className="w-full"
-          >
-            Stop Generation
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            onClick={handleGenerate}
-            disabled={!isConfigured || !prompt.trim() || (isWanI2VSelected && !wanImageData)}
-            leftIcon={<Sparkles className="w-4 h-4" />}
-            className="w-full bg-indigo-600 hover:bg-indigo-500"
-          >
-            Generate Video
-          </Button>
-        )}
+        {/* Right Panel - Output */}
+        <div className="hidden lg:flex lg:w-[55%] flex-col">
+          <MediaOutputPanel
+            mediaType="video"
+            generatedMedia={generatedVideo}
+            mediaHistory={videoHistory}
+            getMediaIds={getVideoIds}
+            onDownload={handleDownload}
+            onPreview={(video) => {
+              // Just preview the video without loading prompt
+              setGeneratedVideo({
+                url: video.url,
+                model: video.model,
+              });
+            }}
+            onReloadPrompt={(video) => {
+              // Load prompt and model for regeneration
+              setPrompt(video.prompt || "");
+              setGeneratedVideo({
+                url: video.url,
+                model: video.model,
+                prompt: video.prompt,
+                duration: video.duration,
+              });
+              if (video.model) {
+                const model = availableModels.find((m) => m.id === video.model);
+                if (model) {
+                  setSelectedModel(model.modelKey);
+                  localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, model.modelKey);
+                }
+              }
+            }}
+            onDeleteMedia={deleteVideo}
+            loading={loading}
+          />
+        </div>
       </div>
 
       {/* Asset Picker Dialog */}

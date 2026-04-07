@@ -1,10 +1,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
-import { generateMusic, getModels } from "../services/api";
+import { useJobs } from "../context/JobContext";
+import { getModels } from "../services/api";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
-import { LoadingSpinner, MusicPresetPanel } from "./shared";
+import { LoadingSpinner, MusicPresetPanel, MediaOutputPanel } from "./shared";
 import { Music, Sparkles, Download, Settings } from "lucide-react";
 
 const generateMusicId = () =>
@@ -13,15 +14,26 @@ const MUSIC_SELECTED_MODEL_KEY = "blackbox_ai_music_selected_model";
 const MUSIC_SELECTED_PROVIDER_KEY = "blackbox_ai_music_selected_provider";
 
 export default function MusicGenerator() {
-  const { isConfigured, saveMusic, providers, getMusic, addLibraryAsset } =
-    useApp();
+  const { 
+    isConfigured, 
+    saveMusic, 
+    providers, 
+    getMusic, 
+    addLibraryAsset,
+    musicHistory,
+    getMusicIds,
+    deleteMusic,
+  } = useApp();
+
+  const { enqueueJob, getJobsByType, processQueue, updateJob } = useJobs();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem(MUSIC_SELECTED_MODEL_KEY) || "",
   );
   const [availableModels, setAvailableModels] = useState([]);
   const [selectedMusicId, setSelectedMusicId] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const musicJobs = getJobsByType("music");
+  const loading = musicJobs.some(job => job.status === "running" || job.status === "pending");
   const [generatedMusic, setGeneratedMusic] = useState(null);
   const [error, setError] = useState("");
   const [voice, setVoice] = useState("");
@@ -195,9 +207,9 @@ export default function MusicGenerator() {
   }, [configuredProviderFilter]);
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || loading) return;
+    if (!prompt.trim()) return;
 
-    setLoading(true);
+    
     setError("");
     setGeneratedMusic(null);
 
@@ -210,7 +222,7 @@ export default function MusicGenerator() {
 
     if ((!selectedModelInfo && !isLocalModelSelected) || !effectiveProvider) {
       setError("Please select a gateway and model first");
-      setLoading(false);
+      
       return;
     }
 
@@ -270,7 +282,7 @@ export default function MusicGenerator() {
       }
     } finally {
       abortControllerRef.current = null;
-      setLoading(false);
+      
     }
   };
 
@@ -350,7 +362,7 @@ export default function MusicGenerator() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
-      setLoading(false);
+      
     }
   };
 
@@ -541,120 +553,133 @@ export default function MusicGenerator() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="max-w-4xl mx-auto space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Prompt
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the music you want to generate..."
-              disabled={!isConfigured}
-              className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]"
-            />
-          </div>
+      {/* Main Content - Split Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Panel - Controls */}
+        <div className="w-full lg:w-[45%] flex flex-col border-r border-gray-700">
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-4">
+              {/* Prompt */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Prompt
+                </label>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe the music you want to generate..."
+                  disabled={!isConfigured}
+                  className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[120px]"
+                />
+              </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Voice (optional)
-              </label>
-              <input
-                value={voice}
-                onChange={(e) => setVoice(e.target.value)}
-                placeholder="e.g. mellow-female"
-                className="w-full bg-gray-800 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              {/* Voice */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Voice (optional)
+                </label>
+                <input
+                  value={voice}
+                  onChange={(e) => setVoice(e.target.value)}
+                  placeholder="e.g. mellow-female"
+                  className="w-full bg-gray-800 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Music Settings Panel */}
+              <MusicPresetPanel
+                duration={duration}
+                onDurationChange={setDuration}
+                format={format}
+                onFormatChange={setFormat}
+                style={musicStyle}
+                onStyleChange={setMusicStyle}
+                minDuration={5}
+                maxDuration={180}
               />
+
+              {/* Error */}
+              {error && (
+                <div className="p-3 bg-red-900/50 text-red-200 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Not Configured Warning */}
+              {!isConfigured && (
+                <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-400">
+                    <Settings className="w-4 h-4" />
+                    <span className="text-sm font-medium">API Not Configured</span>
+                  </div>
+                  <p className="text-xs text-yellow-300/70 mt-1">
+                    Configure API keys in Admin panel to generate music.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Music Settings Panel */}
-          <MusicPresetPanel
-            duration={duration}
-            onDurationChange={setDuration}
-            format={format}
-            onFormatChange={setFormat}
-            style={musicStyle}
-            onStyleChange={setMusicStyle}
-            minDuration={5}
-            maxDuration={180}
-          />
-
-          {error && (
-            <div className="p-3 bg-red-900/50 text-red-200 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          {generatedMusic && (
-            <div className="space-y-3">
-              <div className="text-xs text-gray-500 bg-gray-800/50 px-3 py-1.5 rounded-lg inline-block">
-                {selectedMusicId ? `History ID: ${selectedMusicId}` : "Preview"}
-              </div>
-              <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
-                <audio src={generatedMusic.url} controls className="w-full" />
-              </div>
-              {generatedMusic.raw && (
-                <p className="text-sm text-gray-400 bg-gray-800/50 p-3 rounded-lg border border-gray-700 break-all">
-                  {generatedMusic.raw}
-                </p>
-              )}
+          {/* Generate Button */}
+          <div className="p-4 border-t border-gray-700">
+            {loading ? (
               <Button
-                variant="success"
-                onClick={handleDownload}
-                leftIcon={<Download className="w-4 h-4" />}
+                variant="danger"
+                onClick={handleStopGeneration}
+                className="w-full"
               >
-                Download Audio
+                Stop Generation
               </Button>
-            </div>
-          )}
-
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-600/20 flex items-center justify-center mb-4">
-                <LoadingSpinner size="lg" className="text-emerald-400" />
-              </div>
-              <p className="text-gray-400 font-medium">Generating music...</p>
-              <p className="text-xs text-gray-500 mt-1">This may take a moment</p>
-            </div>
-          )}
-
-          {!isConfigured && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-yellow-600/20 flex items-center justify-center mb-4">
-                <Settings className="w-8 h-8 text-yellow-500" />
-              </div>
-              <h3 className="text-lg font-medium text-white mb-2">API Not Configured</h3>
-              <p className="text-gray-400 text-center max-w-sm">
-                Please configure your API keys in the Admin panel to start generating music.
-              </p>
-            </div>
-          )}
+            ) : (
+              <Button
+                variant="primary"
+                onClick={handleGenerate}
+                disabled={!isConfigured || !prompt.trim()}
+                leftIcon={<Sparkles className="w-4 h-4" />}
+                className="w-full bg-emerald-600 hover:bg-emerald-500"
+              >
+                Generate Music
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="p-4 border-t border-gray-700">
-        {loading ? (
-          <Button
-            variant="danger"
-            onClick={handleStopGeneration}
-            className="w-full"
-          >
-            Stop Generation
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            onClick={handleGenerate}
-            disabled={!isConfigured || !prompt.trim()}
-            leftIcon={<Sparkles className="w-4 h-4" />}
-            className="w-full bg-emerald-600 hover:bg-emerald-500"
-          >
-            Generate Music
-          </Button>
-        )}
+        {/* Right Panel - Output */}
+        <div className="hidden lg:flex lg:w-[55%] flex-col">
+          <MediaOutputPanel
+            mediaType="music"
+            generatedMedia={generatedMusic}
+            mediaHistory={musicHistory}
+            getMediaIds={getMusicIds}
+            onDownload={handleDownload}
+            onPreview={(music) => {
+              // Just preview the music without loading prompt
+              setGeneratedMusic({
+                url: music.url,
+                model: music.model,
+              });
+            }}
+            onReloadPrompt={(music) => {
+              // Load prompt and model for regeneration
+              setPrompt(music.prompt || "");
+              setGeneratedMusic({
+                url: music.url,
+                model: music.model,
+                prompt: music.prompt,
+                duration: music.duration,
+              });
+              if (music.model) {
+                const model = availableModels.find((m) => m.id === music.model);
+                if (model) {
+                  setSelectedModel(model.modelKey);
+                  localStorage.setItem(MUSIC_SELECTED_MODEL_KEY, model.modelKey);
+                }
+              }
+            }}
+            onDeleteMedia={deleteMusic}
+            loading={loading}
+          />
+        </div>
       </div>
     </div>
   );

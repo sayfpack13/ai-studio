@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
+import { JobProvider } from "./context/JobContext";
 import { ToastProvider } from "./context/ToastContext";
 import Sidebar from "./components/Sidebar";
-import HistorySidebar from "./components/HistorySidebar";
+import JobsPanel from "./components/JobsPanel";
 import Chat from "./components/Chat";
 import ImageGenerator from "./components/ImageGenerator";
 import VideoGenerator from "./components/VideoGenerator";
@@ -18,25 +19,6 @@ import { getToken } from "./services/api";
 function AppContent() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!getToken());
-  const [historySidebarOpen, setHistorySidebarOpen] = useState(() => {
-    try {
-      const stored = localStorage.getItem("blackbox_ai_history_sidebar_open");
-      return stored ? JSON.parse(stored) : true;
-    } catch {
-      return true;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "blackbox_ai_history_sidebar_open",
-        JSON.stringify(historySidebarOpen)
-      );
-    } catch (error) {
-      console.error("Failed to save history sidebar state", error);
-    }
-  }, [historySidebarOpen]);
   const { sidebarOpen, toggleSidebar } = useApp();
 
   const handleAuthChange = (auth) => {
@@ -80,25 +62,6 @@ function AppContent() {
           {/* Header Actions */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setHistorySidebarOpen((prev) => !prev)}
-              className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-              title="Toggle history sidebar"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 4h10M5 12h14M5 20h10"
-                />
-              </svg>
-            </button>
-            <button
               onClick={() => setShowAdmin(true)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
                 isAuthenticated
@@ -128,7 +91,7 @@ function AppContent() {
         </div>
       </header>
 
-      {/* Main Content with Sidebars */}
+      {/* Main Content with Sidebar */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
 
@@ -144,11 +107,6 @@ function AppContent() {
             <Route path="/library" element={<MediaLibrary />} />
           </Routes>
         </main>
-
-        <HistorySidebar
-          isOpen={historySidebarOpen}
-          onToggle={() => setHistorySidebarOpen((prev) => !prev)}
-        />
       </div>
 
       {/* Admin Panel Modal */}
@@ -158,6 +116,9 @@ function AppContent() {
           onAuthChange={handleAuthChange}
         />
       )}
+
+      {/* Jobs Panel */}
+      <JobsPanel />
     </div>
   );
 }
@@ -165,11 +126,13 @@ function AppContent() {
 function App() {
   return (
     <AppProvider>
-      <ToastProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
-      </ToastProvider>
+      <JobProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </ToastProvider>
+      </JobProvider>
     </AppProvider>
   );
 }

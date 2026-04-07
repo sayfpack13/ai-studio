@@ -14,11 +14,11 @@ export { default as VideoPresetPanel } from "./VideoPresetPanel";
 export { default as MusicPresetPanel } from "./MusicPresetPanel";
 export { default as ChutesImagePresetPanel } from "./ChutesImagePresetPanel";
 
-// New unified components
+// Unified components
 export { default as ImagePresetPanel } from "./ImagePresetPanel";
-export { default as ImageOutputPanel } from "./ImageOutputPanel";
-export { default as ImageGalleryGrid } from "./ImageGalleryGrid";
-export { default as ImageCompareView } from "./ImageCompareView";
+export { default as MediaOutputPanel } from "./MediaOutputPanel";
+export { default as MediaGalleryGrid } from "./MediaGalleryGrid";
+export { default as MediaCompareView } from "./MediaCompareView";
 
 // Base UI components
 export * from "./ui";

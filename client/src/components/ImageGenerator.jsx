@@ -1,10 +1,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
-import { enqueuePipeline, generateImage, getModels } from "../services/api";
+import { useJobs } from "../context/JobContext";
+import { enqueuePipeline, getModels } from "../services/api";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
-import { LoadingSpinner, GenerationProgress, ImagePresetPanel, ImageOutputPanel, getModelConfig } from "./shared";
+import { LoadingSpinner, GenerationProgress, ImagePresetPanel, MediaOutputPanel, getModelConfig } from "./shared";
 import { Image, Sparkles, Download, RefreshCw, Film, Settings } from "lucide-react";
 
 // Generate unique image ID
@@ -26,13 +27,15 @@ export default function ImageGenerator() {
     getImageIds,
     deleteImage,
   } = useApp();
+  const { enqueueJob, getJobsByType, processQueue, updateJob } = useJobs();
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem(IMAGE_SELECTED_MODEL_KEY) || "",
   );
   const [availableModels, setAvailableModels] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const imageJobs = getJobsByType("image");
+  const loading = imageJobs.some(job => job.status === "running" || job.status === "pending");
   const [generatedImage, setGeneratedImage] = useState(null);
   const [error, setError] = useState("");
 
@@ -278,12 +281,9 @@ export default function ImageGenerator() {
   }, [configuredProviderFilter]);
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || loading) return;
+    if (!prompt.trim()) return;
 
-    setLoading(true);
     setError("");
-    setGeneratedImage(null);
-    setDebugDetails(null);
 
     const selectedModelInfo = availableModels.find(
       (m) => m.modelKey === selectedModel,
@@ -294,7 +294,6 @@ export default function ImageGenerator() {
 
     if ((!selectedModelInfo && !isLocalModelSelected) || !effectiveProvider) {
       setError("Please select a gateway and model first");
-      setLoading(false);
       return;
     }
 
@@ -304,13 +303,11 @@ export default function ImageGenerator() {
         const parsed = JSON.parse(customParamsText);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
           setError("Custom parameters must be a JSON object");
-          setLoading(false);
           return;
         }
         parsedCustomParams = parsed;
       } catch {
         setError("Custom parameters JSON is invalid");
-        setLoading(false);
         return;
       }
     }
@@ -350,7 +347,6 @@ export default function ImageGenerator() {
         normalizedSteps > 100
       ) {
         setError("Hunyuan steps must be an integer between 10 and 100");
-        setLoading(false);
         return;
       }
 
@@ -368,7 +364,6 @@ export default function ImageGenerator() {
           setError(
             "Hunyuan seed must be an integer between 0 and 4294967295, or empty for random",
           );
-          setLoading(false);
           return;
         }
       }
@@ -381,7 +376,6 @@ export default function ImageGenerator() {
         setError(
           "Hunyuan size must be one of: 'auto', 'WxH' (e.g. 1280x768), 'W:H' (e.g. 16:9), or square pixels (e.g. 1024)",
         );
-        setLoading(false);
         return;
       }
     }
@@ -416,7 +410,6 @@ export default function ImageGenerator() {
           setError(
             "Qwen seed must be an integer between 0 and 4294967295, or empty for random",
           );
-          setLoading(false);
           return;
         }
       }
@@ -428,7 +421,6 @@ export default function ImageGenerator() {
         normalizedWidth > 2048
       ) {
         setError("Qwen width must be an integer between 128 and 2048");
-        setLoading(false);
         return;
       }
 
@@ -439,7 +431,6 @@ export default function ImageGenerator() {
         normalizedHeight > 2048
       ) {
         setError("Qwen height must be an integer between 128 and 2048");
-        setLoading(false);
         return;
       }
 
@@ -450,7 +441,6 @@ export default function ImageGenerator() {
         normalizedTrueCfgScale > 10
       ) {
         setError("Qwen true_cfg_scale must be between 0 and 10");
-        setLoading(false);
         return;
       }
 
@@ -465,7 +455,6 @@ export default function ImageGenerator() {
         setError(
           "Qwen num_inference_steps must be an integer between 5 and 75",
         );
-        setLoading(false);
         return;
       }
     }
@@ -485,18 +474,20 @@ export default function ImageGenerator() {
         }
       : undefined;
 
-    try {
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
+    // Determine if model supports width/height parameters
+    const supportsWidthHeight =
+      !isHunyuanImage3 && !isQwenImage2512 && !isZImageTurbo;
 
-      // Determine if model supports width/height parameters
-      const supportsWidthHeight =
-        !isHunyuanImage3 && !isQwenImage2512 && !isZImageTurbo;
+    const modelIdToSend = isLocalModelSelected ? selectedModel : selectedModelInfo?.id;
+    const localOpts = isLocalModelSelected ? { localOllamaUrl: ollamaLocal.localUrl } : {};
 
-      const modelIdToSend = isLocalModelSelected ? selectedModel : selectedModelInfo?.id;
-      const localOpts = isLocalModelSelected ? { localOllamaUrl: ollamaLocal.localUrl } : {};
-
-      const response = await generateImage(prompt, modelIdToSend, {
+    // Prepare job parameters
+    const imageId = generateImageId();
+    const jobParams = {
+      prompt,
+      model: modelIdToSend,
+      imageId,
+      options: {
         provider: effectiveProvider,
         modelKey: isLocalModelSelected ? undefined : selectedModelInfo?.modelKey,
         ...localOpts,
@@ -527,7 +518,6 @@ export default function ImageGenerator() {
                     Number(zImageParams.maxSequenceLength) || 512,
                   num_inference_steps:
                     Number(zImageParams.numInferenceSteps) || 9,
-                  // Only include seed if provided (don't send null)
                   ...(zImageParams.seed &&
                     zImageParams.seed !== "" && {
                       seed: Number(zImageParams.seed),
@@ -535,77 +525,47 @@ export default function ImageGenerator() {
                 }
               : undefined,
         debug: debugMode,
-        signal: controller.signal,
         extraParams: {
           ...zImageExtraParams,
           ...parsedCustomParams,
         },
+      },
+      metadata: {
+        modelKey: selectedModelInfo?.modelKey || selectedModel,
+        provider: effectiveProvider,
+        negativePrompt: negativePrompt || "",
+        width,
+        height,
+        hunyuanParams:
+          selectedModelInfo?.id === "chutes/hunyuan-image-3"
+            ? { ...hunyuanParams }
+            : undefined,
+        qwenImageParams:
+          selectedModelInfo?.id === "chutes/Qwen-Image-2512"
+            ? { ...qwenImageParams }
+            : undefined,
+        zImageParams:
+          selectedModelInfo?.id === "chutes/z-image-turbo"
+            ? { ...zImageParams }
+            : undefined,
+        customParamsText: customParamsText || "",
+      },
+    };
+
+    // Enqueue the job with save callback
+    enqueueJob("image", jobParams, (result) => {
+      saveImage(imageId, prompt, result, modelIdToSend, jobParams.metadata);
+      addLibraryAsset({
+        type: "image",
+        source: "image",
+        title: prompt.slice(0, 80) || "Generated image",
+        url: result.url,
+        metadata: {
+          model: modelIdToSend,
+          provider: effectiveProvider,
+        },
       });
-
-      if (response.debug) {
-        setDebugDetails(response.debug);
-      }
-
-      if (response.data || response.image || response.url) {
-        const imageData = {
-          url: response.data?.[0]?.url || response.image || response.url,
-          revisedPrompt: response.data?.[0]?.revised_prompt || prompt,
-        };
-        setGeneratedImage(imageData);
-
-        // Save to history (with metadata for restoring model-specific controls)
-        const imageId = generateImageId();
-        saveImage(
-          imageId,
-          prompt,
-          imageData,
-          selectedModelInfo?.id || selectedModel,
-          {
-            modelKey: selectedModelInfo?.modelKey || selectedModel,
-            provider: effectiveProvider,
-            negativePrompt: negativePrompt || "",
-            width,
-            height,
-            hunyuanParams:
-              selectedModelInfo?.id === "chutes/hunyuan-image-3"
-                ? { ...hunyuanParams }
-                : undefined,
-            qwenImageParams:
-              selectedModelInfo?.id === "chutes/Qwen-Image-2512"
-                ? { ...qwenImageParams }
-                : undefined,
-            zImageParams:
-              selectedModelInfo?.id === "chutes/z-image-turbo"
-                ? { ...zImageParams }
-                : undefined,
-            customParamsText: customParamsText || "",
-          },
-        );
-        await addLibraryAsset({
-          type: "image",
-          source: "image",
-          title: prompt.slice(0, 80) || "Generated image",
-          url: imageData.url,
-          metadata: {
-            model: selectedModelInfo?.id || selectedModel,
-            provider: effectiveProvider,
-          },
-        });
-      } else if (response.error) {
-        setError(response.error);
-      } else {
-        setError("Unexpected response format");
-      }
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        setError("Image generation stopped.");
-      } else {
-        setError(err.message || "Failed to generate image");
-      }
-    } finally {
-      abortControllerRef.current = null;
-      setLoading(false);
-    }
+    });
   };
 
   const handleStopGeneration = () => {
@@ -1199,14 +1159,29 @@ export default function ImageGenerator() {
 
         {/* Right Panel - Output */}
         <div className="hidden lg:flex lg:w-[55%] flex-col">
-          <ImageOutputPanel
-            generatedImage={generatedImage}
-            imageHistory={imageHistory}
-            getImageIds={getImageIds}
+          <MediaOutputPanel
+            mediaType="image"
+            generatedMedia={generatedImage}
+            mediaHistory={imageHistory}
+            getMediaIds={getImageIds}
             onDownload={handleDownload}
             onSendToVideo={handleImageToVideoPipeline}
+            onPreview={(image) => {
+              // Just preview the image without loading prompt
+              setGeneratedImage({
+                url: image.url,
+                model: image.model,
+              });
+            }}
             onReloadPrompt={(image) => {
+              // Load prompt and model for regeneration
               setPrompt(image.prompt || "");
+              setGeneratedImage({
+                url: image.url,
+                revisedPrompt: image.revisedPrompt,
+                model: image.model,
+                prompt: image.prompt,
+              });
               if (image.model) {
                 const model = availableModels.find((m) => m.id === image.model);
                 if (model) {
@@ -1215,7 +1190,7 @@ export default function ImageGenerator() {
                 }
               }
             }}
-            onDeleteImage={deleteImage}
+            onDeleteMedia={deleteImage}
             loading={loading}
           />
         </div>

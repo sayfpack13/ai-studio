@@ -29,22 +29,82 @@ const REMIX_HISTORY_KEY = "blackbox_ai_remix_history";
 const EDITOR_PROJECTS_KEY = "blackbox_ai_editor_projects";
 const LIBRARY_FILTERS_KEY = "blackbox_ai_library_filters";
 
-// Helper to load from localStorage
+// Maximum items to keep in history
+const MAX_HISTORY_ITEMS = 50;
+
+// Check if URL is a data URL (base64)
+const isDataUrl = (url) => url && url.startsWith("data:");
+
+// Strip base64 data from result to save space
+const stripBase64FromResult = (result) => {
+  if (!result || typeof result !== "object") return result;
+  const stripped = { ...result };
+  // Only keep URL if it's not a data URL
+  if (stripped.url && isDataUrl(stripped.url)) {
+    delete stripped.url;
+  }
+  return stripped;
+};
+
+// Trim history to max items
+const trimHistory = (history, maxItems = MAX_HISTORY_ITEMS) => {
+  const entries = Object.entries(history);
+  if (entries.length <= maxItems) return history;
+
+  // Sort by lastUpdated and keep only the most recent
+  const sorted = entries.sort(
+    (a, b) => (b[1]?.lastUpdated || 0) - (a[1]?.lastUpdated || 0)
+  );
+  const trimmed = sorted.slice(0, maxItems);
+  return Object.fromEntries(trimmed);
+};
+
+// Helper to load from localStorage with size check
 const loadFromStorage = (key, defaultValue) => {
   try {
     const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : defaultValue;
+    if (!stored) return defaultValue;
+    const parsed = JSON.parse(stored);
+    // If it's a history object, trim it on load
+    if (typeof parsed === "object" && !Array.isArray(parsed)) {
+      return trimHistory(parsed);
+    }
+    return parsed;
   } catch {
     return defaultValue;
   }
 };
 
-// Helper to save to localStorage
+// Helper to save to localStorage with error handling
 const saveToStorage = (key, value) => {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    // Check if this would exceed quota (rough check: 5MB limit per origin)
+    if (serialized.length > 4 * 1024 * 1024) {
+      console.warn(`Data for ${key} is too large, clearing old data`);
+      // If it's a history object, trim it
+      if (typeof value === "object" && !Array.isArray(value)) {
+        const trimmed = trimHistory(value, MAX_HISTORY_ITEMS / 2);
+        localStorage.setItem(key, JSON.stringify(trimmed));
+        return;
+      }
+    }
+    localStorage.setItem(key, serialized);
   } catch (error) {
-    console.error("Failed to save to localStorage:", error);
+    if (error.name === "QuotaExceededError") {
+      console.warn(`localStorage quota exceeded for ${key}, clearing...`);
+      try {
+        // Clear the key and try again with trimmed data
+        localStorage.removeItem(key);
+        if (typeof value === "object" && !Array.isArray(value)) {
+          const trimmed = trimHistory(value, MAX_HISTORY_ITEMS / 2);
+          localStorage.setItem(key, JSON.stringify(trimmed));
+        }
+      } catch {
+        // If still failing, just clear the key
+        localStorage.removeItem(key);
+      }
+    }
   }
 };
 
@@ -54,32 +114,32 @@ export function AppProvider({ children }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [streamEnabled, setStreamEnabled] = useState(() =>
-    loadFromStorage(STREAM_ENABLED_KEY, false),
+    loadFromStorage(STREAM_ENABLED_KEY, false)
   );
   const [sidebarOpen, setSidebarOpen] = useState(() =>
-    loadFromStorage(SIDEBAR_OPEN_KEY, true),
+    loadFromStorage(SIDEBAR_OPEN_KEY, true)
   );
   const [chatHistory, setChatHistory] = useState(() =>
-    loadFromStorage(CHAT_HISTORY_KEY, {}),
+    loadFromStorage(CHAT_HISTORY_KEY, {})
   );
   const [imageHistory, setImageHistory] = useState(() =>
-    loadFromStorage(IMAGE_HISTORY_KEY, {}),
+    loadFromStorage(IMAGE_HISTORY_KEY, {})
   );
   const [videoHistory, setVideoHistory] = useState(() =>
-    loadFromStorage(VIDEO_HISTORY_KEY, {}),
+    loadFromStorage(VIDEO_HISTORY_KEY, {})
   );
   const [musicHistory, setMusicHistory] = useState(() =>
-    loadFromStorage(MUSIC_HISTORY_KEY, {}),
+    loadFromStorage(MUSIC_HISTORY_KEY, {})
   );
   const [remixHistory, setRemixHistory] = useState(() =>
-    loadFromStorage(REMIX_HISTORY_KEY, {}),
+    loadFromStorage(REMIX_HISTORY_KEY, {})
   );
   const [editorProjects, setEditorProjects] = useState(() =>
-    loadFromStorage(EDITOR_PROJECTS_KEY, {}),
+    loadFromStorage(EDITOR_PROJECTS_KEY, {})
   );
   const [libraryAssets, setLibraryAssets] = useState([]);
   const [libraryFilters, setLibraryFilters] = useState(() =>
-    loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "" }),
+    loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "" })
   );
 
   useEffect(() => {
@@ -96,33 +156,34 @@ export function AppProvider({ children }) {
     saveToStorage(SIDEBAR_OPEN_KEY, sidebarOpen);
   }, [sidebarOpen]);
 
-  // Persist chat history
+  // Persist chat history (trimmed)
   useEffect(() => {
-    saveToStorage(CHAT_HISTORY_KEY, chatHistory);
+    saveToStorage(CHAT_HISTORY_KEY, trimHistory(chatHistory));
   }, [chatHistory]);
 
-  // Persist image history
+  // Persist image history (trimmed)
   useEffect(() => {
-    saveToStorage(IMAGE_HISTORY_KEY, imageHistory);
+    saveToStorage(IMAGE_HISTORY_KEY, trimHistory(imageHistory));
   }, [imageHistory]);
 
-  // Persist video history
+  // Persist video history (trimmed)
   useEffect(() => {
-    saveToStorage(VIDEO_HISTORY_KEY, videoHistory);
+    saveToStorage(VIDEO_HISTORY_KEY, trimHistory(videoHistory));
   }, [videoHistory]);
 
-  // Persist music history
+  // Persist music history (trimmed)
   useEffect(() => {
-    saveToStorage(MUSIC_HISTORY_KEY, musicHistory);
+    saveToStorage(MUSIC_HISTORY_KEY, trimHistory(musicHistory));
   }, [musicHistory]);
 
   useEffect(() => {
-    saveToStorage(REMIX_HISTORY_KEY, remixHistory);
+    saveToStorage(REMIX_HISTORY_KEY, trimHistory(remixHistory));
   }, [remixHistory]);
 
   useEffect(() => {
-    saveToStorage(EDITOR_PROJECTS_KEY, editorProjects);
+    saveToStorage(EDITOR_PROJECTS_KEY, trimHistory(editorProjects));
   }, [editorProjects]);
+
   useEffect(() => {
     saveToStorage(LIBRARY_FILTERS_KEY, libraryFilters);
   }, [libraryFilters]);
@@ -142,7 +203,7 @@ export function AppProvider({ children }) {
 
   const refreshLibraryAssets = useCallback(async (filters = {}) => {
     const response = await listLibraryAssets(filters);
-    const assets = response?.assets || [];
+    const assets = response?.items || response?.assets || [];
     setLibraryAssets(assets);
     return assets;
   }, []);
@@ -159,7 +220,7 @@ export function AppProvider({ children }) {
     const response = await updateLibraryAsset(assetId, patch);
     if (response?.asset) {
       setLibraryAssets((prev) =>
-        prev.map((item) => (item.id === assetId ? response.asset : item)),
+        prev.map((item) => (item.id === assetId ? response.asset : item))
       );
     }
     return response;
@@ -175,7 +236,7 @@ export function AppProvider({ children }) {
 
   const runLibrarySearch = useCallback(async (queryPayload) => {
     const response = await searchLibraryAssets(queryPayload);
-    const assets = response?.assets || [];
+    const assets = response?.items || response?.assets || [];
     setLibraryAssets(assets);
     return assets;
   }, []);
@@ -210,7 +271,7 @@ export function AppProvider({ children }) {
 
       return response;
     },
-    [],
+    []
   );
 
   // Toggle stream setting
@@ -225,21 +286,27 @@ export function AppProvider({ children }) {
 
   // ==================== CHAT HISTORY ====================
 
-  const saveChatMessages = useCallback((chatId, messages) => {
-    setChatHistory((prev) => ({
-      ...prev,
-      [chatId]: {
-        messages,
-        lastUpdated: Date.now(),
-      },
-    }));
-  }, []);
+  const saveChatMessages = useCallback(
+    (chatId, messages) => {
+      setChatHistory((prev) => {
+        const updated = {
+          ...prev,
+          [chatId]: {
+            messages,
+            lastUpdated: Date.now(),
+          },
+        };
+        return trimHistory(updated);
+      });
+    },
+    []
+  );
 
   const getChatMessages = useCallback(
     (chatId) => {
       return chatHistory[chatId]?.messages || [];
     },
-    [chatHistory],
+    [chatHistory]
   );
 
   const deleteChat = useCallback((chatId) => {
@@ -257,33 +324,33 @@ export function AppProvider({ children }) {
   const getChatIds = useCallback(() => {
     return Object.keys(chatHistory).sort(
       (a, b) =>
-        (chatHistory[b]?.lastUpdated || 0) - (chatHistory[a]?.lastUpdated || 0),
+        (chatHistory[b]?.lastUpdated || 0) - (chatHistory[a]?.lastUpdated || 0)
     );
   }, [chatHistory]);
 
   // ==================== IMAGE HISTORY ====================
 
-  const saveImage = useCallback(
-    (imageId, prompt, result, model, metadata = null) => {
-      setImageHistory((prev) => ({
+  const saveImage = useCallback((imageId, prompt, result, model, metadata = null) => {
+    setImageHistory((prev) => {
+      const updated = {
         ...prev,
         [imageId]: {
           prompt,
-          result,
+          result: stripBase64FromResult(result),
           model,
           ...(metadata && typeof metadata === "object" ? { metadata } : {}),
           lastUpdated: Date.now(),
         },
-      }));
-    },
-    [],
-  );
+      };
+      return trimHistory(updated);
+    });
+  }, []);
 
   const getImage = useCallback(
     (imageId) => {
       return imageHistory[imageId];
     },
-    [imageHistory],
+    [imageHistory]
   );
 
   const deleteImage = useCallback((imageId) => {
@@ -301,30 +368,32 @@ export function AppProvider({ children }) {
   const getImageIds = useCallback(() => {
     return Object.keys(imageHistory).sort(
       (a, b) =>
-        (imageHistory[b]?.lastUpdated || 0) -
-        (imageHistory[a]?.lastUpdated || 0),
+        (imageHistory[b]?.lastUpdated || 0) - (imageHistory[a]?.lastUpdated || 0)
     );
   }, [imageHistory]);
 
   // ==================== VIDEO HISTORY ====================
 
   const saveVideo = useCallback((videoId, prompt, result, model) => {
-    setVideoHistory((prev) => ({
-      ...prev,
-      [videoId]: {
-        prompt,
-        result,
-        model,
-        lastUpdated: Date.now(),
-      },
-    }));
+    setVideoHistory((prev) => {
+      const updated = {
+        ...prev,
+        [videoId]: {
+          prompt,
+          result: stripBase64FromResult(result),
+          model,
+          lastUpdated: Date.now(),
+        },
+      };
+      return trimHistory(updated);
+    });
   }, []);
 
   const getVideo = useCallback(
     (videoId) => {
       return videoHistory[videoId];
     },
-    [videoHistory],
+    [videoHistory]
   );
 
   const deleteVideo = useCallback((videoId) => {
@@ -342,30 +411,32 @@ export function AppProvider({ children }) {
   const getVideoIds = useCallback(() => {
     return Object.keys(videoHistory).sort(
       (a, b) =>
-        (videoHistory[b]?.lastUpdated || 0) -
-        (videoHistory[a]?.lastUpdated || 0),
+        (videoHistory[b]?.lastUpdated || 0) - (videoHistory[a]?.lastUpdated || 0)
     );
   }, [videoHistory]);
 
   // ==================== MUSIC HISTORY ====================
 
   const saveMusic = useCallback((musicId, prompt, result, model) => {
-    setMusicHistory((prev) => ({
-      ...prev,
-      [musicId]: {
-        prompt,
-        result,
-        model,
-        lastUpdated: Date.now(),
-      },
-    }));
+    setMusicHistory((prev) => {
+      const updated = {
+        ...prev,
+        [musicId]: {
+          prompt,
+          result: stripBase64FromResult(result),
+          model,
+          lastUpdated: Date.now(),
+        },
+      };
+      return trimHistory(updated);
+    });
   }, []);
 
   const getMusic = useCallback(
     (musicId) => {
       return musicHistory[musicId];
     },
-    [musicHistory],
+    [musicHistory]
   );
 
   const deleteMusic = useCallback((musicId) => {
@@ -383,26 +454,25 @@ export function AppProvider({ children }) {
   const getMusicIds = useCallback(() => {
     return Object.keys(musicHistory).sort(
       (a, b) =>
-        (musicHistory[b]?.lastUpdated || 0) -
-        (musicHistory[a]?.lastUpdated || 0),
+        (musicHistory[b]?.lastUpdated || 0) - (musicHistory[a]?.lastUpdated || 0)
     );
   }, [musicHistory]);
 
-  const saveRemix = useCallback(
-    (remixId, prompt, result, model, metadata = {}) => {
-      setRemixHistory((prev) => ({
+  const saveRemix = useCallback((remixId, prompt, result, model, metadata = {}) => {
+    setRemixHistory((prev) => {
+      const updated = {
         ...prev,
         [remixId]: {
           prompt,
-          result,
+          result: stripBase64FromResult(result),
           model,
           metadata,
           lastUpdated: Date.now(),
         },
-      }));
-    },
-    [],
-  );
+      };
+      return trimHistory(updated);
+    });
+  }, []);
 
   const deleteRemix = useCallback((remixId) => {
     setRemixHistory((prev) => {
@@ -419,33 +489,30 @@ export function AppProvider({ children }) {
   const getRemixIds = useCallback(() => {
     return Object.keys(remixHistory).sort(
       (a, b) =>
-        (remixHistory[b]?.lastUpdated || 0) -
-        (remixHistory[a]?.lastUpdated || 0),
+        (remixHistory[b]?.lastUpdated || 0) - (remixHistory[a]?.lastUpdated || 0)
     );
   }, [remixHistory]);
 
   const saveEditorProject = useCallback(
     (projectId, project) => {
-      const updatedProjects = {
-        ...editorProjects,
-        [projectId]: {
-          ...project,
-          lastUpdated: Date.now(),
-        },
-      };
-      setEditorProjects(updatedProjects);
-      // Save directly to localStorage for immediate persistence
-      saveToStorage(EDITOR_PROJECTS_KEY, updatedProjects);
+      setEditorProjects((prev) => {
+        const updated = {
+          ...prev,
+          [projectId]: {
+            ...project,
+            lastUpdated: Date.now(),
+          },
+        };
+        return trimHistory(updated);
+      });
     },
-    [editorProjects],
+    []
   );
 
   const deleteEditorProject = useCallback((projectId) => {
     setEditorProjects((prev) => {
       const next = { ...prev };
       delete next[projectId];
-      // Save directly to localStorage for immediate persistence
-      saveToStorage(EDITOR_PROJECTS_KEY, next);
       return next;
     });
   }, []);
@@ -454,7 +521,7 @@ export function AppProvider({ children }) {
     return Object.keys(editorProjects).sort(
       (a, b) =>
         (editorProjects[b]?.lastUpdated || 0) -
-        (editorProjects[a]?.lastUpdated || 0),
+        (editorProjects[a]?.lastUpdated || 0)
     );
   }, [editorProjects]);
 

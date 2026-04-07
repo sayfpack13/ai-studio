@@ -12,8 +12,8 @@ import { generateImage, generateVideo, generateMusic, getJobs, cancelServerJob, 
 const JobContext = createContext();
 
 const JOBS_STORAGE_KEY = "blackbox_ai_jobs";
-const MAX_COMPLETED_JOBS = 200;
-const COMPLETED_JOB_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const MAX_COMPLETED_JOBS = 50; // Reduced from 200 to prevent quota issues
+const COMPLETED_JOB_TTL = 24 * 60 * 60 * 1000; // Reduced to 1 day
 
 // Helper to load from localStorage
 const loadJobsFromStorage = () => {
@@ -33,13 +33,46 @@ const loadJobsFromStorage = () => {
   }
 };
 
-// Helper to save to localStorage
+// Helper to save to localStorage with quota handling
 const saveJobsToStorage = (jobs) => {
   try {
-    const trimmedJobs = jobs.slice(-MAX_COMPLETED_JOBS);
-    localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(trimmedJobs));
+    // Strip any large data from jobs
+    const cleaned = jobs.map(job => {
+      const { params, ...rest } = job;
+      // Don't store full params (may contain base64 data)
+      return {
+        ...rest,
+        params: params ? {
+          prompt: params.prompt,
+          model: params.model,
+          imageId: params.imageId,
+          videoId: params.videoId,
+          musicId: params.musicId,
+        } : undefined,
+      };
+    });
+    
+    const trimmedJobs = cleaned.slice(-MAX_COMPLETED_JOBS);
+    const serialized = JSON.stringify(trimmedJobs);
+    
+    // Check size before saving
+    if (serialized.length > 500000) { // 500KB limit
+      console.warn("Jobs data too large, clearing old jobs");
+      localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(trimmedJobs.slice(-20)));
+      return;
+    }
+    
+    localStorage.setItem(JOBS_STORAGE_KEY, serialized);
   } catch (error) {
-    console.error("Failed to save jobs to localStorage:", error);
+    if (error.name === "QuotaExceededError") {
+      console.warn("localStorage quota exceeded for jobs, clearing...");
+      // Clear and save only essential data
+      try {
+        localStorage.removeItem(JOBS_STORAGE_KEY);
+      } catch {
+        // Ignore
+      }
+    }
   }
 };
 

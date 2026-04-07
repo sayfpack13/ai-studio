@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Account · Chutes{% endblock %}
+{% block content %}
+<h1>Connect your Chutes account</h1>
+
+<p class="page-lead muted">
+  Save the secret key from the Chutes CLI so this app can talk to Chutes and show what’s live.
+  <a href="https://chutes.ai/docs/cli/account" target="_blank" rel="noopener">How to create a key</a>
+</p>
+
+<div class="warn">
+  <strong>This dashboard only:</strong> there is no login — don’t expose this web UI to the internet; use it on <code>127.0.0.1</code> on your own machine.
+  <span class="muted small">That is separate from where models run: after <strong>build / deploy</strong>, your chute runs on <strong>Chutes.ai</strong> (their GPUs), not “local only.”</span>
+  Keys are stored in <code>.local/credentials.json</code> (not committed to git).
+</div>
+
+<form method="post" action="/settings/account" class="form stack" id="save-form">
+  <label>Secret API key
+    <input name="api_key" type="password" autocomplete="off" placeholder="Paste new key, or leave blank to keep saved key" />
+  </label>
+  <p class="muted small">After you create a key with the Chutes CLI, paste it here once, then click <strong>Save</strong>.</p>
+
+  <label class="inline-check">
+    <input type="checkbox" name="clear_key" value="1" />
+    Remove saved key from this app
+  </label>
+
+  <div class="row">
+    <button type="submit" class="btn">Save</button>
+    <button type="button" class="btn secondary" id="btn-probe">Test connection</button>
+    <a href="/">Home</a>
+  </div>
+
+  <details class="settings-advanced">
+    <summary>Advanced (API URL &amp; CLI config)</summary>
+    <label>API base URL
+      <input name="api_base_url" type="url" value="{{ creds.api_base_url }}" placeholder="https://api.chutes.ai" />
+    </label>
+    <p class="muted small">Only change this if Chutes gave you a different API address.</p>
+
+    <label>Optional: path to your Chutes <code>config.ini</code>
+      <input name="chutes_config_path" type="text" value="{{ creds.chutes_config_path }}" placeholder="C:\Users\you\.chutes\config.ini" />
+    </label>
+    <p class="muted small"><strong>Build / Publish</strong> need the full CLI config from <code>chutes register</code> (default <code>~/.chutes/config.ini</code>). Set a path here only if that file lives elsewhere.</p>
+
+    <label>Account fingerprint (Chutes website → <strong>Settings</strong>)
+      <input name="account_fingerprint" type="password" autocomplete="off" placeholder="Paste once, or leave blank to keep saved value" />
+    </label>
+    <p class="muted small">Used to link your <strong>local Bittensor wallet</strong> to your website account (<code>POST /users/change_bt_auth</code>). Copy the fingerprint string only — not the &quot;google&quot; label above it.</p>
+    <label class="inline-check">
+      <input type="checkbox" name="clear_fingerprint" value="1" />
+      Remove saved fingerprint
+    </label>
+
+    <p class="muted small"><strong>Website → local wallet:</strong> save fingerprint above, then use <strong>Link Bittensor wallet</strong> (reads <code>~/.bittensor/wallets/</code> on this machine). Optional overrides if you have several wallets:</p>
+    <div class="row" style="gap: 0.75rem; flex-wrap: wrap;">
+      <label style="flex: 1; min-width: 10rem;">Coldkey folder
+        <input id="link-coldkey" type="text" placeholder="e.g. my_coldkey" />
+      </label>
+      <label style="flex: 1; min-width: 10rem;">Hotkey file name
+        <input id="link-hotkey" type="text" placeholder="e.g. my_hotkey" />
+      </label>
+    </div>
+    <p style="margin-top: 0.75rem;">
+      <button type="button" class="btn secondary" id="btn-link-bt">Link Bittensor wallet</button>
+      <span class="muted small">Requires saved API key + fingerprint.</span>
+    </p>
+    <pre id="link-bt-out" class="log" hidden></pre>
+  </details>
+</form>
+
+{% if generated_ini %}
+<p class="muted small">Reference file (API key only): <code>{{ generated_ini }}</code> — not sufficient for <code>chutes build</code>; use your registered <code>config.ini</code> for that.</p>
+{% endif %}
+
+<p class="muted small">Saved key (masked): <code>{{ key_masked }}</code></p>
+<p class="muted small">Saved fingerprint (masked): <code>{{ fingerprint_masked }}</code></p>
+
+<pre id="probe-out" class="log" hidden></pre>
+
+<p class="muted small"><a href="/platform/advanced">Advanced platform tools</a> · <a href="/diagnostics">Diagnostics</a></p>
+
+<script>
+document.getElementById("btn-probe").addEventListener("click", async () => {
+  const fd = new FormData();
+  const keyInput = document.querySelector('input[name="api_key"]');
+  const baseInput = document.querySelector('input[name="api_base_url"]');
+  if (keyInput.value) fd.append("api_key", keyInput.value);
+  if (baseInput && baseInput.value) fd.append("api_base_url", baseInput.value);
+  const el = document.getElementById("probe-out");
+  el.hidden = false;
+  el.textContent = "Testing…";
+  const res = await fetch("/api/probe", { method: "POST", body: fd });
+  const data = await res.json();
+  el.textContent = JSON.stringify(data, null, 2);
+});
+
+document.getElementById("btn-link-bt").addEventListener("click", async () => {
+  const fd = new FormData();
+  const fpInput = document.querySelector('input[name="account_fingerprint"]');
+  if (fpInput && fpInput.value) fd.append("fingerprint", fpInput.value);
+  const ck = document.getElementById("link-coldkey");
+  const hk = document.getElementById("link-hotkey");
+  if (ck && ck.value) fd.append("coldkey", ck.value);
+  if (hk && hk.value) fd.append("hotkey", hk.value);
+  const out = document.getElementById("link-bt-out");
+  out.hidden = false;
+  out.textContent = "Linking…";
+  const res = await fetch("/api/account/link-bittensor", { method: "POST", body: fd });
+  const data = await res.json();
+  out.textContent = JSON.stringify(data, null, 2);
+});
+</script>
+{% endblock %}

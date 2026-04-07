@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { listMyChutes } from "./chutes-bridge.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,6 +12,7 @@ const GATEWAY_PREFIXES = new Set([
   "blackboxai",
   "blackbox",
   "chutes",
+  "chutes-private",
   "nanogpt",
   "ollama",
 ]);
@@ -281,6 +283,34 @@ export async function loadAllModels(config) {
     if (!provider.enabled) continue;
     const providerModels = await loadModelsFromProviderFile(provider);
     all.push(...providerModels);
+  }
+
+  // Add private chutes from Chutes.ai
+  try {
+    const privateChutesResult = await listMyChutes();
+    if (privateChutesResult.ok && privateChutesResult.models) {
+      for (const chute of privateChutesResult.models) {
+        all.push({
+          id: chute.id,
+          modelKey: toModelKey("chutes-private", chute.id),
+          uniqueKey: toModelKey("chutes-private", chute.id),
+          name: chute.displayName || chute.name,
+          provider: "chutes-private",
+          configuredProvider: "chutes-private",
+          modelProvider: chute.name.toLowerCase(),
+          categories: chute.categories || ["chat"],
+          isCloud: false,
+          baseUrl: chute.base_url,
+          chuteId: chute.chute_id,
+          isPrivateChute: true,
+          hot: chute.hot,
+          pricePerHour: chute.price_per_hour,
+        });
+      }
+    }
+  } catch (error) {
+    // Private chutes fetch failed - continue with static models only
+    console.error("Failed to load private chutes:", error.message);
   }
 
   return all;

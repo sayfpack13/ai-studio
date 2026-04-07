@@ -3,6 +3,9 @@ import { useApp } from "../context/AppContext";
 import { enqueuePipeline, generateImage, getModels } from "../services/api";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
+import { Button } from "./ui";
+import { LoadingSpinner, GenerationProgress, ImagePresetPanel, ImageOutputPanel, getModelConfig } from "./shared";
+import { Image, Sparkles, Download, RefreshCw, Film, Settings } from "lucide-react";
 
 // Generate unique image ID
 const generateImageId = () =>
@@ -13,8 +16,16 @@ const IMAGE_SELECTED_MODEL_KEY = "blackbox_ai_image_selected_model";
 const IMAGE_SELECTED_PROVIDER_KEY = "blackbox_ai_image_selected_provider";
 
 export default function ImageGenerator() {
-  const { isConfigured, saveImage, providers, getImage, addLibraryAsset } =
-    useApp();
+  const { 
+    isConfigured, 
+    saveImage, 
+    providers, 
+    getImage, 
+    addLibraryAsset,
+    imageHistory,
+    getImageIds,
+    deleteImage,
+  } = useApp();
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
@@ -27,6 +38,8 @@ export default function ImageGenerator() {
 
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
+  const [steps, setSteps] = useState(30);
+  const [guidanceScale, setGuidanceScale] = useState(7.5);
   const [debugMode, setDebugMode] = useState(false);
   const [customParamsText, setCustomParamsText] = useState("");
   const [debugDetails, setDebugDetails] = useState(null);
@@ -835,22 +848,56 @@ export default function ImageGenerator() {
     ? modelParameterHints[selectedModelInfo.id]
     : null;
 
+  // Unified params for ImagePresetPanel
+  const imageParams = useMemo(() => {
+    const modelId = selectedModelInfo?.id;
+    if (modelId === "chutes/z-image-turbo") return zImageParams;
+    if (modelId === "chutes/hunyuan-image-3") return hunyuanParams;
+    if (modelId === "chutes/Qwen-Image-2512") return qwenImageParams;
+    return { width, height, steps, guidanceScale, negativePrompt };
+  }, [selectedModelInfo?.id, zImageParams, hunyuanParams, qwenImageParams, width, height, steps, guidanceScale, negativePrompt]);
+
+  const handleImageParamsChange = useCallback((updater) => {
+    const modelId = selectedModelInfo?.id;
+    const newParams = typeof updater === "function" ? updater(imageParams) : updater;
+
+    if (modelId === "chutes/z-image-turbo") {
+      setZImageParams(newParams);
+    } else if (modelId === "chutes/hunyuan-image-3") {
+      setHunyuanParams(newParams);
+    } else if (modelId === "chutes/Qwen-Image-2512") {
+      setQwenImageParams(newParams);
+    } else {
+      if (newParams.width !== undefined) setWidth(newParams.width);
+      if (newParams.height !== undefined) setHeight(newParams.height);
+      if (newParams.steps !== undefined) setSteps(newParams.steps);
+      if (newParams.guidanceScale !== undefined) setGuidanceScale(newParams.guidanceScale);
+      if (newParams.negativePrompt !== undefined) setNegativePrompt(newParams.negativePrompt);
+    }
+  }, [selectedModelInfo?.id, imageParams]);
+
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden relative">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700 flex justify-between items-start">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Image Generation</h2>
-          <p className="text-sm text-gray-400">
-            Model: {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
-          </p>
+      <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+            <Image className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Image Generation</h2>
+            <p className="text-xs text-gray-400">
+              {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
+            </p>
+          </div>
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => setShowModelSelector(true)}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
         >
           Change Model
-        </button>
+        </Button>
       </div>
 
       {/* Model Selector Dropdown */}
@@ -1035,534 +1082,143 @@ export default function ImageGenerator() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="max-w-4xl mx-auto space-y-4">
-          {/* Prompt */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Prompt
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the image you want to generate..."
-              disabled={!isConfigured}
-              className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[100px]"
-            />
-          </div>
-
-          {/* Advanced Options */}
-          <div>
-            <div className="mt-3 space-y-3 p-3 bg-gray-800 rounded-lg">
-              {selectedModelInfo?.id !== "chutes/hunyuan-image-3" &&
-                selectedModelInfo?.id !== "chutes/Qwen-Image-2512" && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Negative Prompt
-                    </label>
-                    <textarea
-                      value={negativePrompt}
-                      onChange={(e) => setNegativePrompt(e.target.value)}
-                      placeholder="What to avoid in the image..."
-                      className="w-full bg-gray-700 text-white p-2 rounded resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      rows="2"
-                    />
-                  </div>
-                )}
-              {selectedModelInfo?.id !== "chutes/hunyuan-image-3" &&
-                selectedModelInfo?.id !== "chutes/Qwen-Image-2512" &&
-                selectedModelInfo?.id !== "chutes/z-image-turbo" && (
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-400 mb-1">
-                        Width
-                      </label>
-                      <input
-                        type="number"
-                        value={width}
-                        onChange={(e) => setWidth(Number(e.target.value))}
-                        className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-400 mb-1">
-                        Height
-                      </label>
-                      <input
-                        type="number"
-                        value={height}
-                        onChange={(e) => setHeight(Number(e.target.value))}
-                        className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-              {selectedModelInfo?.id === "chutes/z-image-turbo" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Seed
-                    </label>
-                    <input
-                      type="number"
-                      value={zImageParams.seed}
-                      onChange={(e) =>
-                        setZImageParams((prev) => ({
-                          ...prev,
-                          seed: e.target.value,
-                        }))
-                      }
-                      placeholder="Optional random seed"
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Shift
-                    </label>
-                    <input
-                      type="number"
-                      value={zImageParams.shift}
-                      onChange={(e) =>
-                        setZImageParams((prev) => ({
-                          ...prev,
-                          shift: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Guidance Scale
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={zImageParams.guidanceScale}
-                      onChange={(e) =>
-                        setZImageParams((prev) => ({
-                          ...prev,
-                          guidanceScale: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Max Sequence Length
-                    </label>
-                    <input
-                      type="number"
-                      value={zImageParams.maxSequenceLength}
-                      onChange={(e) =>
-                        setZImageParams((prev) => ({
-                          ...prev,
-                          maxSequenceLength: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Num Inference Steps
-                    </label>
-                    <input
-                      type="number"
-                      value={zImageParams.numInferenceSteps}
-                      onChange={(e) =>
-                        setZImageParams((prev) => ({
-                          ...prev,
-                          numInferenceSteps: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Width (576-2048)
-                    </label>
-                    <input
-                      type="number"
-                      min="576"
-                      max="2048"
-                      value={zImageParams.width}
-                      onChange={(e) =>
-                        setZImageParams((prev) => ({
-                          ...prev,
-                          width: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Height (576-2048)
-                    </label>
-                    <input
-                      type="number"
-                      min="576"
-                      max="2048"
-                      value={zImageParams.height}
-                      onChange={(e) =>
-                        setZImageParams((prev) => ({
-                          ...prev,
-                          height: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {selectedModelInfo?.id === "chutes/hunyuan-image-3" && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Seed
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="4294967295"
-                      step="1"
-                      value={hunyuanParams.seed}
-                      onChange={(e) =>
-                        setHunyuanParams((prev) => ({
-                          ...prev,
-                          seed: e.target.value,
-                        }))
-                      }
-                      placeholder="Optional (blank = random)"
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      0 to 4294967295, or leave empty.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Size
-                    </label>
-                    <input
-                      type="text"
-                      value={hunyuanParams.size}
-                      onChange={(e) =>
-                        setHunyuanParams((prev) => ({
-                          ...prev,
-                          size: e.target.value,
-                        }))
-                      }
-                      placeholder="1024x1024 | 16:9 | auto | 1024"
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      auto, WxH, W:H, or square pixels.
-                    </p>
-                    <p className="text-xs text-amber-400 mt-1">
-                      Hunyuan Image 3 uses{" "}
-                      <span className="font-mono">size</span> in{" "}
-                      <span className="font-mono">input_args</span> (not
-                      width/height).
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Steps
-                    </label>
-                    <input
-                      type="number"
-                      min="10"
-                      max="100"
-                      step="1"
-                      value={hunyuanParams.steps}
-                      onChange={(e) =>
-                        setHunyuanParams((prev) => ({
-                          ...prev,
-                          steps: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Integer between 10 and 100.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {selectedModelInfo?.id === "chutes/Qwen-Image-2512" && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Seed
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="4294967295"
-                      step="1"
-                      value={qwenImageParams.seed}
-                      onChange={(e) =>
-                        setQwenImageParams((prev) => ({
-                          ...prev,
-                          seed: e.target.value,
-                        }))
-                      }
-                      placeholder="Optional (blank = random)"
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      0 to 4294967295, or leave empty.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Width
-                    </label>
-                    <input
-                      type="number"
-                      min="128"
-                      max="2048"
-                      step="1"
-                      value={qwenImageParams.width}
-                      onChange={(e) =>
-                        setQwenImageParams((prev) => ({
-                          ...prev,
-                          width: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Integer between 128 and 2048.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Height
-                    </label>
-                    <input
-                      type="number"
-                      min="128"
-                      max="2048"
-                      step="1"
-                      value={qwenImageParams.height}
-                      onChange={(e) =>
-                        setQwenImageParams((prev) => ({
-                          ...prev,
-                          height: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Integer between 128 and 2048.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      True CFG Scale
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      step="0.1"
-                      value={qwenImageParams.trueCfgScale}
-                      onChange={(e) =>
-                        setQwenImageParams((prev) => ({
-                          ...prev,
-                          trueCfgScale: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Number between 0 and 10.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Num Inference Steps
-                    </label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="75"
-                      step="1"
-                      value={qwenImageParams.numInferenceSteps}
-                      onChange={(e) =>
-                        setQwenImageParams((prev) => ({
-                          ...prev,
-                          numInferenceSteps: e.target.value,
-                        }))
-                      }
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Integer between 5 and 75.
-                    </p>
-                  </div>
-
-                  <div className="md:col-span-3">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Negative Prompt
-                    </label>
-                    <textarea
-                      value={qwenImageParams.negativePrompt}
-                      onChange={(e) =>
-                        setQwenImageParams((prev) => ({
-                          ...prev,
-                          negativePrompt: e.target.value,
-                        }))
-                      }
-                      placeholder="Optional negative prompt"
-                      className="w-full bg-gray-700 text-white p-2 rounded resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      rows="2"
-                    />
-                    <p className="text-xs text-amber-400 mt-1">
-                      Qwen Image 2512 uses dedicated{" "}
-                      <span className="font-mono">input_args</span> fields.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {selectedModelHints && selectedModelHints.length > 0 && (
-                <div className="text-xs text-gray-300 bg-gray-700/60 rounded p-2">
-                  Suggested params for this model:{" "}
-                  {selectedModelHints.join(", ")}
-                </div>
-              )}
-
+      {/* Main Content - Split Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Panel - Controls */}
+        <div className="w-full lg:w-[45%] flex flex-col border-r border-gray-700">
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-4">
+              {/* Prompt */}
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">
-                  Custom JSON Parameters
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Prompt
                 </label>
                 <textarea
-                  value={customParamsText}
-                  onChange={(e) => setCustomParamsText(e.target.value)}
-                  placeholder='{"seed": 42, "style": "photoreal"}'
-                  className="w-full bg-gray-700 text-white p-2 rounded resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs"
-                  rows="4"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe the image you want to generate..."
+                  disabled={!isConfigured}
+                  className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[120px]"
                 />
-                <p className="text-xs text-gray-400 mt-1">
-                  Passed directly to provider API (advanced/debug use).
-                </p>
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={debugMode}
-                  onChange={(e) => setDebugMode(e.target.checked)}
-                  className="rounded"
-                />
-                Enable debug details in response
-              </label>
+              {/* Image Preset Panel */}
+              <ImagePresetPanel
+                modelId={selectedModelInfo?.id || "default"}
+                params={imageParams}
+                onParamsChange={handleImageParamsChange}
+              />
+
+              {/* Debug & Custom JSON */}
+              <div className="p-3 bg-gray-800 rounded-lg space-y-3">
+                {selectedModelHints && selectedModelHints.length > 0 && (
+                  <div className="text-xs text-gray-300 bg-gray-700/60 rounded p-2">
+                    Suggested params: {selectedModelHints.join(", ")}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    Custom JSON Parameters
+                  </label>
+                  <textarea
+                    value={customParamsText}
+                    onChange={(e) => setCustomParamsText(e.target.value)}
+                    placeholder='{"seed": 42}'
+                    className="w-full bg-gray-700 text-white p-2 rounded resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs"
+                    rows={3}
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={debugMode}
+                    onChange={(e) => setDebugMode(e.target.checked)}
+                    className="rounded"
+                  />
+                  Debug mode
+                </label>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="p-3 bg-red-900/50 text-red-200 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Debug Details */}
+              {debugDetails && (
+                <div className="p-3 bg-gray-800 border border-gray-700 rounded-lg">
+                  <p className="text-sm text-purple-300 font-medium mb-2">Debug Details</p>
+                  <pre className="text-xs text-gray-300 whitespace-pre-wrap break-all max-h-40 overflow-auto">
+                    {JSON.stringify(debugDetails, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Not Configured Warning */}
+              {!isConfigured && (
+                <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-400">
+                    <Settings className="w-4 h-4" />
+                    <span className="text-sm font-medium">API Not Configured</span>
+                  </div>
+                  <p className="text-xs text-yellow-300/70 mt-1">
+                    Configure API keys in Admin panel to generate images.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Error */}
-          {error && (
-            <div className="p-3 bg-red-900/50 text-red-200 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          {debugDetails && (
-            <div className="space-y-2 p-3 bg-gray-800 border border-gray-700 rounded-lg">
-              <p className="text-sm text-purple-300 font-medium">
-                Debug Details
-              </p>
-              <pre className="text-xs text-gray-300 whitespace-pre-wrap break-all max-h-64 overflow-auto">
-                {JSON.stringify(debugDetails, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {/* Generated Image */}
-          {generatedImage && (
-            <div className="space-y-3">
-              <div className="relative rounded-lg overflow-hidden bg-gray-800">
-                <img
-                  src={generatedImage.url}
-                  alt="Generated"
-                  className="w-full h-auto"
-                />
-              </div>
-              {generatedImage.revisedPrompt && (
-                <p className="text-sm text-gray-400">
-                  <span className="font-medium">Revised prompt:</span>{" "}
-                  {generatedImage.revisedPrompt}
-                </p>
-              )}
-              <button
-                onClick={handleDownload}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          {/* Generate Button */}
+          <div className="p-4 border-t border-gray-700">
+            {loading ? (
+              <Button
+                variant="danger"
+                onClick={handleStopGeneration}
+                className="w-full"
               >
-                Download Image
-              </button>
-              <button
-                onClick={handleImageToVideoPipeline}
-                className="ml-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+                Stop Generation
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onClick={handleGenerate}
+                disabled={!isConfigured || !prompt.trim()}
+                leftIcon={<Sparkles className="w-4 h-4" />}
+                className="w-full bg-purple-600 hover:bg-purple-500"
               >
-                Send To Video Pipeline
-              </button>
-            </div>
-          )}
-
-          {/* Loading State */}
-          {loading && (
-            <div className="text-center py-8">
-              <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-400">Generating image...</p>
-            </div>
-          )}
-
-          {/* Not Configured */}
-          {!isConfigured && (
-            <div className="text-center py-8">
-              <p className="text-yellow-400 mb-2">API not configured</p>
-              <p className="text-gray-500">
-                Please ask admin to configure the API key
-              </p>
-            </div>
-          )}
+                Generate Image
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Generate Button */}
-      <div className="p-4 border-t border-gray-700">
-        {loading ? (
-          <button
-            onClick={handleStopGeneration}
-            className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
-          >
-            Stop Generation
-          </button>
-        ) : (
-          <button
-            onClick={handleGenerate}
-            disabled={!isConfigured || !prompt.trim()}
-            className="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:hover:bg-purple-600 font-medium"
-          >
-            Generate Image
-          </button>
-        )}
+        {/* Right Panel - Output */}
+        <div className="hidden lg:flex lg:w-[55%] flex-col">
+          <ImageOutputPanel
+            generatedImage={generatedImage}
+            imageHistory={imageHistory}
+            getImageIds={getImageIds}
+            onDownload={handleDownload}
+            onSendToVideo={handleImageToVideoPipeline}
+            onReloadPrompt={(image) => {
+              setPrompt(image.prompt || "");
+              if (image.model) {
+                const model = availableModels.find((m) => m.id === image.model);
+                if (model) {
+                  setSelectedModel(model.modelKey);
+                  localStorage.setItem(IMAGE_SELECTED_MODEL_KEY, model.modelKey);
+                }
+              }
+            }}
+            onDeleteImage={deleteImage}
+            loading={loading}
+          />
+        </div>
       </div>
     </div>
   );

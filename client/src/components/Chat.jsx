@@ -3,6 +3,10 @@ import { useApp } from "../context/AppContext";
 import { sendChatMessage, getModels } from "../services/api";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
+import { MessageBubble, ChatInput, TypingIndicator } from "./chat/index";
+import { ModelSelector } from "./shared";
+import { Button } from "./ui";
+import { Plus, Settings, Sparkles, Zap } from "lucide-react";
 
 // Generate unique chat ID
 const generateChatId = () =>
@@ -472,15 +476,21 @@ export default function Chat() {
     <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden relative">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Chat</h2>
-          <p className="text-sm text-gray-400">
-            Model: {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
-          </p>
-        </div>
         <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-white">AI Chat</h2>
+            <p className="text-xs text-gray-400">
+              {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           {/* Stream Toggle */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-lg">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-lg border border-gray-700">
+            <Zap className={`w-4 h-4 ${streamEnabled ? "text-yellow-400" : "text-gray-500"}`} />
             <span className="text-sm text-gray-400">Stream</span>
             <button
               onClick={toggleStream}
@@ -496,32 +506,21 @@ export default function Chat() {
               />
             </button>
           </div>
-          <button
+          <Button
+            variant="success"
+            size="sm"
             onClick={handleNewChat}
-            className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-1"
-            title="New Chat"
+            leftIcon={<Plus className="w-4 h-4" />}
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span className="hidden sm:inline">New</span>
-          </button>
-          <button
+            New
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => setShowModelSelector(!showModelSelector)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
           >
             Change Model
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -734,58 +733,65 @@ export default function Chat() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {!isConfigured && (
-          <div className="text-center py-8">
-            <p className="text-yellow-400 mb-2">API not configured</p>
-            <p className="text-gray-500">
-              Please ask admin to configure the API key
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-2xl bg-yellow-600/20 flex items-center justify-center mb-4">
+              <Settings className="w-8 h-8 text-yellow-500" />
+            </div>
+            <h3 className="text-lg font-medium text-white mb-2">API Not Configured</h3>
+            <p className="text-gray-400 text-center max-w-sm">
+              Please configure your API keys in the Admin panel to start chatting with AI models.
             </p>
           </div>
         )}
 
         {messages.length === 0 && isConfigured && (
-          <div className="text-center py-8">
-            <p className="text-gray-400">Start a conversation</p>
-            <p className="text-sm text-gray-500 mt-2">
-              Type your message below and press Enter to send
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mb-4">
+              <Sparkles className="w-8 h-8 text-blue-400" />
+            </div>
+            <h3 className="text-lg font-medium text-white mb-2">Start a Conversation</h3>
+            <p className="text-gray-400 text-center max-w-sm mb-4">
+              Type your message below and press Enter to send. Use markdown for formatting.
             </p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <span className="px-3 py-1 bg-gray-800 rounded-full text-xs text-gray-400">
+                **bold**
+              </span>
+              <span className="px-3 py-1 bg-gray-800 rounded-full text-xs text-gray-400">
+                `code`
+              </span>
+              <span className="px-3 py-1 bg-gray-800 rounded-full text-xs text-gray-400">
+                ```code block```
+              </span>
+            </div>
           </div>
         )}
 
         {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`flex ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`max-w-[80%] p-3 rounded-lg ${
-                message.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : message.isError
-                    ? "bg-red-900/50 text-red-200"
-                    : "bg-gray-700 text-gray-200"
-              }`}
-            >
-              <p className="whitespace-pre-wrap">{message.content}</p>
-            </div>
+          <div key={index} className="group">
+            <MessageBubble
+              message={message}
+              isStreaming={false}
+            />
           </div>
         ))}
 
         {/* Streaming content */}
         {streamEnabled && loading && streamingContent && (
-          <div className="flex justify-start">
-            <div className="max-w-[80%] p-3 rounded-lg bg-gray-700 text-gray-200">
-              <p className="whitespace-pre-wrap">{streamingContent}</p>
-              <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse ml-1" />
-            </div>
-          </div>
+          <MessageBubble
+            message={{ role: "assistant", content: streamingContent }}
+            isStreaming={true}
+          />
         )}
 
+        {/* Typing indicator */}
         {loading && !streamingContent && (
-          <div className="flex justify-start">
-            <div className="bg-gray-700 text-gray-400 p-3 rounded-lg">
-              <span className="animate-pulse">Thinking...</span>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gray-700 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
+            </div>
+            <div className="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3">
+              <TypingIndicator />
             </div>
           </div>
         )}
@@ -795,34 +801,16 @@ export default function Chat() {
 
       {/* Input */}
       <div className="p-4 border-t border-gray-700 flex-shrink-0">
-        <div className="flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type your message..."
-            disabled={!isConfigured || loading}
-            className="flex-1 bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            rows="1"
-          />
-          {loading ? (
-            <button
-              onClick={handleStop}
-              className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              Stop
-            </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!isConfigured || !input.trim()}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:hover:bg-blue-600"
-            >
-              Send
-            </button>
-          )}
-        </div>
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSend}
+          loading={loading}
+          disabled={!isConfigured}
+          showStopButton={true}
+          onStop={handleStop}
+          placeholder="Type your message..."
+        />
       </div>
     </div>
   );

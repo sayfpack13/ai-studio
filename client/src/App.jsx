@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
+import { ToastProvider } from "./context/ToastContext";
 import Sidebar from "./components/Sidebar";
 import HistorySidebar from "./components/HistorySidebar";
 import Chat from "./components/Chat";
@@ -164,9 +165,11 @@ function AppContent() {
 function App() {
   return (
     <AppProvider>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </ToastProvider>
     </AppProvider>
   );
 }

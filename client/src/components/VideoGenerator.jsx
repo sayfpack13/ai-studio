@@ -4,6 +4,9 @@ import { enqueuePipeline, generateVideo, getModels } from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
+import { Button } from "./ui";
+import { LoadingSpinner, VideoPresetPanel } from "./shared";
+import { Film, Sparkles, Download, Music, Settings } from "lucide-react";
 
 // Generate unique video ID
 const generateVideoId = () =>
@@ -533,25 +536,33 @@ export default function VideoGenerator() {
   }, [handleVideoHistorySelected]);
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden">
-      <div className="p-4 border-b border-gray-700 flex justify-between items-start">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Video Generation</h2>
-          <p className="text-sm text-gray-400">
-            Model: {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
-          </p>
-          {isWanI2VSelected && (
-            <p className="text-xs text-indigo-300 mt-1">
-              Wan 2.2 I2V mode: image-to-video with advanced controls
+    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden relative">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
+            <Film className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Video Generation</h2>
+            <p className="text-xs text-gray-400">
+              {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
             </p>
-          )}
+            {isWanI2VSelected && (
+              <p className="text-xs text-indigo-400 mt-0.5">
+                Wan 2.2 I2V mode: image-to-video
+              </p>
+            )}
+          </div>
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => setShowModelSelector(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+          className="bg-indigo-600 hover:bg-indigo-500"
         >
           Change Model
-        </button>
+        </Button>
       </div>
 
       {showModelSelector && (
@@ -941,38 +952,16 @@ export default function VideoGenerator() {
               </div>
             </div>
           ) : (
-            <div>
-              <div className="mt-3 space-y-3 p-3 bg-gray-800 rounded-lg">
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      Duration (seconds)
-                    </label>
-                    <input
-                      type="number"
-                      value={duration}
-                      onChange={(e) => setDuration(Number(e.target.value))}
-                      min="1"
-                      max="60"
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      FPS
-                    </label>
-                    <input
-                      type="number"
-                      value={fps}
-                      onChange={(e) => setFps(Number(e.target.value))}
-                      min="12"
-                      max="60"
-                      className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <VideoPresetPanel
+              duration={duration}
+              onDurationChange={setDuration}
+              fps={fps}
+              onFpsChange={setFps}
+              minDuration={1}
+              maxDuration={60}
+              minFps={12}
+              maxFps={60}
+            />
           )}
 
           {error && (
@@ -983,7 +972,7 @@ export default function VideoGenerator() {
 
           {generatedVideo && (
             <div className="space-y-3">
-              <div className="relative rounded-lg overflow-hidden bg-gray-800">
+              <div className="relative rounded-xl overflow-hidden bg-gray-800 border border-gray-700">
                 <video
                   src={generatedVideo.url}
                   controls
@@ -993,43 +982,48 @@ export default function VideoGenerator() {
                 </video>
               </div>
               {generatedVideo.id && (
-                <p className="text-sm text-gray-400">
-                  <span className="font-medium">Video ID:</span>{" "}
+                <p className="text-sm text-gray-400 bg-gray-800/50 p-3 rounded-lg border border-gray-700">
+                  <span className="font-medium text-gray-300">Video ID:</span>{" "}
                   {generatedVideo.id}
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
+                  variant="success"
                   onClick={handleDownload}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                  leftIcon={<Download className="w-4 h-4" />}
                 >
                   Download Video
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={handleMusicToEditorPipeline}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                  leftIcon={<Music className="w-4 h-4" />}
                 >
                   Link Music Pipeline
-                </button>
+                </Button>
               </div>
             </div>
           )}
 
           {loading && (
-            <div className="text-center py-8">
-              <div className="animate-spin w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-400">Generating video...</p>
-              <p className="text-sm text-gray-500 mt-2">
-                This may take a while
-              </p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 flex items-center justify-center mb-4">
+                <LoadingSpinner size="lg" className="text-indigo-400" />
+              </div>
+              <p className="text-gray-400 font-medium">Generating video...</p>
+              <p className="text-xs text-gray-500 mt-1">This may take a while</p>
             </div>
           )}
 
           {!isConfigured && (
-            <div className="text-center py-8">
-              <p className="text-yellow-400 mb-2">API not configured</p>
-              <p className="text-gray-500">
-                Please ask admin to configure the API key
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 rounded-2xl bg-yellow-600/20 flex items-center justify-center mb-4">
+                <Settings className="w-8 h-8 text-yellow-500" />
+              </div>
+              <h3 className="text-lg font-medium text-white mb-2">API Not Configured</h3>
+              <p className="text-gray-400 text-center max-w-sm">
+                Please configure your API keys in the Admin panel to start generating videos.
               </p>
             </div>
           )}
@@ -1037,20 +1031,25 @@ export default function VideoGenerator() {
       </div>
 
       <div className="p-4 border-t border-gray-700">
-        <button
-          onClick={loading ? handleStopGeneration : handleGenerate}
-          disabled={
-            !isConfigured ||
-            (!loading &&
-              (!prompt.trim() || (isWanI2VSelected && !wanImageData)))
-          }
-          className={`w-full px-6 py-3 text-white rounded-lg transition-colors disabled:opacity-50 font-medium ${loading
-              ? "bg-red-600 hover:bg-red-700 disabled:hover:bg-red-600"
-              : "bg-indigo-600 hover:bg-indigo-700 disabled:hover:bg-indigo-600"
-            }`}
-        >
-          {loading ? "Stop Generation" : "Generate Video"}
-        </button>
+        {loading ? (
+          <Button
+            variant="danger"
+            onClick={handleStopGeneration}
+            className="w-full"
+          >
+            Stop Generation
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={handleGenerate}
+            disabled={!isConfigured || !prompt.trim() || (isWanI2VSelected && !wanImageData)}
+            leftIcon={<Sparkles className="w-4 h-4" />}
+            className="w-full bg-indigo-600 hover:bg-indigo-500"
+          >
+            Generate Video
+          </Button>
+        )}
       </div>
 
       {/* Asset Picker Dialog */}

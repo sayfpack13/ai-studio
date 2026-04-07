@@ -3,6 +3,9 @@ import { useApp } from "../context/AppContext";
 import { generateMusic, getModels } from "../services/api";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
+import { Button } from "./ui";
+import { LoadingSpinner, MusicPresetPanel } from "./shared";
+import { Music, Sparkles, Download, Settings } from "lucide-react";
 
 const generateMusicId = () =>
   `mus_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -23,6 +26,8 @@ export default function MusicGenerator() {
   const [error, setError] = useState("");
   const [voice, setVoice] = useState("");
   const [format, setFormat] = useState("mp3");
+  const [duration, setDuration] = useState(30);
+  const [musicStyle, setMusicStyle] = useState(null);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [cloudFilter, setCloudFilter] = useState("all");
@@ -354,20 +359,28 @@ export default function MusicGenerator() {
   );
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden">
-      <div className="p-4 border-b border-gray-700 flex justify-between items-start">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Music Generation</h2>
-          <p className="text-sm text-gray-400">
-            Model: {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
-          </p>
+    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden relative">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+            <Music className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Music Generation</h2>
+            <p className="text-xs text-gray-400">
+              {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
+            </p>
+          </div>
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => setShowModelSelector(true)}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+          className="bg-emerald-600 hover:bg-emerald-500"
         >
           Change Model
-        </button>
+        </Button>
       </div>
 
       {showModelSelector && (
@@ -555,21 +568,19 @@ export default function MusicGenerator() {
                 className="w-full bg-gray-800 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Format
-              </label>
-              <select
-                value={format}
-                onChange={(e) => setFormat(e.target.value)}
-                className="w-full bg-gray-800 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="mp3">MP3</option>
-                <option value="wav">WAV</option>
-                <option value="ogg">OGG</option>
-              </select>
-            </div>
           </div>
+
+          {/* Music Settings Panel */}
+          <MusicPresetPanel
+            duration={duration}
+            onDurationChange={setDuration}
+            format={format}
+            onFormatChange={setFormat}
+            style={musicStyle}
+            onStyleChange={setMusicStyle}
+            minDuration={5}
+            maxDuration={180}
+          />
 
           {error && (
             <div className="p-3 bg-red-900/50 text-red-200 rounded-lg">
@@ -579,36 +590,45 @@ export default function MusicGenerator() {
 
           {generatedMusic && (
             <div className="space-y-3">
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-gray-500 bg-gray-800/50 px-3 py-1.5 rounded-lg inline-block">
                 {selectedMusicId ? `History ID: ${selectedMusicId}` : "Preview"}
               </div>
-              <audio src={generatedMusic.url} controls className="w-full" />
+              <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                <audio src={generatedMusic.url} controls className="w-full" />
+              </div>
               {generatedMusic.raw && (
-                <p className="text-sm text-gray-400 break-all">
+                <p className="text-sm text-gray-400 bg-gray-800/50 p-3 rounded-lg border border-gray-700 break-all">
                   {generatedMusic.raw}
                 </p>
               )}
-              <button
+              <Button
+                variant="success"
                 onClick={handleDownload}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                leftIcon={<Download className="w-4 h-4" />}
               >
                 Download Audio
-              </button>
+              </Button>
             </div>
           )}
 
           {loading && (
-            <div className="text-center py-8">
-              <div className="animate-spin w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-400">Generating music...</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-600/20 flex items-center justify-center mb-4">
+                <LoadingSpinner size="lg" className="text-emerald-400" />
+              </div>
+              <p className="text-gray-400 font-medium">Generating music...</p>
+              <p className="text-xs text-gray-500 mt-1">This may take a moment</p>
             </div>
           )}
 
           {!isConfigured && (
-            <div className="text-center py-8">
-              <p className="text-yellow-400 mb-2">API not configured</p>
-              <p className="text-gray-500">
-                Please ask admin to configure the API key
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 rounded-2xl bg-yellow-600/20 flex items-center justify-center mb-4">
+                <Settings className="w-8 h-8 text-yellow-500" />
+              </div>
+              <h3 className="text-lg font-medium text-white mb-2">API Not Configured</h3>
+              <p className="text-gray-400 text-center max-w-sm">
+                Please configure your API keys in the Admin panel to start generating music.
               </p>
             </div>
           )}
@@ -617,20 +637,23 @@ export default function MusicGenerator() {
 
       <div className="p-4 border-t border-gray-700">
         {loading ? (
-          <button
+          <Button
+            variant="danger"
             onClick={handleStopGeneration}
-            className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
+            className="w-full"
           >
             Stop Generation
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
+            variant="primary"
             onClick={handleGenerate}
             disabled={!isConfigured || !prompt.trim()}
-            className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:hover:bg-emerald-600 font-medium"
+            leftIcon={<Sparkles className="w-4 h-4" />}
+            className="w-full bg-emerald-600 hover:bg-emerald-500"
           >
             Generate Music
-          </button>
+          </Button>
         )}
       </div>
     </div>

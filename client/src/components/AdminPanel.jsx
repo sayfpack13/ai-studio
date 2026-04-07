@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, Key, Server, Check, X, Loader2, Eye, EyeOff, Plus, Trash2, Zap, Settings, LogOut, Lock } from 'lucide-react';
 import { loginAdmin, verifyToken, getConfig, updateConfig, logoutAdmin, getToken, testProviderConnection } from '../services/api';
+import { Button, Input, Modal } from './ui';
+import { LoadingSpinner } from './shared';
 
 export default function AdminPanel({ onClose, onAuthChange }) {
   const [password, setPassword] = useState('');
@@ -163,115 +167,154 @@ export default function AdminPanel({ onClose, onAuthChange }) {
   // Show loading state while checking session
   if (initialCheck) {
     return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-800 rounded-lg p-8">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-gray-900 border border-gray-800 rounded-xl p-8"
+        >
+          <LoadingSpinner size="lg" className="mx-auto" />
           <p className="text-gray-400 mt-4 text-center">Checking session...</p>
-        </div>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={(e) => {
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={(e) => {
       if (e.target === e.currentTarget) onClose();
     }}>
-      <div className="bg-gray-800 rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="bg-gray-900 border border-gray-800 rounded-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+      >
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white">Admin Panel</h2>
+        <div className="flex items-center justify-between p-4 border-b border-gray-800 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Admin Panel</h2>
+              <p className="text-xs text-gray-400">Configure API providers</p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             {isAuthenticated && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleLogout}
-                className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                leftIcon={<LogOut className="w-4 h-4" />}
               >
                 Logout
-              </button>
+              </Button>
             )}
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-white text-2xl"
-            >
-              ×
-            </button>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="w-5 h-5" />
+            </Button>
           </div>
         </div>
 
-        <div className="p-4">
+        <div className="p-4 overflow-y-auto flex-1">
           {!isAuthenticated ? (
             // Login Form
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Admin Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-700 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter admin password"
-                  required
-                  autoFocus
-                />
+            <motion.form
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              onSubmit={handleLogin}
+              className="space-y-4"
+            >
+              <div className="flex flex-col items-center py-4">
+                <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center mb-4">
+                  <Lock className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-medium text-white mb-1">Admin Authentication</h3>
+                <p className="text-sm text-gray-400 text-center">Enter your admin password to continue</p>
               </div>
 
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter admin password"
+                required
+                autoFocus
+                leftIcon={<Key className="w-4 h-4" />}
+              />
+
               {error && (
-                <div className="p-3 bg-red-900/50 text-red-200 rounded-lg text-sm">
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-3 bg-red-900/30 border border-red-800 text-red-300 rounded-lg text-sm flex items-center gap-2"
+                >
+                  <X className="w-4 h-4 flex-shrink-0" />
                   {error}
-                </div>
+                </motion.div>
               )}
 
-              <button
+              <Button
                 type="submit"
-                disabled={loading || !password}
-                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                variant="primary"
+                loading={loading}
+                disabled={!password}
+                className="w-full"
               >
                 {loading ? 'Authenticating...' : 'Login'}
-              </button>
+              </Button>
 
               <p className="text-sm text-gray-400 text-center">
                 First time? Enter a new password to set up admin access.
               </p>
-              
+
               <p className="text-xs text-gray-500 text-center">
                 Session persists for 24 hours
               </p>
-            </form>
+            </motion.form>
           ) : (
             // Configuration Form
-            <div className="space-y-4">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
               {/* Session Info */}
-              <div className="flex items-center justify-between p-3 bg-green-900/30 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-green-900/20 border border-green-800/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                   <span className="text-sm text-green-400">Session Active</span>
                 </div>
                 <span className="text-xs text-gray-400">Expires in 24h</span>
               </div>
 
-              <form onSubmit={handleSaveConfig} className="space-y-4">
+              <form onSubmit={handleSaveConfig} className="space-y-3">
                 {config.providers.map((provider) => (
-                  <div key={provider.id} className="p-4 bg-gray-900/50 border border-gray-700 rounded-lg space-y-3">
+                  <motion.div
+                    key={provider.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-gray-800/50 border border-gray-700 rounded-xl space-y-3"
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-gray-200">{provider.name}</h3>
-                        {/* API Key Status Indicator */}
+                        <Server className="w-4 h-4 text-gray-400" />
+                        <h3 className="text-sm font-semibold text-white">{provider.name}</h3>
                         {provider.hasApiKey && (
-                          <span className="flex items-center gap-1 px-2 py-0.5 bg-green-900/50 text-green-400 text-xs rounded-full">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                            </svg>
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-green-900/30 border border-green-800/50 text-green-400 text-xs rounded-full">
+                            <Check className="w-3 h-3" />
                             Key Saved
                           </span>
                         )}
                       </div>
-                      <label className="inline-flex items-center gap-2 text-sm text-gray-300">
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={provider.enabled}
                           onChange={(e) => updateProviderField(provider.id, 'enabled', e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
                         />
                         Enabled
                       </label>
@@ -279,81 +322,58 @@ export default function AdminPanel({ onClose, onAuthChange }) {
 
                     {/* Connection Status */}
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => handleTestConnection(provider.id)}
                         disabled={!provider.hasApiKey || testingProvider === provider.id}
-                        className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                        leftIcon={testingProvider === provider.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                       >
-                        {testingProvider === provider.id ? (
-                          <>
-                            <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                            Testing...
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                            Test Connection
-                          </>
-                        )}
-                      </button>
-                      
+                        {testingProvider === provider.id ? 'Testing...' : 'Test Connection'}
+                      </Button>
+
                       {connectionStatus[provider.id] === 'connected' && (
                         <span className="flex items-center gap-1 text-xs text-green-400">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
+                          <Check className="w-4 h-4" />
                           Connected
                         </span>
                       )}
                       {connectionStatus[provider.id] === 'failed' && (
                         <span className="flex items-center gap-1 text-xs text-red-400">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                          </svg>
+                          <X className="w-4 h-4" />
                           Failed
                         </span>
                       )}
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        API Base URL
-                      </label>
-                      <input
-                        type="text"
-                        value={provider.apiBaseUrl}
-                        onChange={(e) => updateProviderField(provider.id, 'apiBaseUrl', e.target.value)}
-                        className="w-full bg-gray-700 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="https://provider-api/v1"
-                      />
-                    </div>
+                    <Input
+                      label="API Base URL"
+                      value={provider.apiBaseUrl}
+                      onChange={(e) => updateProviderField(provider.id, 'apiBaseUrl', e.target.value)}
+                      placeholder="https://provider-api/v1"
+                      leftIcon={<Server className="w-4 h-4" />}
+                    />
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Private API Key
-                      </label>
-                      <input
-                        type="password"
-                        value={provider.apiKey}
-                        onChange={(e) => updateProviderField(provider.id, 'apiKey', e.target.value)}
-                        className="w-full bg-gray-700 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={provider.hasApiKey ? 'Leave blank to keep current key' : 'Enter API key'}
-                      />
-                    </div>
-                  </div>
+                    <Input
+                      type="password"
+                      label="Private API Key"
+                      value={provider.apiKey}
+                      onChange={(e) => updateProviderField(provider.id, 'apiKey', e.target.value)}
+                      placeholder={provider.hasApiKey ? 'Leave blank to keep current key' : 'Enter API key'}
+                      leftIcon={<Key className="w-4 h-4" />}
+                    />
+                  </motion.div>
                 ))}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-1.5">
                     Default Provider
                   </label>
                   <select
                     value={config.defaultProvider}
                     onChange={(e) => setConfig({ ...config, defaultProvider: e.target.value })}
-                    className="w-full bg-gray-700 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-800 border border-gray-700 text-white p-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {config.providers
                       .filter((provider) => provider.enabled)
@@ -366,30 +386,41 @@ export default function AdminPanel({ onClose, onAuthChange }) {
                 </div>
 
                 {error && (
-                  <div className="p-3 bg-red-900/50 text-red-200 rounded-lg text-sm">
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-3 bg-red-900/30 border border-red-800 text-red-300 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    <X className="w-4 h-4 flex-shrink-0" />
                     {error}
-                  </div>
+                  </motion.div>
                 )}
 
                 {success && (
-                  <div className="p-3 bg-green-900/50 text-green-200 rounded-lg text-sm">
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-3 bg-green-900/30 border border-green-800 text-green-300 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4 flex-shrink-0" />
                     {success}
-                  </div>
+                  </motion.div>
                 )}
 
-                <button
+                <Button
                   type="submit"
-                  disabled={loading}
-                  className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                  variant="success"
+                  loading={loading}
+                  className="w-full"
                 >
                   {loading ? 'Saving...' : 'Save Configuration'}
-                </button>
+                </Button>
 
               </form>
-            </div>
+            </motion.div>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

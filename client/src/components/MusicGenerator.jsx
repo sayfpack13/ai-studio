@@ -23,6 +23,7 @@ export default function MusicGenerator() {
     musicHistory,
     getMusicIds,
     deleteMusic,
+    clearAllMusic,
   } = useApp();
 
   const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, maxConcurrentJobs } = useJobs();
@@ -43,9 +44,18 @@ export default function MusicGenerator() {
   const [localError, setLocalError] = useState("");
   const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
 
-  // Get the most recent failed job error
+  // Get the most recent failed job error, only if recent
   const latestFailedJob = failedJobs.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
-  const jobError = latestFailedJob?.error || "";
+  const latestCompletedJob = musicJobs
+    .filter(job => job.status === "completed")
+    .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
+  const FIVE_MINUTES = 5 * 60 * 1000;
+  const isRecentFailure = latestFailedJob && (Date.now() - (latestFailedJob.completedAt || 0)) < FIVE_MINUTES;
+  const shouldShowFailedError = isRecentFailure && (
+    !latestCompletedJob ||
+    (latestFailedJob.completedAt || 0) > (latestCompletedJob.completedAt || 0)
+  );
+  const jobError = shouldShowFailedError ? (latestFailedJob?.error || "") : "";
   const error = localError || jobError;
 
   // Get the selected running job for progress display
@@ -918,6 +928,7 @@ export default function MusicGenerator() {
               }
             }}
             onDeleteMedia={deleteMusic}
+            onClearHistory={clearAllMusic}
             loading={hasActiveJobs || selectedRunningJobId !== null}
             error={error}
             progress={selectedRunningJobId !== null ? selectedJobProgress : null}

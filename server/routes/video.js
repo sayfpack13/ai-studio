@@ -323,6 +323,7 @@ async function handleWanI2VGeneration({
   });
 
   const result = response.data;
+  console.log('[Wan I2V] Full response:', JSON.stringify(result, null, 2).slice(0, 2000));
   console.log('[Wan I2V] Response structure:', Object.keys(result));
   console.log('[Wan I2V] Has providerResponse:', !!result.providerResponse);
   console.log('[Wan I2V] Has data:', !!result.data);
@@ -331,28 +332,46 @@ async function handleWanI2VGeneration({
   // Check if response contains binary video data in multiple possible locations
   let binaryData = null;
   
-  // Check providerResponse field
-  if (result.providerResponse && typeof result.providerResponse === 'string') {
-    if (result.providerResponse.includes('ftyp') || result.providerResponse.includes('\x00\x00\x00')) {
+  // Check all string fields for potential binary data (base64 encoded video)
+  for (const [key, value] of Object.entries(result)) {
+    if (typeof value === 'string' && value.length > 5000) {
+      console.log(`[Wan I2V] Large string field found: ${key}, length: ${value.length}, preview: ${value.slice(0, 100)}`);
+      // Check if it looks like base64 video data
+      if (value.startsWith('AAAA') || value.includes('ftyp') || /^[A-Za-z0-9+/=]+$/.test(value.slice(0, 100))) {
+        binaryData = value;
+        console.log('[Wan I2V] Detected base64 video data in field:', key);
+        break;
+      }
+    }
+  }
+  
+  // Check providerResponse field specifically
+  if (!binaryData && result.providerResponse && typeof result.providerResponse === 'string') {
+    if (result.providerResponse.includes('ftyp') || result.providerResponse.length > 10000) {
       binaryData = result.providerResponse;
+      console.log('[Wan I2V] Using providerResponse as binary data');
     }
   }
   
   // Check data field
   if (!binaryData && result.data && typeof result.data === 'string') {
-    if (result.data.includes('ftyp') || result.data.includes('\x00\x00\x00')) {
+    if (result.data.includes('ftyp') || result.data.length > 10000) {
       binaryData = result.data;
+      console.log('[Wan I2V] Using data field as binary data');
     }
   }
   
   // Check if URL is videolan.org (indicates binary data was returned but URL extraction failed)
   const extractedUrl = extractVideoUrl(result);
+  console.log('[Wan I2V] Extracted URL:', extractedUrl);
+  
   if (!binaryData && extractedUrl && extractedUrl.includes('videolan.org')) {
+    console.log('[Wan I2V] videolan.org URL detected, searching for binary data...');
     // Try to find binary data in other fields
     for (const [key, value] of Object.entries(result)) {
-      if (typeof value === 'string' && (value.includes('ftyp') || value.includes('\x00\x00\x00') || value.length > 10000)) {
+      if (typeof value === 'string' && value.length > 5000) {
         binaryData = value;
-        console.log('[Wan I2V] Found binary data in field:', key);
+        console.log('[Wan I2V] Found potential binary data in field:', key, 'length:', value.length);
         break;
       }
     }

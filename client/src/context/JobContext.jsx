@@ -13,7 +13,8 @@ const JobContext = createContext();
 
 const JOBS_STORAGE_KEY = "blackbox_ai_jobs";
 const MAX_COMPLETED_JOBS = 50; // Reduced from 200 to prevent quota issues
-const COMPLETED_JOB_TTL = 24 * 60 * 60 * 1000; // Reduced to 1 day
+const COMPLETED_JOB_TTL = 24 * 60 * 60 * 1000; // 1 day for completed
+const FAILED_JOB_TTL = 5 * 60 * 1000; // 5 minutes for failed (don't show old errors)
 
 // Helper to load from localStorage
 const loadJobsFromStorage = () => {
@@ -21,12 +22,18 @@ const loadJobsFromStorage = () => {
     const stored = localStorage.getItem(JOBS_STORAGE_KEY);
     if (!stored) return [];
     const jobs = JSON.parse(stored);
-    // Filter out old completed jobs
+    // Filter out old jobs based on status
     const now = Date.now();
     return jobs.filter(
-      (job) =>
-        job.status !== "completed" ||
-        now - (job.completedAt || 0) < COMPLETED_JOB_TTL
+      (job) => {
+        if (job.status === "failed") {
+          return now - (job.completedAt || 0) < FAILED_JOB_TTL;
+        }
+        if (job.status === "completed") {
+          return now - (job.completedAt || 0) < COMPLETED_JOB_TTL;
+        }
+        return true; // Keep pending/running jobs
+      }
     );
   } catch {
     return [];
@@ -149,7 +156,8 @@ export function JobProvider({ children}) {
     saveJobsToStorage(serializable);
   }, [jobs]);
 
-  // Fetch server jobs on mount and periodically
+  // Fetch server jobs on mount and periodically (adaptive polling)
+  const hasActiveLocalJobs = jobs.some(j => j.status === "running" || j.status === "pending");
   useEffect(() => {
     const fetchServerJobs = async () => {
       try {
@@ -163,9 +171,10 @@ export function JobProvider({ children}) {
     };
 
     fetchServerJobs();
-    const interval = setInterval(fetchServerJobs, 5000); // Poll every 5 seconds
+    const pollInterval = hasActiveLocalJobs ? 5000 : 30000;
+    const interval = setInterval(fetchServerJobs, pollInterval);
     return () => clearInterval(interval);
-  }, []);
+  }, [hasActiveLocalJobs]);
 
   // Get jobs by status
   const getActiveJobs = useCallback(() => {

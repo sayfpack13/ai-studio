@@ -32,17 +32,6 @@ const LIBRARY_FILTERS_KEY = "blackbox_ai_library_filters";
 // Maximum items to keep in history
 const MAX_HISTORY_ITEMS = 50;
 
-// Check if URL is a data URL (base64)
-const isDataUrl = (url) => url && url.startsWith("data:");
-
-// Strip base64 data from result to save space
-// Server-side now handles saving binary data to files, so we preserve all URLs
-const stripBase64FromResult = (result) => {
-  if (!result || typeof result !== "object") return result;
-  // Preserve all URLs since server handles file saving
-  return result;
-};
-
 // Trim history to max items
 const trimHistory = (history, maxItems = MAX_HISTORY_ITEMS) => {
   const entries = Object.entries(history);
@@ -52,8 +41,21 @@ const trimHistory = (history, maxItems = MAX_HISTORY_ITEMS) => {
   const sorted = entries.sort(
     (a, b) => (b[1]?.lastUpdated || 0) - (a[1]?.lastUpdated || 0)
   );
-  const trimmed = sorted.slice(0, maxItems);
-  return Object.fromEntries(trimmed);
+  const trimmed = Object.fromEntries(sorted.slice(0, maxItems));
+  return trimmed;
+};
+
+// Filter out invalid video URLs (videolan.org, data URLs)
+const filterInvalidVideos = (history) => {
+  const filtered = {};
+  for (const [id, video] of Object.entries(history)) {
+    const url = video?.result?.url || video?.url;
+    // Keep only entries with valid URLs
+    if (url && !url.includes('videolan.org') && !url.startsWith('data:')) {
+      filtered[id] = video;
+    }
+  }
+  return filtered;
 };
 
 // Helper to load from localStorage with size check
@@ -123,7 +125,7 @@ export function AppProvider({ children }) {
     loadFromStorage(IMAGE_HISTORY_KEY, {})
   );
   const [videoHistory, setVideoHistory] = useState(() =>
-    loadFromStorage(VIDEO_HISTORY_KEY, {})
+    filterInvalidVideos(loadFromStorage(VIDEO_HISTORY_KEY, {}))
   );
   const [musicHistory, setMusicHistory] = useState(() =>
     loadFromStorage(MUSIC_HISTORY_KEY, {})
@@ -333,7 +335,7 @@ export function AppProvider({ children }) {
         ...prev,
         [imageId]: {
           prompt,
-          result: stripBase64FromResult(result),
+          result,
           model,
           ...(metadata && typeof metadata === "object" ? { metadata } : {}),
           lastUpdated: Date.now(),
@@ -377,7 +379,7 @@ export function AppProvider({ children }) {
         ...prev,
         [videoId]: {
           prompt,
-          result: stripBase64FromResult(result),
+          result,
           model,
           metadata,
           lastUpdated: Date.now(),
@@ -406,20 +408,6 @@ export function AppProvider({ children }) {
     setVideoHistory({});
   }, []);
 
-  const clearInvalidVideos = useCallback(() => {
-    setVideoHistory((prev) => {
-      const cleaned = {};
-      for (const [id, video] of Object.entries(prev)) {
-        const url = video?.result?.url || video?.url;
-        // Skip entries with invalid URLs (videolan.org, data URLs, etc)
-        if (url && !url.includes('videolan.org') && !url.startsWith('data:')) {
-          cleaned[id] = video;
-        }
-      }
-      return cleaned;
-    });
-  }, []);
-
   const getVideoIds = useCallback(() => {
     return Object.keys(videoHistory).sort(
       (a, b) =>
@@ -435,7 +423,7 @@ export function AppProvider({ children }) {
         ...prev,
         [musicId]: {
           prompt,
-          result: stripBase64FromResult(result),
+          result,
           model,
           lastUpdated: Date.now(),
         },
@@ -476,7 +464,7 @@ export function AppProvider({ children }) {
         ...prev,
         [remixId]: {
           prompt,
-          result: stripBase64FromResult(result),
+          result,
           model,
           metadata,
           lastUpdated: Date.now(),
@@ -570,7 +558,6 @@ export function AppProvider({ children }) {
     getVideo,
     deleteVideo,
     clearAllVideos,
-    clearInvalidVideos,
     getVideoIds,
     // Music history
     musicHistory,

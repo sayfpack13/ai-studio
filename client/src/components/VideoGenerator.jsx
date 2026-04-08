@@ -66,14 +66,18 @@ export default function VideoGenerator() {
   const [localError, setLocalError] = useState("");
   const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
 
-  // Get the most recent failed job error, but only if it's more recent than the latest successful job
+  // Get the most recent failed job error, but only if it's recent and more recent than the latest successful job
   const latestFailedJob = failedJobs.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
   const latestCompletedJob = videoJobs
     .filter(job => job.status === "completed")
     .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
   
-  // Only show failed job error if it's more recent than the latest successful job (within 30 seconds)
-  const shouldShowFailedError = latestFailedJob && (
+  // Only show failed job error if:
+  // 1. It happened within the last 5 minutes (not old errors on page load)
+  // 2. It's more recent than the latest successful job
+  const FIVE_MINUTES = 5 * 60 * 1000;
+  const isRecentFailure = latestFailedJob && (Date.now() - (latestFailedJob.completedAt || 0)) < FIVE_MINUTES;
+  const shouldShowFailedError = isRecentFailure && (
     !latestCompletedJob || 
     (latestFailedJob.completedAt || 0) > (latestCompletedJob.completedAt || 0)
   );
@@ -617,13 +621,14 @@ export default function VideoGenerator() {
 
     // Enqueue the job with save callback
     enqueueJob("video", jobParams, (result) => {
+      const videoUrl = result.data?.[0]?.url || result.video || result.url;
       const videoData = {
-        url: result.data?.[0]?.url || result.video || result.url,
+        url: videoUrl,
         id: result.id,
-        raw: result.providerResponse || result.raw || null,
       };
       setGeneratedVideo(videoData);
 
+      // Save only url and id to history (not raw/providerResponse which can be MBs)
       saveVideo(
         videoId,
         prompt,

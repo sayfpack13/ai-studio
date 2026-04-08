@@ -63,8 +63,13 @@ function assetToParams(asset) {
 
 class LibraryService {
   constructor() {
-    // Initialize migration from old JSON if needed
-    this.ready = this.migrateFromJson();
+    // Initialize migration from old JSON if needed, then cleanup invalid assets
+    this.ready = this.init();
+  }
+
+  async init() {
+    await this.migrateFromJson();
+    await this.cleanupInvalidAssets();
   }
 
   // Migrate from old JSON format to SQLite
@@ -279,6 +284,36 @@ class LibraryService {
     }
 
     return toDelete.length;
+  }
+
+  // Cleanup invalid assets (videolan.org, data URLs, etc.) — runs once
+  async cleanupInvalidAssets() {
+    const fs = await import("fs/promises");
+    const { join } = await import("path");
+    const { DATA_DIR } = await import("./db.js");
+    const FLAG = join(DATA_DIR, ".cleaned-invalid-assets");
+
+    try {
+      await fs.access(FLAG);
+      return 0; // Already cleaned
+    } catch {
+      // Not cleaned yet
+    }
+
+    // Delete assets with videolan.org URLs
+    const videolanResult = db.prepare(`DELETE FROM assets WHERE url LIKE ?`).run('%videolan.org%');
+    if (videolanResult.changes > 0) {
+      console.log(`[Library] Deleted ${videolanResult.changes} assets with videolan.org URLs`);
+    }
+
+    // Delete assets with data URLs (base64)
+    const dataUrlResult = db.prepare(`DELETE FROM assets WHERE url LIKE ?`).run('data:%');
+    if (dataUrlResult.changes > 0) {
+      console.log(`[Library] Deleted ${dataUrlResult.changes} assets with data URLs`);
+    }
+
+    await fs.writeFile(FLAG, new Date().toISOString());
+    return videolanResult.changes + dataUrlResult.changes;
   }
 
   // Download external URL and save locally

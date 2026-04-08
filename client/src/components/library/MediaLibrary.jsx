@@ -4,6 +4,13 @@ import { uploadLibraryFile } from "../../services/api";
 
 const fallbackTime = 0;
 
+function isInvalidMediaUrl(url) {
+  if (!url) return true;
+  if (url.includes('videolan.org')) return true;
+  if (url.startsWith('data:')) return true;
+  return false;
+}
+
 function normalizeHistoryItem(item, id, type, source) {
   if (!item) return null;
 
@@ -20,6 +27,9 @@ function normalizeHistoryItem(item, id, type, source) {
     item?.result?.audio ||
     item?.result?.image ||
     "";
+
+  // Skip entries with invalid URLs
+  if (isInvalidMediaUrl(url)) return null;
 
   return {
     id: `hist_${type}_${id}`,
@@ -177,7 +187,7 @@ export default function MediaLibrary() {
   const mergedAssets = useMemo(() => {
     const apiAssets = (libraryAssets || [])
       .map(normalizeLibraryAsset)
-      .filter(Boolean);
+      .filter(a => a && !isInvalidMediaUrl(a.url));
 
     const historyAssets = [
       ...(getImageIds?.() || []).map((id) =>

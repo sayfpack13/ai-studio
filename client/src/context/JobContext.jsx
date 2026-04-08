@@ -511,7 +511,8 @@ export function JobProvider({ children}) {
                 job.params.videoId,
                 job.params.prompt,
                 data,
-                job.params.model
+                job.params.model,
+                job.params.metadata
               );
           } else if (job.type === "music") {
             saveResult = (data) =>

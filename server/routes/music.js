@@ -4,9 +4,88 @@ import { requireApiKey } from '../middleware/auth.js';
 import { findModel } from '../utils/models.js';
 import { getDefaultVoices, remixTrack } from '../services/remix-service.js';
 import libraryService from '../services/library-service.js';
+import { saveBuffer } from '../services/file-storage.js';
 
 const router = express.Router();
 router.use(requireApiKey);
+
+// Detect if response contains binary audio data (MP3, WAV signatures)
+function containsBinaryAudioData(result) {
+  if (!result || typeof result !== 'object') return false;
+  
+  const checkBinary = (value) => {
+    if (typeof value === 'string') {
+      // Check for MP3 signature (ID3 or FF FB)
+      if (value.startsWith('ID3') || value.includes('\xFF\xFB')) return true;
+      // Check for WAV signature (RIFF....WAVE)
+      if (value.includes('RIFF') && value.includes('WAVE')) return true;
+      // Check for OGG signature (OggS)
+      if (value.includes('OggS')) return true;
+      // Check for generic binary data
+      if (value.includes('\x00\x00\x00') && value.length > 100) return true;
+    }
+    return false;
+  };
+  
+  // Check providerResponse for binary data
+  if (result.providerResponse && checkBinary(result.providerResponse)) {
+    return true;
+  }
+  
+  // Check common response fields
+  for (const field of ['audio', 'data', 'result', 'content', 'b64_json', 'base64']) {
+    if (result[field] && checkBinary(result[field])) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+async function saveBinaryAudioResponse(result, prompt, modelId, providerId) {
+  try {
+    const crypto = await import('crypto');
+    
+    // Find the binary data
+    let binaryData = null;
+    let mimeType = 'audio/mpeg'; // default
+    
+    if (result.providerResponse && typeof result.providerResponse === 'string') {
+      binaryData = result.providerResponse;
+      if (binaryData.includes('RIFF') && binaryData.includes('WAVE')) mimeType = 'audio/wav';
+      else if (binaryData.includes('OggS')) mimeType = 'audio/ogg';
+    }
+    
+    if (!binaryData) return null;
+    
+    // Save to file
+    const audioHash = crypto.createHash('md5').update(binaryData).digest('hex');
+    const filename = `generated_audio_${Date.now()}_${audioHash.substring(0, 8)}${mimeType === 'audio/wav' ? '.wav' : mimeType === 'audio/ogg' ? '.ogg' : '.mp3'}`;
+    
+    const buffer = Buffer.from(binaryData, 'base64');
+    const saved = await saveBuffer(buffer, mimeType, 'generated_audio');
+    
+    // Add to library
+    await libraryService.createAsset({
+      type: 'audio',
+      source: 'music',
+      title: prompt.slice(0, 80) || 'Generated audio',
+      url: saved.url,
+      filePath: saved.filepath,
+      metadata: {
+        model: modelId,
+        provider: providerId,
+        sizeBytes: saved.size,
+        storage: 'local',
+      },
+    });
+    
+    return saved.url;
+  } catch (err) {
+    console.error('Failed to save binary audio:', err.message);
+    return null;
+  }
+}
 
 router.post('/generate', async (req, res) => {
   try {
@@ -127,11 +206,21 @@ router.post('/generate', async (req, res) => {
       .split(/\s+/)
       .filter((part) => part.startsWith('http'));
 
+    let audioUrl = urls[0] || content;
+
+    // Check if response contains binary audio data
+    if (containsBinaryAudioData(response.data)) {
+      const fileUrl = await saveBinaryAudioResponse(response.data, prompt, modelId, providerId);
+      if (fileUrl) {
+        audioUrl = fileUrl;
+      }
+    }
+
     const payload = {
       success: true,
       data: [
         {
-          url: urls[0] || content,
+          url: audioUrl,
           raw: content,
           revised_prompt: prompt
         }

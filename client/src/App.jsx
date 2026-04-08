@@ -13,12 +13,12 @@ import MusicRemix from "./components/MusicRemix";
 import VideoEditor from "./components/VideoEditor";
 import Dashboard from "./components/Dashboard";
 import MediaLibrary from "./components/library/MediaLibrary";
-import AdminPanel from "./components/AdminPanel";
-import { ChutesPage } from "./components/Chutes";
+import AdminDashboard from "./components/AdminDashboard";
 import { getToken } from "./services/api";
+import { useNavigate } from "react-router-dom";
 
 function AppContent() {
-  const [showAdmin, setShowAdmin] = useState(false);
+  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!getToken());
   const { sidebarOpen, toggleSidebar } = useApp();
   const { sidebarOpen: jobsSidebarOpen, setSidebarOpen: setJobsSidebarOpen, getActiveJobs, getPendingJobs } = useJobs();
@@ -98,7 +98,7 @@ function AppContent() {
             </button>
 
             <button
-              onClick={() => setShowAdmin(true)}
+              onClick={() => navigate('/admin')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
                 isAuthenticated
                   ? "bg-green-700 hover:bg-green-600 text-white"
@@ -141,18 +141,10 @@ function AppContent() {
             <Route path="/remix" element={<MusicRemix />} />
             <Route path="/editor" element={<VideoEditor />} />
             <Route path="/library" element={<MediaLibrary />} />
-            <Route path="/chutes" element={<ChutesPage />} />
+            <Route path="/admin" element={<AdminDashboard onAuthChange={handleAuthChange} />} />
           </Routes>
         </main>
       </div>
-
-      {/* Admin Panel Modal */}
-      {showAdmin && (
-        <AdminPanel
-          onClose={() => setShowAdmin(false)}
-          onAuthChange={handleAuthChange}
-        />
-      )}
 
       {/* Jobs Panel */}
       <JobsPanel />

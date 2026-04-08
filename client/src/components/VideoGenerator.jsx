@@ -45,9 +45,10 @@ export default function VideoGenerator() {
     videoHistory,
     getVideoIds,
     deleteVideo,
+    clearAllVideos,
   } = useApp();
 
-  const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, maxConcurrentJobs } = useJobs();
+  const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, maxConcurrentJobs, registerSaveFns } = useJobs();
 
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
@@ -65,9 +66,18 @@ export default function VideoGenerator() {
   const [localError, setLocalError] = useState("");
   const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
 
-  // Get the most recent failed job error
+  // Get the most recent failed job error, but only if it's more recent than the latest successful job
   const latestFailedJob = failedJobs.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
-  const jobError = latestFailedJob?.error || "";
+  const latestCompletedJob = videoJobs
+    .filter(job => job.status === "completed")
+    .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
+  
+  // Only show failed job error if it's more recent than the latest successful job (within 30 seconds)
+  const shouldShowFailedError = latestFailedJob && (
+    !latestCompletedJob || 
+    (latestFailedJob.completedAt || 0) > (latestCompletedJob.completedAt || 0)
+  );
+  const jobError = shouldShowFailedError ? (latestFailedJob?.error || "") : "";
   const error = localError || jobError;
 
   // Get the selected running job for progress display
@@ -103,7 +113,6 @@ export default function VideoGenerator() {
 
   const [isLocalModelSelected, setIsLocalModelSelected] = useState(false);
   const searchInputRef = useRef(null);
-  const abortControllerRef = useRef(null);
 
   const isOllamaLocalActive =
     cloudFilter === "local" && configuredProviderFilter === "ollama";
@@ -267,6 +276,11 @@ export default function VideoGenerator() {
       localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, selectedModel);
     }
   }, [selectedModel]);
+
+  // Register save function so jobs can save results after page reload
+  useEffect(() => {
+    registerSaveFns("video", saveVideo);
+  }, [registerSaveFns, saveVideo]);
 
   useEffect(() => {
     if (configuredProviderFilter) {
@@ -519,9 +533,11 @@ export default function VideoGenerator() {
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    
     setLocalError("");
     setGeneratedVideo(null);
+    
+    // Clear selected running job to avoid showing stale errors
+    setSelectedRunningJobId(null);
 
     const selectedInfo = availableModels.find(
       (m) => m.modelKey === selectedModel,
@@ -532,7 +548,6 @@ export default function VideoGenerator() {
 
     if ((!selectedInfo && !isLocalModelSelected) || !effectiveProvider) {
       setLocalError("Please select a gateway and model first");
-      
       return;
     }
 
@@ -540,73 +555,93 @@ export default function VideoGenerator() {
       const validationError = validateWanInputs();
       if (validationError) {
         setLocalError(validationError);
-        
         return;
       }
     }
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const modelIdToSend = isLocalModelSelected ? selectedModel : selectedInfo?.id;
+    const localOpts = isLocalModelSelected ? { localOllamaUrl: ollamaLocal.localUrl } : {};
 
-    try {
-      const modelIdToSend = isLocalModelSelected ? selectedModel : selectedInfo?.id;
-      const localOpts = isLocalModelSelected ? { localOllamaUrl: ollamaLocal.localUrl } : {};
-
-      const payload = {
+    // Prepare job parameters
+    const videoId = generateVideoId();
+    const jobParams = {
+      prompt,
+      model: modelIdToSend,
+      videoId,
+      options: {
         provider: effectiveProvider,
         modelKey: isLocalModelSelected ? undefined : selectedInfo?.modelKey,
-        signal: controller.signal,
         ...localOpts,
+        ...(isWanI2VSelected
+          ? {
+              image: wanImageData,
+              wanFrames: clamp(Number(wanFrames), 21, 140),
+              wanFps: clamp(Number(wanFps), 16, 24),
+              wanFast: Boolean(wanFast),
+              wanSeed: wanSeed === "" ? null : Number(wanSeed),
+              wanResolution: wanResolution === "720p" ? "720p" : "480p",
+              wanGuidanceScale: clamp(Number(wanGuidanceScale), 0, 10),
+              wanGuidanceScale2: clamp(Number(wanGuidanceScale2), 0, 10),
+              wanNegativePrompt:
+                wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
+            }
+          : {
+              duration,
+              fps,
+            }),
+      },
+      metadata: {
+        modelKey: selectedInfo?.modelKey || selectedModel,
+        provider: effectiveProvider,
+        ...(isWanI2VSelected
+          ? {
+              wan: {
+                frames: Number(wanFrames),
+                fps: Number(wanFps),
+                fast: Boolean(wanFast),
+                seed: wanSeed === "" ? null : Number(wanSeed),
+                resolution: wanResolution,
+                guidance_scale: Number(wanGuidanceScale),
+                guidance_scale_2: Number(wanGuidanceScale2),
+                negative_prompt:
+                  wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
+                imageSourceType: wanImageSourceType,
+              },
+            }
+          : {
+              duration,
+              fps,
+            }),
+      },
+    };
+
+    // Enqueue the job with save callback
+    enqueueJob("video", jobParams, (result) => {
+      const videoData = {
+        url: result.data?.[0]?.url || result.video || result.url,
+        id: result.id,
+        raw: result.providerResponse || result.raw || null,
       };
+      setGeneratedVideo(videoData);
 
-      if (isWanI2VSelected) {
-        Object.assign(payload, {
-          image: wanImageData,
-          wanFrames: clamp(Number(wanFrames), 21, 140),
-          wanFps: clamp(Number(wanFps), 16, 24),
-          wanFast: Boolean(wanFast),
-          wanSeed: wanSeed === "" ? null : Number(wanSeed),
-          wanResolution: wanResolution === "720p" ? "720p" : "480p",
-          wanGuidanceScale: clamp(Number(wanGuidanceScale), 0, 10),
-          wanGuidanceScale2: clamp(Number(wanGuidanceScale2), 0, 10),
-          wanNegativePrompt:
-            wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
-        });
-      } else {
-        Object.assign(payload, {
-          duration,
-          fps,
-        });
-      }
+      saveVideo(
+        videoId,
+        prompt,
+        videoData,
+        modelIdToSend,
+        jobParams.metadata,
+      );
 
-      const response = await generateVideo(prompt, modelIdToSend, payload);
-
-      if (response.data || response.video || response.url) {
-        const videoData = {
-          url: response.data?.[0]?.url || response.video || response.url,
-          id: response.id,
-          raw: response.providerResponse || response.raw || null,
-        };
-        setGeneratedVideo(videoData);
-
-        const videoId = generateVideoId();
-        saveVideo(
-          videoId,
-          prompt,
-          videoData,
-          selectedInfo?.id || selectedModel,
-        );
-
-        await addLibraryAsset({
-          type: "video",
-          source: "video",
-          title: prompt.slice(0, 80) || "Generated video",
-          url: videoData.url,
-          metadata: {
-            model: selectedInfo?.id || selectedModel,
-            provider: effectiveProvider,
-            ...(isWanI2VSelected
-              ? {
+      addLibraryAsset({
+        type: "video",
+        source: "video",
+        title: prompt.slice(0, 80) || "Generated video",
+        url: videoData.url,
+        metadata: {
+          model: modelIdToSend,
+          provider: effectiveProvider,
+          ...(isWanI2VSelected
+            ? {
                 wan: {
                   frames: Number(wanFrames),
                   fps: Number(wanFps),
@@ -620,24 +655,10 @@ export default function VideoGenerator() {
                   imageSourceType: wanImageSourceType,
                 },
               }
-              : {}),
-          },
-        });
-      } else if (response.error) {
-        setLocalError(response.error);
-      } else {
-        setLocalError("Unexpected response format");
-      }
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        setLocalError("Video generation stopped.");
-      } else {
-        setLocalError(err.message || "Failed to generate video");
-      }
-    } finally {
-      abortControllerRef.current = null;
-      
-    }
+            : {}),
+        },
+      });
+    });
   };
 
   const handleDownload = () => {
@@ -649,9 +670,8 @@ export default function VideoGenerator() {
   };
 
   const handleStopGeneration = () => {
-    if (!abortControllerRef.current) return;
-    abortControllerRef.current.abort();
-    abortControllerRef.current = null;
+    // Cancel all running video jobs
+    cancelAllJobsByType("video");
   };
 
   const handleMusicToEditorPipeline = async () => {
@@ -705,6 +725,7 @@ export default function VideoGenerator() {
       setGeneratedVideo(videoItem.result || null);
       setPrompt(videoItem.prompt || "");
       setLocalError("");
+      setSelectedRunningJobId(null); // Clear running job to prevent showing loading state
 
       const metadata = videoItem?.metadata && typeof videoItem.metadata === "object"
         ? videoItem.metadata
@@ -1261,19 +1282,16 @@ export default function VideoGenerator() {
               setGeneratedVideo({
                 url: video.url,
                 model: video.model,
-                prompt: video.prompt,
-                duration: video.duration,
               });
-              if (video.model) {
-                const model = availableModels.find((m) => m.id === video.model);
-                if (model) {
-                  setSelectedModel(model.modelKey);
-                  localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, model.modelKey);
-                }
+            }}
+            onDeleteMedia={(videoId) => {
+              deleteVideo(videoId);
+              if (generatedVideo?.id === videoId) {
+                setGeneratedVideo(null);
               }
             }}
-            onDeleteMedia={deleteVideo}
-            loading={hasActiveJobs || selectedRunningJobId !== null}
+            onClearHistory={clearAllVideos}
+            loading={hasActiveJobs}
             error={error}
             progress={selectedRunningJobId !== null ? selectedJobProgress : null}
             onClearError={() => {

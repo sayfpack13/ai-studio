@@ -58,6 +58,7 @@ export default function MediaOutputPanel({
   onReloadPrompt,
   onPreview,
   onDeleteMedia,
+  onClearHistory,
   loading,
   error,
   progress,
@@ -167,10 +168,12 @@ export default function MediaOutputPanel({
 
   // Render media player based on type
   const renderMediaPlayer = (item, showControls = true) => {
+    const url = item.url;
+
     if (mediaType === "image") {
       return (
         <img
-          src={item.url}
+          src={url}
           alt={item.prompt || "Generated image"}
           className="w-full h-auto max-h-[50vh] object-contain"
         />
@@ -179,7 +182,8 @@ export default function MediaOutputPanel({
     if (mediaType === "video") {
       return (
         <video
-          src={item.url}
+          key={url}
+          src={url}
           controls={showControls}
           className="w-full h-auto max-h-[50vh]"
         >
@@ -193,7 +197,7 @@ export default function MediaOutputPanel({
           <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4">
             <Volume2 className="w-12 h-12 text-white" />
           </div>
-          <audio src={item.url} controls className="w-full max-w-md" />
+          <audio key={item.url} src={item.url} controls className="w-full max-w-md" />
           {item.prompt && (
             <p className="text-sm text-gray-400 mt-4 text-center">{item.prompt}</p>
           )}
@@ -391,16 +395,32 @@ export default function MediaOutputPanel({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.15 }}
+              className="flex flex-col h-full"
             >
-              <MediaGalleryGrid
-                mediaType={mediaType}
-                items={historyItems}
-                onSelect={handleSelectFromHistory}
-                onCompare={config.supportsComparison ? handleAddToCompare : undefined}
-                onDelete={onDeleteMedia}
-                onReload={handleReloadPrompt}
-                selectedForCompare={compareItems.map((item) => item.id)}
-              />
+              <div className="flex items-center justify-between p-2 border-b border-gray-700">
+                <span className="text-sm text-gray-400">
+                  {historyItems.length} {historyItems.length === 1 ? 'item' : 'items'}
+                </span>
+                {onClearHistory && (
+                  <button
+                    onClick={onClearHistory}
+                    className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
+                  >
+                    Clear History
+                  </button>
+                )}
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <MediaGalleryGrid
+                  mediaType={mediaType}
+                  items={historyItems}
+                  onSelect={handleSelectFromHistory}
+                  onCompare={config.supportsComparison ? handleAddToCompare : undefined}
+                  onDelete={onDeleteMedia}
+                  onReload={handleReloadPrompt}
+                  selectedForCompare={compareItems.map((item) => item.id)}
+                />
+              </div>
             </motion.div>
           )}
 

@@ -1,11 +1,12 @@
 import express from "express";
 import axios from "axios";
-import { appendFile, mkdir } from "fs/promises";
+import { appendFile, mkdir, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { requireApiKey } from "../middleware/auth.js";
 import { findModel } from "../utils/models.js";
 import libraryService from "../services/library-service.js";
+import { saveBuffer } from "../services/file-storage.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -275,6 +276,86 @@ function extractFirstBase64Image(value, depth = 0) {
   }
 
   return null;
+}
+
+// Detect if response contains binary image data (PNG, JPEG signatures)
+function containsBinaryImageData(result) {
+  if (!result || typeof result !== 'object') return false;
+  
+  const checkBinary = (value) => {
+    if (typeof value === 'string') {
+      // Check for PNG signature (89 50 4E 47 0D 0A 1A 0A)
+      if (value.includes('\x89PNG') || value.startsWith('\x89PNG')) return true;
+      // Check for JPEG signature (FF D8 FF)
+      if (value.includes('\xFF\xD8\xFF') || value.startsWith('\xFF\xD8\xFF')) return true;
+      // Check for GIF signature (GIF89a or GIF87a)
+      if (value.includes('GIF89a') || value.includes('GIF87a')) return true;
+      // Check for WebP signature (RIFF....WEBP)
+      if (value.includes('RIFF') && value.includes('WEBP')) return true;
+    }
+    return false;
+  };
+  
+  // Check providerResponse for binary data
+  if (result.providerResponse && checkBinary(result.providerResponse)) {
+    return true;
+  }
+  
+  // Check common response fields
+  for (const field of ['image', 'data', 'result', 'content', 'b64_json', 'base64']) {
+    if (result[field] && checkBinary(result[field])) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+async function saveBinaryImageResponse(result, prompt, modelId, providerId) {
+  try {
+    const crypto = await import('crypto');
+    const path = await import('path');
+    
+    // Find the binary data
+    let binaryData = null;
+    let mimeType = 'image/png'; // default
+    
+    if (result.providerResponse && typeof result.providerResponse === 'string') {
+      binaryData = result.providerResponse;
+      if (binaryData.includes('\xFF\xD8\xFF')) mimeType = 'image/jpeg';
+      else if (binaryData.includes('GIF')) mimeType = 'image/gif';
+      else if (binaryData.includes('WEBP')) mimeType = 'image/webp';
+    }
+    
+    if (!binaryData) return null;
+    
+    // Save to file
+    const imageHash = crypto.createHash('md5').update(binaryData).digest('hex');
+    const filename = `generated_image_${Date.now()}_${imageHash.substring(0, 8)}${mimeType === 'image/jpeg' ? '.jpg' : mimeType === 'image/png' ? '.png' : mimeType === 'image/gif' ? '.gif' : '.webp'}`;
+    
+    const buffer = Buffer.from(binaryData, 'base64');
+    const saved = await saveBuffer(buffer, mimeType, 'generated_image');
+    
+    // Add to library
+    await libraryService.createAsset({
+      type: 'image',
+      source: 'image',
+      title: prompt.slice(0, 80) || 'Generated image',
+      url: saved.url,
+      filePath: saved.filepath,
+      metadata: {
+        model: modelId,
+        provider: providerId,
+        sizeBytes: saved.size,
+        storage: 'local',
+      },
+    });
+    
+    return saved.url;
+  } catch (err) {
+    console.error('Failed to save binary image:', err.message);
+    return null;
+  }
 }
 
 function toStandardImageResponse(result, prompt) {
@@ -1017,6 +1098,14 @@ router.post("/generate", async (req, res) => {
         };
       }
       if (transformed?.data?.[0]?.url) {
+        // Check if response contains binary image data
+        if (containsBinaryImageData(result)) {
+          const fileUrl = await saveBinaryImageResponse(result, effectivePrompt, actualModelId, providerId);
+          if (fileUrl) {
+            transformed.data[0].url = fileUrl;
+          }
+        }
+        
         await libraryService.createAsset({
           type: "image",
           source: "image",

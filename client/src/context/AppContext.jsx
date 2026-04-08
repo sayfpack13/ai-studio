@@ -36,14 +36,11 @@ const MAX_HISTORY_ITEMS = 50;
 const isDataUrl = (url) => url && url.startsWith("data:");
 
 // Strip base64 data from result to save space
+// Server-side now handles saving binary data to files, so we preserve all URLs
 const stripBase64FromResult = (result) => {
   if (!result || typeof result !== "object") return result;
-  const stripped = { ...result };
-  // Only keep URL if it's not a data URL
-  if (stripped.url && isDataUrl(stripped.url)) {
-    delete stripped.url;
-  }
-  return stripped;
+  // Preserve all URLs since server handles file saving
+  return result;
 };
 
 // Trim history to max items
@@ -374,7 +371,7 @@ export function AppProvider({ children }) {
 
   // ==================== VIDEO HISTORY ====================
 
-  const saveVideo = useCallback((videoId, prompt, result, model) => {
+  const saveVideo = useCallback((videoId, prompt, result, model, metadata) => {
     setVideoHistory((prev) => {
       const updated = {
         ...prev,
@@ -382,6 +379,7 @@ export function AppProvider({ children }) {
           prompt,
           result: stripBase64FromResult(result),
           model,
+          metadata,
           lastUpdated: Date.now(),
         },
       };
@@ -406,6 +404,20 @@ export function AppProvider({ children }) {
 
   const clearAllVideos = useCallback(() => {
     setVideoHistory({});
+  }, []);
+
+  const clearInvalidVideos = useCallback(() => {
+    setVideoHistory((prev) => {
+      const cleaned = {};
+      for (const [id, video] of Object.entries(prev)) {
+        const url = video?.result?.url || video?.url;
+        // Skip entries with invalid URLs (videolan.org, data URLs, etc)
+        if (url && !url.includes('videolan.org') && !url.startsWith('data:')) {
+          cleaned[id] = video;
+        }
+      }
+      return cleaned;
+    });
   }, []);
 
   const getVideoIds = useCallback(() => {
@@ -558,6 +570,7 @@ export function AppProvider({ children }) {
     getVideo,
     deleteVideo,
     clearAllVideos,
+    clearInvalidVideos,
     getVideoIds,
     // Music history
     musicHistory,

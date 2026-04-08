@@ -17,6 +17,17 @@ async function apiRequest(method, path, data = null) {
   }
   
   const response = await fetch(`${API_BASE}${path}`, options);
+  
+  // Handle non-JSON responses (e.g., HTML error pages)
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`Server returned non-JSON response (${response.status}): ${text.substring(0, 200)}`);
+    }
+    throw new Error(`Expected JSON response but got: ${contentType}`);
+  }
+  
   const result = await response.json();
   
   if (!response.ok) {

@@ -88,15 +88,28 @@ export default function AssetPickerDialog({
       ),
     ].filter(Boolean);
 
+    // Normalize URLs for deduplication (remove trailing slashes, normalize path)
+    const normalizeUrl = (url) => {
+      if (!url) return null;
+      // Remove trailing slashes and convert to lowercase for comparison
+      return url.replace(/\/+$/, '').toLowerCase();
+    };
+
     const byUrlOrId = new Map();
 
+    // Add API assets first (they have preference)
     for (const asset of apiAssets) {
-      const dedupeKey = asset.url ? `url:${asset.url}` : `id:${asset.id}`;
-      byUrlOrId.set(dedupeKey, asset);
+      const normalizedUrl = normalizeUrl(asset.url);
+      const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
+      if (!byUrlOrId.has(dedupeKey)) {
+        byUrlOrId.set(dedupeKey, asset);
+      }
     }
 
+    // Add history assets, skipping if URL already exists
     for (const asset of historyAssets) {
-      const dedupeKey = asset.url ? `url:${asset.url}` : `id:${asset.id}`;
+      const normalizedUrl = normalizeUrl(asset.url);
+      const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
       if (!byUrlOrId.has(dedupeKey)) {
         byUrlOrId.set(dedupeKey, asset);
       }

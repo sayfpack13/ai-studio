@@ -239,14 +239,13 @@ export default function MusicGenerator() {
       // Handle failed job - show error
       if (selectedJob.status === "failed") {
         setLocalError(selectedJob.error || "Generation failed");
-        setGeneratedMusic(null);
         setSelectedMusicId(null);
         setSelectedRunningJobId(null);
       } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
         // Track running/pending job to show progress
+        // Don't clear generatedMusic - let user continue viewing previous/historical generations
         setSelectedRunningJobId(selectedJob.id);
         setLocalError("");
-        setGeneratedMusic(null);
         setSelectedMusicId(null);
 
         const metadata = selectedJob.params?.metadata;
@@ -338,10 +337,8 @@ export default function MusicGenerator() {
               setSelectedMusicId(selectedJob.params.musicId);
             }
           }
-        } else {
-          setGeneratedMusic(null);
-          setSelectedMusicId(null);
         }
+        // Don't clear generatedMusic if job has no result - preserve current display
       }
 
       // Clear selected job after loading
@@ -390,7 +387,7 @@ export default function MusicGenerator() {
 
     
     setLocalError("");
-    setGeneratedMusic(null);
+    // Don't clear generatedMusic - let user continue viewing previous/historical generations
 
     const selectedModelInfo = availableModels.find(
       (m) => m.modelKey === selectedModel,
@@ -920,12 +917,16 @@ export default function MusicGenerator() {
             onDownload={handleDownload}
             onPreview={(music) => {
               // Just preview the music without loading prompt
+              // Clear selectedRunningJobId so loading state is correct
+              setSelectedRunningJobId(null);
               setGeneratedMusic({
                 url: music.url,
                 model: music.model,
               });
             }}
             onReloadPrompt={(music) => {
+              // Clear selectedRunningJobId so loading state is correct
+              setSelectedRunningJobId(null);
               // Load prompt and model for regeneration
               setPrompt(music.prompt || "");
               setGeneratedMusic({

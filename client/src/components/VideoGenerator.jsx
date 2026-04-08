@@ -305,13 +305,12 @@ export default function VideoGenerator() {
       // Handle failed job - show error
       if (selectedJob.status === "failed") {
         setLocalError(selectedJob.error || "Generation failed");
-        setGeneratedVideo(null);
         setSelectedRunningJobId(null);
       } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
         // Track running/pending job to show progress
+        // Don't clear generatedVideo - let user continue viewing previous/historical generations
         setSelectedRunningJobId(selectedJob.id);
         setLocalError("");
-        setGeneratedVideo(null);
 
         const metadata = selectedJob.params?.metadata;
         const options = selectedJob.params?.options || {};
@@ -430,9 +429,8 @@ export default function VideoGenerator() {
               setGeneratedVideo(historyItem.result || null);
             }
           }
-        } else {
-          setGeneratedVideo(null);
         }
+        // Don't clear generatedVideo if job has no result - preserve current display
       }
 
       // Clear selected job after loading
@@ -509,15 +507,6 @@ export default function VideoGenerator() {
     }
   }, [location.state]);
 
-  useEffect(() => {
-    if (!wanLibraryImageId) return;
-    const selected = imageLibraryAssets.find((a) => a.id === wanLibraryImageId);
-    if (selected?.url) {
-      setWanImageData(selected.url);
-      setWanImageSourceType("library");
-    }
-  }, [wanLibraryImageId, imageLibraryAssets]);
-
   const handleAssetPickerSelect = (asset) => {
     if (asset?.url) {
       setWanImageData(asset.url);
@@ -583,8 +572,8 @@ export default function VideoGenerator() {
     if (!prompt.trim()) return;
 
     setLocalError("");
-    setGeneratedVideo(null);
     
+    // Don't clear generatedVideo - let user continue viewing previous/historical generations
     // Clear selected running job to avoid showing stale errors
     setSelectedRunningJobId(null);
 
@@ -1326,12 +1315,16 @@ export default function VideoGenerator() {
             onDownload={handleDownload}
             onPreview={(video) => {
               // Just preview the video without loading prompt
+              // Clear selectedRunningJobId so loading state is correct
+              setSelectedRunningJobId(null);
               setGeneratedVideo({
                 url: video.url,
                 model: video.model,
               });
             }}
             onReloadPrompt={(video) => {
+              // Clear selectedRunningJobId so loading state is correct
+              setSelectedRunningJobId(null);
               // Load prompt and model for regeneration
               setPrompt(video.prompt || "");
               setGeneratedVideo({

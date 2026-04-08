@@ -1,5 +1,6 @@
 library-assets.json
 generation-jobs.json
+job-results
 uploads
 assets.db
 assets.db-wal

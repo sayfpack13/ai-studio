@@ -321,13 +321,12 @@ export default function ImageGenerator() {
       // Handle failed job - show error
       if (selectedJob.status === "failed") {
         setLocalError(selectedJob.error || "Generation failed");
-        setGeneratedImage(null);
         setSelectedRunningJobId(null);
       } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
         // Track running/pending job to show progress
+        // Don't clear generatedImage - let user continue viewing previous/historical generations
         setSelectedRunningJobId(selectedJob.id);
         setLocalError("");
-        setGeneratedImage(null);
 
         const metadata = selectedJob.params?.metadata;
         const resolvedProvider = metadata?.provider || "";
@@ -463,9 +462,8 @@ export default function ImageGenerator() {
               setGeneratedImage(historyItem.result || null);
             }
           }
-        } else {
-          setGeneratedImage(null);
         }
+        // Don't clear generatedImage if job has no result - preserve current display
       }
 
       // Clear selected job after loading
@@ -814,6 +812,8 @@ export default function ImageGenerator() {
       const historyItem = getImage(imageId);
       if (!historyItem) return;
 
+      // Clear selectedRunningJobId so loading state is correct
+      setSelectedRunningJobId(null);
       setPrompt(historyItem.prompt || "");
       setGeneratedImage(historyItem.result || null);
       setLocalError("");
@@ -1451,12 +1451,16 @@ export default function ImageGenerator() {
             onSendToVideo={handleImageToVideoPipeline}
             onPreview={(image) => {
               // Just preview the image without loading prompt
+              // Clear selectedRunningJobId so loading state is correct
+              setSelectedRunningJobId(null);
               setGeneratedImage({
                 url: image.url,
                 model: image.model,
               });
             }}
             onReloadPrompt={(image) => {
+              // Clear selectedRunningJobId so loading state is correct
+              setSelectedRunningJobId(null);
               // Load prompt and model for regeneration
               setPrompt(image.prompt || "");
               setGeneratedImage({

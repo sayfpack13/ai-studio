@@ -255,18 +255,25 @@ export default function MediaOutputPanel({
               transition={{ duration: 0.15 }}
               className="h-full flex flex-col"
             >
-              {loading ? (
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  <div className="w-20 h-20 rounded-2xl bg-purple-600/20 flex items-center justify-center mb-4">
-                    <RefreshCw className="w-10 h-10 text-purple-400 animate-spin" />
+              {/* Show loading indicator at top if generating, but don't block content */}
+              {loading && (
+                <div className="mb-3 p-3 bg-purple-600/10 border border-purple-500/30 rounded-lg flex items-center gap-3">
+                  <RefreshCw className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-purple-300 font-medium">{config.loadingMessage}</p>
+                    {progress !== null && progress !== undefined && (
+                      <div className="mt-1.5 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-purple-500 transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <p className="text-gray-400 font-medium">{config.loadingMessage}</p>
-                  {progress !== null && progress !== undefined && (
-                    <p className="text-xs text-gray-500 mt-1">{progress}% complete</p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">This may take a moment</p>
                 </div>
-              ) : error ? (
+              )}
+              
+              {error ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
                   <div className="w-20 h-20 rounded-2xl bg-red-600/20 flex items-center justify-center mb-4">
                     <AlertCircle className="w-10 h-10 text-red-400" />

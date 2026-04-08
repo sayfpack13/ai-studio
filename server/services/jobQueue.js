@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import { existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
@@ -8,8 +9,23 @@ const __dirname = dirname(__filename);
 
 const DATA_DIR = join(__dirname, "..", "data");
 const JOBS_PATH = join(DATA_DIR, "generation-jobs.json");
+const JOB_RESULTS_DIR = join(DATA_DIR, "job-results");
 
 const DEFAULT_MAX_HISTORY = 1000;
+
+// Threshold for storing data in separate files (100KB)
+const LARGE_DATA_THRESHOLD = 100 * 1024;
+
+// Check if data is considered "large" and should be stored separately
+function isLargeData(data) {
+  if (!data) return false;
+  try {
+    const serialized = JSON.stringify(data);
+    return serialized.length > LARGE_DATA_THRESHOLD;
+  } catch {
+    return false;
+  }
+}
 
 const STATUS = {
   QUEUED: "queued",
@@ -33,6 +49,39 @@ class JobQueueService {
 
   async #ensureDataDir() {
     await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(JOB_RESULTS_DIR, { recursive: true });
+  }
+
+  // Save large data to a separate file and return a reference
+  async #saveLargeData(jobId, dataType, data) {
+    await this.#ensureDataDir();
+    const filename = `${jobId}_${dataType}.json`;
+    const filepath = join(JOB_RESULTS_DIR, filename);
+    await fs.writeFile(filepath, JSON.stringify(data), "utf-8");
+    return { __fileRef: true, filename, dataType };
+  }
+
+  // Load large data from a separate file
+  async #loadLargeData(ref) {
+    if (!ref || !ref.__fileRef || !ref.filename) return ref;
+    const filepath = join(JOB_RESULTS_DIR, ref.filename);
+    try {
+      const raw = await fs.readFile(filepath, "utf-8");
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  // Delete large data file
+  async #deleteLargeData(ref) {
+    if (!ref || !ref.__fileRef || !ref.filename) return;
+    const filepath = join(JOB_RESULTS_DIR, ref.filename);
+    try {
+      await fs.unlink(filepath);
+    } catch {
+      // Ignore errors
+    }
   }
 
   #generateId(prefix = "job") {
@@ -66,6 +115,18 @@ class JobQueueService {
 
       for (const job of jobs) {
         if (!job?.id) continue;
+        
+        // Load large data from files if referenced
+        if (job.result?.__fileRef) {
+          job.result = await this.#loadLargeData(job.result);
+        }
+        if (job.payload?.__fileRef) {
+          job.payload = await this.#loadLargeData(job.payload);
+        }
+        if (job.error?.__fileRef) {
+          job.error = await this.#loadLargeData(job.error);
+        }
+        
         this.jobs.set(job.id, job);
         this.order.push(job.id);
       }
@@ -85,11 +146,39 @@ class JobQueueService {
     this.writeInFlight = true;
     try {
       await this.#ensureDataDir();
+      
+      // Extract large data and save to separate files
+      const jobsToSave = [];
+      for (const id of this.order) {
+        const job = this.jobs.get(id);
+        if (!job) continue;
+        
+        const jobCopy = this.#clone(job);
+        
+        // Extract large result data
+        if (isLargeData(jobCopy.result)) {
+          const ref = await this.#saveLargeData(id, 'result', jobCopy.result);
+          jobCopy.result = ref;
+        }
+        
+        // Extract large payload data
+        if (isLargeData(jobCopy.payload)) {
+          const ref = await this.#saveLargeData(id, 'payload', jobCopy.payload);
+          jobCopy.payload = ref;
+        }
+        
+        // Extract large error data
+        if (isLargeData(jobCopy.error)) {
+          const ref = await this.#saveLargeData(id, 'error', jobCopy.error);
+          jobCopy.error = ref;
+        }
+        
+        jobsToSave.push(jobCopy);
+      }
+      
       const payload = {
         updatedAt: new Date().toISOString(),
-        jobs: this.order
-          .map((id) => this.jobs.get(id))
-          .filter(Boolean),
+        jobs: jobsToSave,
       };
       await fs.writeFile(JOBS_PATH, JSON.stringify(payload, null, 2), "utf-8");
     } finally {
@@ -118,6 +207,8 @@ class JobQueueService {
         job.status === STATUS.CANCELED;
 
       if (removed < removableCount && terminal) {
+        // Clean up large data files asynchronously
+        this.#cleanupJobLargeData(job);
         this.jobs.delete(id);
         removed++;
         continue;
@@ -127,6 +218,19 @@ class JobQueueService {
     }
 
     this.order = nextOrder;
+  }
+
+  // Clean up large data files for a job
+  async #cleanupJobLargeData(job) {
+    if (!job) return;
+    const { id } = job;
+    
+    // Delete large data files if they exist
+    const dataTypes = ['result', 'payload', 'error'];
+    for (const dataType of dataTypes) {
+      const ref = { __fileRef: true, filename: `${id}_${dataType}.json`, dataType };
+      await this.#deleteLargeData(ref);
+    }
   }
 
   registerProcessor(type, processorFn) {
@@ -291,6 +395,9 @@ class JobQueueService {
     const job = this.jobs.get(jobId);
     if (!job) return false;
 
+    // Clean up large data files
+    await this.#cleanupJobLargeData(job);
+
     // Remove from jobs map
     this.jobs.delete(jobId);
 
@@ -308,7 +415,11 @@ class JobQueueService {
     await this.ready;
     let deleted = 0;
     for (const jobId of jobIds) {
-      if (this.jobs.delete(jobId)) {
+      const job = this.jobs.get(jobId);
+      if (job) {
+        // Clean up large data files
+        await this.#cleanupJobLargeData(job);
+        this.jobs.delete(jobId);
         const index = this.order.indexOf(jobId);
         if (index > -1) {
           this.order.splice(index, 1);
@@ -330,15 +441,17 @@ class JobQueueService {
     for (const id of this.order) {
       const job = this.jobs.get(id);
       if (job && terminalStatuses.includes(job.status)) {
-        toDelete.push(id);
+        toDelete.push({ id, job });
       }
     }
 
-    for (const id of toDelete) {
+    for (const { id, job } of toDelete) {
+      // Clean up large data files
+      await this.#cleanupJobLargeData(job);
       this.jobs.delete(id);
     }
 
-    this.order = this.order.filter((id) => !toDelete.includes(id));
+    this.order = this.order.filter((id) => !toDelete.some(t => t.id === id));
 
     if (toDelete.length > 0) {
       await this.#persist();

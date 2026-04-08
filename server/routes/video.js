@@ -235,10 +235,11 @@ function buildWanI2VArgs(body) {
     }
   }
 
+  // Chutes API expects 'image' parameter with base64 data (not 'image_b64')
+  // See: https://chutes.ai/app/chute/4f82321e-3e58-55da-ba44-051686ddbfe5
   const args = {
     prompt,
-    image,
-    frames: 81, // Always include frames with default (schema doesn't allow null)
+    image,  // Chutes Wan 2.2 I2V uses 'image' for base64 data
   };
 
   // Only include optional parameters if explicitly provided
@@ -250,6 +251,9 @@ function buildWanI2VArgs(body) {
   const framesInput = toIntegerOrNull(body.wanFrames ?? body.frames);
   if (framesInput != null) {
     args.frames = clamp(framesInput, 21, 140);
+  } else {
+    // Always include frames with default value
+    args.frames = 81;
   }
 
   const fastInput = body.wanFast ?? body.fast;
@@ -287,6 +291,41 @@ function buildWanI2VArgs(body) {
   return args;
 }
 
+// Convert image URL to base64
+async function imageUrlToBase64(url) {
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    });
+    const buffer = Buffer.from(response.data);
+    const contentType = response.headers['content-type'] || 'image/jpeg';
+    return buffer.toString('base64');
+  } catch (error) {
+    throw new Error(`Failed to fetch image: ${error.message}`);
+  }
+}
+
+// Convert local file path to base64
+async function localFileToBase64(filePath) {
+  const fs = await import('fs/promises');
+  const path = await import('path');
+  
+  // Handle /uploads/... paths
+  let fullPath = filePath;
+  if (filePath.startsWith('/uploads/')) {
+    // process.cwd() is the server directory, so just add data
+    fullPath = path.join(process.cwd(), 'data', filePath);
+  }
+  
+  try {
+    const buffer = await fs.readFile(fullPath);
+    return buffer.toString('base64');
+  } catch (error) {
+    throw new Error(`Failed to read local file: ${error.message}`);
+  }
+}
+
 async function handleWanI2VGeneration({
   req,
   res,
@@ -312,7 +351,59 @@ async function handleWanI2VGeneration({
     return res.status(400).json({ error: validationError });
   }
 
-  const requestData = args; // Send args directly, not wrapped in { args }
+  // Convert image to base64 if needed
+  let imageBase64 = args.image;
+  
+  if (args.image) {
+    // Check if it's a full URL
+    if (args.image.startsWith('http://') || args.image.startsWith('https://')) {
+      console.log('[Wan I2V] Converting remote image URL to base64...');
+      try {
+        imageBase64 = await imageUrlToBase64(args.image);
+        console.log('[Wan I2V] Image converted, base64 length:', imageBase64.length);
+      } catch (fetchError) {
+        console.error('[Wan I2V] Failed to fetch image:', fetchError.message);
+        return res.status(400).json({ error: `Failed to fetch image: ${fetchError.message}` });
+      }
+    }
+    // Check if it's a local file path (starts with /uploads/)
+    else if (args.image.startsWith('/uploads/')) {
+      console.log('[Wan I2V] Converting local file to base64...');
+      try {
+        imageBase64 = await localFileToBase64(args.image);
+        console.log('[Wan I2V] Local file converted, base64 length:', imageBase64.length);
+      } catch (fetchError) {
+        console.error('[Wan I2V] Failed to read local file:', fetchError.message);
+        return res.status(400).json({ error: `Failed to read local file: ${fetchError.message}` });
+      }
+    }
+    // If it's already base64 (long string with no special chars), use it directly
+    else if (args.image.length > 100 && /^[A-Za-z0-9+/=]+$/.test(args.image)) {
+      console.log('[Wan I2V] Image appears to be base64 already, length:', args.image.length);
+      imageBase64 = args.image;
+    }
+    // Otherwise, try to treat it as a URL or file path
+    else {
+      console.log('[Wan I2V] Unknown image format, attempting to fetch as URL...');
+      try {
+        // Try as URL first
+        if (args.image.startsWith('/') || args.image.startsWith('.')) {
+          imageBase64 = await localFileToBase64(args.image);
+        } else {
+          imageBase64 = await imageUrlToBase64(args.image);
+        }
+        console.log('[Wan I2V] Image converted, base64 length:', imageBase64.length);
+      } catch (fetchError) {
+        console.error('[Wan I2V] Failed to process image:', fetchError.message);
+        return res.status(400).json({ error: `Invalid image format: expected base64, URL, or local file path` });
+      }
+    }
+  }
+
+  const requestData = {
+    ...args,
+    image: imageBase64,
+  };
 
   // Build headers - skip Authorization for public chutes
   const isPublicChute = req.providerContext?.isPublicChute;
@@ -323,11 +414,49 @@ async function handleWanI2VGeneration({
     requestHeaders.Authorization = `Bearer ${apiKey}`;
   }
 
-  const response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
-    headers: requestHeaders,
-    timeout,
-    responseType: 'arraybuffer', // Important: preserve binary data
-  });
+  let response;
+  try {
+    // Log request for debugging
+    console.log('[Wan I2V] Sending request to:', WAN_I2V_ENDPOINT);
+    console.log('[Wan I2V] Request data keys:', Object.keys(requestData));
+    console.log('[Wan I2V] Prompt length:', args.prompt?.length || 0);
+    console.log('[Wan I2V] Image length:', args.image?.length || 0);
+    console.log('[Wan I2V] Frames:', args.frames);
+    
+    response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
+      headers: requestHeaders,
+      timeout,
+      responseType: 'arraybuffer', // Important: preserve binary data
+    });
+  } catch (axiosError) {
+    // Handle error response - decode buffer if present
+    let errorMessage = "Wan I2V generation failed";
+    let errorDetail = null;
+    
+    if (axiosError.response?.data) {
+      try {
+        const errorBuffer = Buffer.from(axiosError.response.data);
+        const errorJson = JSON.parse(errorBuffer.toString('utf8'));
+        errorDetail = errorJson;
+        errorMessage = errorJson.detail || errorJson.error?.message || errorJson.message || errorMessage;
+      } catch {
+        // If not JSON, try to use as string
+        try {
+          const errorBuffer = Buffer.from(axiosError.response.data);
+          errorMessage = errorBuffer.toString('utf8').slice(0, 500);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+    
+    console.error('[Wan I2V] API error:', axiosError.message, errorDetail || '');
+    
+    return res.status(axiosError.response?.status || 500).json({
+      error: errorMessage,
+      detail: errorDetail,
+    });
+  }
 
   // Check if response is binary video data (arraybuffer)
   const buffer = Buffer.from(response.data);

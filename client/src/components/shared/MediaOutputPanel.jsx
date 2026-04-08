@@ -98,6 +98,7 @@ export default function MediaOutputPanel({
         model: item.model,
         lastUpdated: item.lastUpdated,
         url: result.url,
+        thumbnail: result.thumbnail || null,
         revisedPrompt: result.revisedPrompt,
         metadata: item.metadata,
         duration: result.duration,

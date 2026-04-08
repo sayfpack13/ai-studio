@@ -736,12 +736,18 @@ router.post("/generate", async (req, res) => {
         JSON.stringify(effectiveRequestData, null, 2),
       );
 
+      // Build headers - skip Authorization for public chutes
+      const isPublicChute = req.providerContext?.isPublicChute;
+      const requestHeaders = {
+        "Content-Type": "application/json",
+      };
+      if (!isPublicChute && apiKey && apiKey !== 'public') {
+        requestHeaders.Authorization = `Bearer ${apiKey}`;
+      }
+
       try {
         chutesResponse = await axios.post(endpoint, effectiveRequestData, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
+          headers: requestHeaders,
           timeout,
           responseType: "arraybuffer",
           transformResponse: [(data) => data],
@@ -790,10 +796,7 @@ router.post("/generate", async (req, res) => {
 
           try {
             chutesResponse = await axios.post(endpoint, effectiveRequestData, {
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-              },
+              headers: requestHeaders,
               timeout,
               responseType: "arraybuffer",
               transformResponse: [(data) => data],
@@ -812,10 +815,7 @@ router.post("/generate", async (req, res) => {
                 endpoint,
                 effectiveRequestData,
                 {
-                  headers: {
-                    Authorization: `Bearer ${apiKey}`,
-                    "Content-Type": "application/json",
-                  },
+                  headers: requestHeaders,
                   timeout,
                   responseType: "arraybuffer",
                   transformResponse: [(data) => data],
@@ -921,10 +921,7 @@ router.post("/generate", async (req, res) => {
                 endpoint,
                 effectiveRequestData,
                 {
-                  headers: {
-                    Authorization: `Bearer ${apiKey}`,
-                    "Content-Type": "application/json",
-                  },
+                  headers: requestHeaders,
                   timeout,
                   responseType: "arraybuffer",
                   transformResponse: [(data) => data],

@@ -439,21 +439,37 @@ export function JobProvider({ children}) {
         return { error: result.error };
       }
 
+      // Check for success flag or URL presence
+      const isSuccess = result.success === true || result.success === "true";
+      
       // Extract result data
       let resultData;
       if (type === "image") {
+        const imageUrl = result.data?.[0]?.url || result.image || result.url;
+        if (!imageUrl && !isSuccess) {
+          return { error: "No image URL in response" };
+        }
         resultData = {
-          url: result.data?.[0]?.url || result.image || result.url,
+          url: imageUrl,
           revisedPrompt: result.data?.[0]?.revised_prompt || params.prompt,
         };
       } else if (type === "video") {
+        const videoUrl = result.data?.[0]?.url || result.video || result.url;
+        if (!videoUrl && !isSuccess) {
+          return { error: "No video URL in response" };
+        }
         resultData = {
-          url: result.data?.[0]?.url || result.video || result.url,
+          url: videoUrl,
+          thumbnail: result.data?.[0]?.thumbnail || null,
           id: result.id,
         };
       } else if (type === "music") {
+        const audioUrl = result.data?.[0]?.url || result.url || result.audio;
+        if (!audioUrl && !isSuccess) {
+          return { error: "No audio URL in response" };
+        }
         resultData = {
-          url: result.data?.[0]?.url || result.url || result.audio,
+          url: audioUrl,
         };
       }
 

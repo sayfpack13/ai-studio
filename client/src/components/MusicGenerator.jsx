@@ -322,12 +322,21 @@ export default function MusicGenerator() {
         if (options.duration != null) setDuration(Number(options.duration));
         if (options.style) setMusicStyle(options.style);
 
-        // If job is completed, try to load result from history
-        if (selectedJob.status === "completed" && selectedJob.params?.musicId) {
-          const historyItem = getMusic(selectedJob.params.musicId);
-          if (historyItem) {
-            setGeneratedMusic(historyItem.result || null);
-            setSelectedMusicId(selectedJob.params.musicId);
+        // If job is completed, try to load result
+        if (selectedJob.status === "completed") {
+          // Use result directly from job (more reliable than history lookup)
+          if (selectedJob.result?.url) {
+            setGeneratedMusic({
+              url: selectedJob.result.url,
+            });
+            setSelectedMusicId(selectedJob.params?.musicId);
+          } else if (selectedJob.params?.musicId) {
+            // Fallback to history lookup
+            const historyItem = getMusic(selectedJob.params.musicId);
+            if (historyItem) {
+              setGeneratedMusic(historyItem.result || null);
+              setSelectedMusicId(selectedJob.params.musicId);
+            }
           }
         } else {
           setGeneratedMusic(null);
@@ -351,8 +360,14 @@ export default function MusicGenerator() {
       }
 
       if (job.status === "completed") {
-        // Load the result from history
-        if (job.params?.musicId) {
+        // Use result directly from job (more reliable than history lookup)
+        if (job.result?.url) {
+          setGeneratedMusic({
+            url: job.result.url,
+          });
+          setSelectedMusicId(job.params?.musicId);
+        } else if (job.params?.musicId) {
+          // Fallback to history lookup
           const historyItem = getMusic(job.params.musicId);
           if (historyItem) {
             setGeneratedMusic(historyItem.result || null);

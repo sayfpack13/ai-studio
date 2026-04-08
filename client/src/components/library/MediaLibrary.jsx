@@ -31,12 +31,15 @@ function normalizeHistoryItem(item, id, type, source) {
   // Skip entries with invalid URLs
   if (isInvalidMediaUrl(url)) return null;
 
+  const thumbnail = item?.thumbnail || item?.result?.thumbnail || null;
+
   return {
     id: `hist_${type}_${id}`,
     title: String(titleBase).slice(0, 120),
     type,
     source,
     url,
+    thumbnail,
     metadata: item?.metadata || {},
     createdAt: item?.createdAt || item?.lastUpdated || fallbackTime,
     updatedAt:
@@ -398,10 +401,19 @@ export default function MediaLibrary() {
             )}
 
             {asset.url && asset.type === "video" && (
-              <video
-                src={asset.url}
-                className="w-full h-28 object-cover rounded"
-              />
+              asset.thumbnail ? (
+                <img
+                  src={asset.thumbnail}
+                  alt={asset.title}
+                  className="w-full h-28 object-cover rounded"
+                />
+              ) : (
+                <video
+                  src={asset.url}
+                  className="w-full h-28 object-cover rounded"
+                  muted
+                />
+              )
             )}
 
             {asset.url && asset.type === "audio" && (

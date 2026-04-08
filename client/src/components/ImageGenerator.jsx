@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
 import { enqueuePipeline, getModels } from "../services/api";
@@ -17,6 +18,7 @@ const IMAGE_SELECTED_MODEL_KEY = "blackbox_ai_image_selected_model";
 const IMAGE_SELECTED_PROVIDER_KEY = "blackbox_ai_image_selected_provider";
 
 export default function ImageGenerator() {
+  const navigate = useNavigate();
   const { 
     isConfigured, 
     saveImage, 
@@ -446,11 +448,20 @@ export default function ImageGenerator() {
           }
         }
 
-        // If job is completed, try to load result from history
-        if (selectedJob.status === "completed" && selectedJob.params?.imageId) {
-          const historyItem = getImage(selectedJob.params.imageId);
-          if (historyItem) {
-            setGeneratedImage(historyItem.result || null);
+        // If job is completed, try to load result
+        if (selectedJob.status === "completed") {
+          // Use result directly from job (more reliable than history lookup)
+          if (selectedJob.result?.url) {
+            setGeneratedImage({
+              url: selectedJob.result.url,
+              revisedPrompt: selectedJob.result.revisedPrompt || selectedJob.params?.prompt,
+            });
+          } else if (selectedJob.params?.imageId) {
+            // Fallback to history lookup
+            const historyItem = getImage(selectedJob.params.imageId);
+            if (historyItem) {
+              setGeneratedImage(historyItem.result || null);
+            }
           }
         } else {
           setGeneratedImage(null);
@@ -473,8 +484,14 @@ export default function ImageGenerator() {
       }
 
       if (job.status === "completed") {
-        // Load the result from history
-        if (job.params?.imageId) {
+        // Use result directly from job (more reliable than history lookup)
+        if (job.result?.url) {
+          setGeneratedImage({
+            url: job.result.url,
+            revisedPrompt: job.result.revisedPrompt || job.params?.prompt,
+          });
+        } else if (job.params?.imageId) {
+          // Fallback to history lookup
           const historyItem = getImage(job.params.imageId);
           if (historyItem) {
             setGeneratedImage(historyItem.result || null);
@@ -764,7 +781,7 @@ export default function ImageGenerator() {
     };
 
     // Enqueue the job with save callback
-    enqueueJob("image", jobParams, (result) => {
+    const jobId = enqueueJob("image", jobParams, (result) => {
       saveImage(imageId, prompt, result, modelIdToSend, jobParams.metadata);
       addLibraryAsset({
         type: "image",
@@ -777,6 +794,9 @@ export default function ImageGenerator() {
         },
       });
     });
+    
+    // Track this job to show result when complete
+    setSelectedRunningJobId(jobId);
   };
 
   const handleStopGeneration = () => {
@@ -974,13 +994,11 @@ export default function ImageGenerator() {
 
   const handleImageToVideoPipeline = async () => {
     if (!generatedImage?.url || !prompt) return;
-    await enqueuePipeline("image-to-video", {
-      imagePayload: { prompt, image: generatedImage.url },
-      videoPayload: {
+    // Navigate to video page with image data
+    navigate("/video", {
+      state: {
+        imageSource: generatedImage.url,
         prompt: `${prompt} cinematic motion`,
-        image: generatedImage.url,
-        duration: 8,
-        fps: 24,
       },
     });
   };

@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
 import { enqueuePipeline, getModels, generateVideo } from "../services/api";
@@ -34,6 +35,7 @@ function clamp(num, min, max) {
 }
 
 export default function VideoGenerator() {
+  const location = useLocation();
   const {
     isConfigured,
     saveVideo,
@@ -412,11 +414,21 @@ export default function VideoGenerator() {
           if (options.wan.negative_prompt) setWanNegativePrompt(options.wan.negative_prompt);
         }
 
-        // If job is completed, try to load result from history
-        if (selectedJob.status === "completed" && selectedJob.params?.videoId) {
-          const historyItem = getVideo(selectedJob.params.videoId);
-          if (historyItem) {
-            setGeneratedVideo(historyItem.result || null);
+        // If job is completed, try to load result
+        if (selectedJob.status === "completed") {
+          // Use result directly from job (more reliable than history lookup)
+          if (selectedJob.result?.url) {
+            setGeneratedVideo({
+              url: selectedJob.result.url,
+              thumbnail: selectedJob.result.thumbnail || null,
+              id: selectedJob.result.id || selectedJob.params?.videoId,
+            });
+          } else if (selectedJob.params?.videoId) {
+            // Fallback to history lookup
+            const historyItem = getVideo(selectedJob.params.videoId);
+            if (historyItem) {
+              setGeneratedVideo(historyItem.result || null);
+            }
           }
         } else {
           setGeneratedVideo(null);
@@ -439,8 +451,15 @@ export default function VideoGenerator() {
       }
 
       if (job.status === "completed") {
-        // Load the result from history
-        if (job.params?.videoId) {
+        // Use result directly from job (more reliable than history lookup)
+        if (job.result?.url) {
+          setGeneratedVideo({
+            url: job.result.url,
+            thumbnail: job.result.thumbnail || null,
+            id: job.result.id || job.params?.videoId,
+          });
+        } else if (job.params?.videoId) {
+          // Fallback to history lookup
           const historyItem = getVideo(job.params.videoId);
           if (historyItem) {
             setGeneratedVideo(historyItem.result || null);
@@ -463,6 +482,32 @@ export default function VideoGenerator() {
     setDuration(5);
     setFps(24);
   }, [isWanI2VSelected]);
+
+  // Handle navigation state from ImageGenerator "Send to Video"
+  useEffect(() => {
+    const state = location.state;
+    if (state?.imageSource) {
+      // Set the image data
+      setWanImageData(state.imageSource);
+      setWanImageSourceType("upload");
+      
+      // Set the prompt if provided
+      if (state.prompt) {
+        setPrompt(state.prompt);
+      }
+      
+      // Select Wan I2V model
+      setSelectedModel(WAN_I2V_MODEL_ID);
+      localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, WAN_I2V_MODEL_ID);
+      
+      // Set provider to chutes
+      setConfiguredProviderFilter("chutes");
+      localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, "chutes");
+      
+      // Clear the navigation state to prevent re-processing
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (!wanLibraryImageId) return;
@@ -620,15 +665,17 @@ export default function VideoGenerator() {
     };
 
     // Enqueue the job with save callback
-    enqueueJob("video", jobParams, (result) => {
+    const jobId = enqueueJob("video", jobParams, (result) => {
       const videoUrl = result.data?.[0]?.url || result.video || result.url;
+      const thumbnail = result.data?.[0]?.thumbnail || null;
       const videoData = {
         url: videoUrl,
+        thumbnail,
         id: result.id,
       };
       setGeneratedVideo(videoData);
 
-      // Save only url and id to history (not raw/providerResponse which can be MBs)
+      // Save to history
       saveVideo(
         videoId,
         prompt,
@@ -664,6 +711,9 @@ export default function VideoGenerator() {
         },
       });
     });
+
+    // Track this job to show result when complete
+    setSelectedRunningJobId(jobId);
   };
 
   const handleDownload = () => {

@@ -314,24 +314,28 @@ async function handleWanI2VGeneration({
 
   const requestData = args; // Send args directly, not wrapped in { args }
 
+  // Build headers - skip Authorization for public chutes
+  const isPublicChute = req.providerContext?.isPublicChute;
+  const requestHeaders = {
+    "Content-Type": "application/json",
+  };
+  if (!isPublicChute && apiKey && apiKey !== 'public') {
+    requestHeaders.Authorization = `Bearer ${apiKey}`;
+  }
+
   const response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: requestHeaders,
     timeout,
     responseType: 'arraybuffer', // Important: preserve binary data
   });
 
   // Check if response is binary video data (arraybuffer)
   const buffer = Buffer.from(response.data);
-  console.log('[Wan I2V] Response buffer size:', buffer.length);
   
   // Check if it looks like MP4 video data (starts with ftyp box)
   const isMp4Data = buffer.length > 12 && 
     (buffer.toString('ascii', 4, 8) === 'ftyp' || 
      buffer.includes(Buffer.from('ftyp'), 4));
-  console.log('[Wan I2V] Is MP4 data:', isMp4Data);
   
   let binaryBuffer = null;
   let result = null;
@@ -341,15 +345,12 @@ async function handleWanI2VGeneration({
     // Check if this is actually video binary or JSON parsed as buffer
     const isJson = buffer.length > 0 && (buffer[0] === 0x7B || buffer[0] === 0x5B); // { or [
     if (!isJson) {
-      console.log('[Wan I2V] Detected binary video data, saving directly');
       binaryBuffer = buffer;
     } else {
       // Try to parse as JSON
       try {
         result = JSON.parse(buffer.toString('utf8'));
-        console.log('[Wan I2V] Parsed as JSON');
       } catch (e) {
-        console.log('[Wan I2V] Not JSON, treating as binary');
         binaryBuffer = buffer;
       }
     }
@@ -362,22 +363,12 @@ async function handleWanI2VGeneration({
     }
   }
   
-  if (result) {
-    console.log('[Wan I2V] Response type:', Array.isArray(result) ? 'array' : typeof result);
-    console.log('[Wan I2V] Has providerResponse:', !!result.providerResponse);
-    console.log('[Wan I2V] Has data:', !!result.data);
-    console.log('[Wan I2V] Has url:', !!(result.data?.[0]?.url || result.url));
-  }
-  
   let binaryData = null;
   
   // Check if response is a large array (chutes.ai returns video as array of bytes)
   if (!binaryBuffer && Array.isArray(result) && result.length > 10000) {
-    console.log('[Wan I2V] Detected large array response, treating as binary data');
     try {
-      // Convert array to Buffer
       binaryBuffer = Buffer.from(result);
-      console.log('[Wan I2V] Converted array to Buffer, size:', binaryBuffer.length);
     } catch (e) {
       console.error('[Wan I2V] Failed to convert array to Buffer:', e.message);
     }
@@ -388,12 +379,9 @@ async function handleWanI2VGeneration({
     const keys = Object.keys(result);
     const isNumericKeys = keys.length > 10000 && keys.every(k => /^\d+$/.test(k));
     if (isNumericKeys) {
-      console.log('[Wan I2V] Detected array-like object with numeric keys, treating as binary data');
       try {
-        // Convert to array then to Buffer
         const values = keys.sort((a, b) => parseInt(a) - parseInt(b)).map(k => result[k]);
         binaryBuffer = Buffer.from(values);
-        console.log('[Wan I2V] Converted array-like object to Buffer, size:', binaryBuffer.length);
       } catch (e) {
         console.error('[Wan I2V] Failed to convert array-like object to Buffer:', e.message);
       }
@@ -404,11 +392,9 @@ async function handleWanI2VGeneration({
   if (!binaryBuffer) {
     for (const [key, value] of Object.entries(result)) {
       if (typeof value === 'string' && value.length > 5000) {
-        console.log(`[Wan I2V] Large string field found: ${key}, length: ${value.length}, preview: ${value.slice(0, 100)}`);
         // Check if it looks like base64 video data
         if (value.startsWith('AAAA') || value.includes('ftyp') || /^[A-Za-z0-9+/=]+$/.test(value.slice(0, 100))) {
           binaryData = value;
-          console.log('[Wan I2V] Detected base64 video data in field:', key);
           break;
         }
       }
@@ -418,7 +404,6 @@ async function handleWanI2VGeneration({
     if (!binaryData && result.providerResponse && typeof result.providerResponse === 'string') {
       if (result.providerResponse.includes('ftyp') || result.providerResponse.length > 10000) {
         binaryData = result.providerResponse;
-        console.log('[Wan I2V] Using providerResponse as binary data');
       }
     }
     
@@ -426,21 +411,17 @@ async function handleWanI2VGeneration({
     if (!binaryData && result.data && typeof result.data === 'string') {
       if (result.data.includes('ftyp') || result.data.length > 10000) {
         binaryData = result.data;
-        console.log('[Wan I2V] Using data field as binary data');
       }
     }
     
     // Check if URL is videolan.org (indicates binary data was returned but URL extraction failed)
     const extractedUrl = extractVideoUrl(result);
-    console.log('[Wan I2V] Extracted URL:', extractedUrl);
     
     if (!binaryData && extractedUrl && extractedUrl.includes('videolan.org')) {
-      console.log('[Wan I2V] videolan.org URL detected, searching for binary data...');
       // Try to find binary data in other fields
       for (const [key, value] of Object.entries(result)) {
         if (typeof value === 'string' && value.length > 5000) {
           binaryData = value;
-          console.log('[Wan I2V] Found potential binary data in field:', key, 'length:', value.length);
           break;
         }
       }
@@ -452,11 +433,13 @@ async function handleWanI2VGeneration({
     const fs = await import('fs');
     const path = await import('path');
     const crypto = await import('crypto');
+    const { exec } = await import('child_process');
     
     // Use binaryBuffer if available (from array), otherwise decode binaryData (from base64)
     const buffer = binaryBuffer || Buffer.from(binaryData, 'base64');
     const videoHash = crypto.createHash('md5').update(buffer).digest('hex');
     const filename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
+    const thumbFilename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.jpg`;
     const videosDir = path.join(process.cwd(), 'data', 'uploads', 'videos');
     
     // Ensure videos directory exists
@@ -465,7 +448,27 @@ async function handleWanI2VGeneration({
     }
     
     const videoPath = path.join(videosDir, filename);
+    const thumbPath = path.join(videosDir, thumbFilename);
     fs.writeFileSync(videoPath, buffer);
+    
+    // Generate thumbnail using ffmpeg
+    let thumbnailUrl = null;
+    try {
+      await new Promise((resolve, reject) => {
+        exec(`ffmpeg -y -i "${videoPath}" -ss 00:00:01 -vframes 1 -vf "scale=320:-1" "${thumbPath}"`, 
+          { timeout: 10000 },
+          (error) => {
+            if (error) resolve(); // Don't fail if thumbnail generation fails
+            else resolve();
+          }
+        );
+      });
+      if (fs.existsSync(thumbPath)) {
+        thumbnailUrl = `/uploads/videos/${thumbFilename}`;
+      }
+    } catch {
+      // Thumbnail generation failed, continue without it
+    }
     
     const videoUrl = `/uploads/videos/${filename}`;
     
@@ -474,11 +477,11 @@ async function handleWanI2VGeneration({
       data: [
         {
           url: videoUrl,
+          thumbnail: thumbnailUrl,
           revised_prompt: prompt,
         },
       ],
       id: result?.id || result?.job_id || result?.request_id || null,
-      providerResponse: result,
     });
     
     await libraryService.createAsset({

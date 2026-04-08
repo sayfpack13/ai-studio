@@ -1,6 +1,15 @@
 import { findModel } from './models.js';
 import { isProviderConfigured } from './config.js';
 
+// Chutes models that use direct public endpoints (no API key required)
+// Note: Most chutes models require API key authentication
+const CHUTES_PUBLIC_MODELS = new Set([
+  // Wan I2V video models may work without auth in some cases
+  'Wan-2.2-I2V-14B-Fast',
+  'Wan-2.2-I2V-14B',
+  'Wan-2.1-I2V-14B',
+]);
+
 export async function resolveProviderContext(config, { requestedProvider, modelId, modelKey } = {}) {
   let providerId = requestedProvider;
 
@@ -33,6 +42,23 @@ export async function resolveProviderContext(config, { requestedProvider, modelI
   }
 
   const provider = config.providers?.[providerId] || null;
+
+  // Check if this is a chutes public model that doesn't need API key
+  const normalizedModelId = modelId?.replace(/^chutes\//, '') || '';
+  const isChutesPublicModel = providerId === 'chutes' && CHUTES_PUBLIC_MODELS.has(normalizedModelId);
+
+  if (isChutesPublicModel && provider) {
+    // Allow public chutes models without API key
+    return {
+      providerId,
+      provider: {
+        ...provider,
+        apiKey: provider.apiKey || 'public', // Use placeholder for public models
+      },
+      configured: true,
+      isPublicChute: true,
+    };
+  }
 
   return {
     providerId,

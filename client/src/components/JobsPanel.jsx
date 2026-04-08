@@ -195,9 +195,22 @@ export default function JobsPanel() {
   }, {});
 
   // Filter jobs by active tab
-  const filteredJobs = jobs.filter((job) =>
-    TABS.find((t) => t.id === activeTab)?.statuses.includes(job.status)
-  );
+  const filteredJobs = jobs
+    .filter((job) =>
+      TABS.find((t) => t.id === activeTab)?.statuses.includes(job.status)
+    )
+    .sort((a, b) => {
+      // Sort by most recent first
+      // For running/pending: use createdAt
+      // For completed/failed/cancelled: use completedAt (fallback to createdAt)
+      const aTime = a.status === "running" || a.status === "pending"
+        ? a.createdAt
+        : (a.completedAt || a.createdAt);
+      const bTime = b.status === "running" || b.status === "pending"
+        ? b.createdAt
+        : (b.completedAt || b.createdAt);
+      return (bTime || 0) - (aTime || 0); // Most recent first
+    });
 
   // Track if user manually closed the sidebar
   const userClosedRef = useRef(false);

@@ -87,7 +87,15 @@ export const generateMusic = async (prompt, model, options = {}) => {
       ...restOptions,
     }),
   });
-  return await response.json();
+
+  const data = await response.json();
+
+  // If response is not OK, return error object
+  if (!response.ok) {
+    return { error: data.error || `Request failed with status ${response.status}` };
+  }
+
+  return data;
 };
 
 export const uploadMusicSource = async ({
@@ -387,7 +395,15 @@ export const generateImage = async (prompt, model, options = {}) => {
       ...restOptions,
     }),
   });
-  return await response.json();
+
+  const data = await response.json();
+
+  // If response is not OK, return error object
+  if (!response.ok) {
+    return { error: data.error || `Request failed with status ${response.status}` };
+  }
+
+  return data;
 };
 
 export const generateVideo = async (prompt, model, options = {}) => {
@@ -405,7 +421,15 @@ export const generateVideo = async (prompt, model, options = {}) => {
       ...restOptions,
     }),
   });
-  return await response.json();
+
+  const data = await response.json();
+
+  // If response is not OK, return error object
+  if (!response.ok) {
+    return { error: data.error || `Request failed with status ${response.status}` };
+  }
+
+  return data;
 };
 
 export const getModels = async ({

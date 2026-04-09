@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
   CheckCircle,
@@ -73,9 +73,13 @@ function JobItem({ job, onCancel, onRetry, onRemove, onClick }) {
   const Icon = config.icon;
   const TypeIcon = TYPE_ICONS[job.type] || Image;
 
+  // Capture current time once per render cycle so Date.now() is not called
+  // during the render pass (React strict-mode purity rule).
+  const [now] = useState(Date.now);
+
   const formatTime = (timestamp) => {
     if (!timestamp) return "";
-    const diff = Date.now() - timestamp;
+    const diff = now - timestamp;
     if (diff < 60000) return "Just now";
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
@@ -83,7 +87,7 @@ function JobItem({ job, onCancel, onRetry, onRemove, onClick }) {
   };
 
   return (
-    <motion.div
+    <Motion.div
       layout
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
@@ -92,7 +96,7 @@ function JobItem({ job, onCancel, onRetry, onRemove, onClick }) {
       onClick={() => onClick?.(job)}
     >
       <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center">
+        <div className="shrink-0 w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center">
           <TypeIcon className="w-4 h-4 text-gray-400" />
         </div>
 
@@ -131,7 +135,10 @@ function JobItem({ job, onCancel, onRetry, onRemove, onClick }) {
           )}
         </div>
 
-        <div className="flex-shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="shrink-0 flex items-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
           {(job.status === "running" || job.status === "pending") && (
             <button
               onClick={() => onCancel(job.id)}
@@ -163,7 +170,7 @@ function JobItem({ job, onCancel, onRetry, onRemove, onClick }) {
           )}
         </div>
       </div>
-    </motion.div>
+    </Motion.div>
   );
 }
 
@@ -197,18 +204,20 @@ export default function JobsPanel() {
   // Filter jobs by active tab
   const filteredJobs = jobs
     .filter((job) =>
-      TABS.find((t) => t.id === activeTab)?.statuses.includes(job.status)
+      TABS.find((t) => t.id === activeTab)?.statuses.includes(job.status),
     )
     .sort((a, b) => {
       // Sort by most recent first
       // For running/pending: use createdAt
       // For completed/failed/cancelled: use completedAt (fallback to createdAt)
-      const aTime = a.status === "running" || a.status === "pending"
-        ? a.createdAt
-        : (a.completedAt || a.createdAt);
-      const bTime = b.status === "running" || b.status === "pending"
-        ? b.createdAt
-        : (b.completedAt || b.createdAt);
+      const aTime =
+        a.status === "running" || a.status === "pending"
+          ? a.createdAt
+          : a.completedAt || a.createdAt;
+      const bTime =
+        b.status === "running" || b.status === "pending"
+          ? b.createdAt
+          : b.completedAt || b.createdAt;
       return (bTime || 0) - (aTime || 0); // Most recent first
     });
 
@@ -251,7 +260,7 @@ export default function JobsPanel() {
       {sidebarOpen && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -260,7 +269,7 @@ export default function JobsPanel() {
           />
 
           {/* Sidebar */}
-          <motion.div
+          <Motion.div
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
@@ -312,7 +321,7 @@ export default function JobsPanel() {
                     )}
                   </span>
                   {activeTab === tab.id && (
-                    <motion.div
+                    <Motion.div
                       layoutId="activeTab"
                       className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
                     />
@@ -329,7 +338,10 @@ export default function JobsPanel() {
                     onClick={clearCompleted}
                     className="w-full py-2 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition-colors"
                   >
-                    Clear {activeTab === "completed" ? "completed" : "failed & cancelled"}
+                    Clear{" "}
+                    {activeTab === "completed"
+                      ? "completed"
+                      : "failed & cancelled"}
                   </button>
                 </div>
               )}
@@ -343,18 +355,26 @@ export default function JobsPanel() {
                     {activeTab === "in-progress"
                       ? "No jobs in progress"
                       : activeTab === "completed"
-                      ? "No completed jobs"
-                      : "No failed jobs"}
+                        ? "No completed jobs"
+                        : "No failed jobs"}
                   </p>
                   {activeTab === "in-progress" && (
-                    <p className="text-xs mt-1">Generate something to see jobs here</p>
+                    <p className="text-xs mt-1">
+                      Generate something to see jobs here
+                    </p>
                   )}
                 </div>
               ) : (
                 <AnimatePresence mode="popLayout">
                   {filteredJobs
                     .sort((a, b) => {
-                      const order = { running: 0, pending: 1, completed: 2, failed: 3, cancelled: 4 };
+                      const order = {
+                        running: 0,
+                        pending: 1,
+                        completed: 2,
+                        failed: 3,
+                        cancelled: 4,
+                      };
                       return (order[a.status] || 5) - (order[b.status] || 5);
                     })
                     .map((job) => (
@@ -370,7 +390,7 @@ export default function JobsPanel() {
                 </AnimatePresence>
               )}
             </div>
-          </motion.div>
+          </Motion.div>
         </>
       )}
     </AnimatePresence>

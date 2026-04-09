@@ -2,7 +2,12 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
-import { enqueuePipeline, getModels, generateVideo, uploadLibraryFile, enqueueJob as enqueueServerJob, getJobs } from "../services/api";
+import {
+  getModels,
+  uploadLibraryFile,
+  enqueueJob as enqueueServerJob,
+  getJobs,
+} from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
@@ -18,8 +23,7 @@ const VIDEO_SELECTED_MODEL_KEY = "blackbox_ai_video_selected_model";
 const VIDEO_SELECTED_PROVIDER_KEY = "blackbox_ai_video_selected_provider";
 
 const WAN_I2V_MODEL_ID = "chutes/Wan-AI/Wan2.2-I2V-14B-Fast";
-const WAN_DEFAULT_NEGATIVE_PROMPT =
-  "";
+const WAN_DEFAULT_NEGATIVE_PROMPT = "";
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -34,6 +38,18 @@ function clamp(num, min, max) {
   return Math.min(max, Math.max(min, num));
 }
 
+// Map raw server job statuses to client-side statuses
+const mapServerStatus = (status) => {
+  const statusMap = {
+    queued: "pending",
+    processing: "running",
+    completed: "completed",
+    failed: "failed",
+    canceled: "cancelled",
+  };
+  return statusMap[status] || status;
+};
+
 export default function VideoGenerator() {
   const location = useLocation();
   const {
@@ -42,7 +58,6 @@ export default function VideoGenerator() {
     providers,
     getVideo,
     addLibraryAsset,
-    libraryAssets,
     refreshLibraryAssets,
     videoHistory,
     getVideoIds,
@@ -50,23 +65,53 @@ export default function VideoGenerator() {
     clearAllVideos,
   } = useApp();
 
-  const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, maxConcurrentJobs, registerSaveFns } = useJobs();
+  const {
+    getJobsByType,
+    selectedJob,
+    setSelectedJob,
+    cancelAllJobsByType,
+    cancelJob,
+    maxConcurrentJobs,
+    registerSaveFns,
+  } = useJobs();
 
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem(VIDEO_SELECTED_MODEL_KEY) || "",
   );
   const [availableModels, setAvailableModels] = useState([]);
+  const [serverJobs, setServerJobs] = useState([]);
   const videoJobs = getJobsByType("video");
-  const runningJobs = videoJobs.filter(job => job.status === "running");
-  const pendingJobs = videoJobs.filter(job => job.status === "pending");
-  const failedJobs = videoJobs.filter(job => job.status === "failed");
+  const runningJobs = useMemo(
+    () => serverJobs.filter((job) => job.status === "running"),
+    [serverJobs],
+  );
+  const pendingJobs = useMemo(
+    () => serverJobs.filter((job) => job.status === "pending"),
+    [serverJobs],
+  );
   const runningCount = runningJobs.length;
   const pendingCount = pendingJobs.length;
   const hasActiveJobs = runningCount > 0 || pendingCount > 0;
   const [generatedVideo, setGeneratedVideo] = useState(null);
   const [localError, setLocalError] = useState("");
   const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
+  const shouldPollServerJobs = hasActiveJobs || selectedRunningJobId !== null;
+  const saveVideoRef = useRef(saveVideo);
+  const addLibraryAssetRef = useRef(addLibraryAsset);
+  const promptRef = useRef(prompt);
+
+  useEffect(() => {
+    saveVideoRef.current = saveVideo;
+  }, [saveVideo]);
+
+  useEffect(() => {
+    addLibraryAssetRef.current = addLibraryAsset;
+  }, [addLibraryAsset]);
+
+  useEffect(() => {
+    promptRef.current = prompt;
+  }, [prompt]);
 
   // Clear local error on component mount to prevent stale errors on page reload
   useEffect(() => {
@@ -89,70 +134,98 @@ export default function VideoGenerator() {
     }
   }, [runningJobs, pendingJobs, selectedRunningJobId]);
 
-  // Poll server jobs to sync status with client-side jobs
+  // Sync server jobs and only poll while video jobs are active
   useEffect(() => {
     // Initial sync on mount
     const syncServerJobs = async () => {
       try {
         const result = await getJobs({ type: "video", limit: 100 });
         if (result.success && result.items) {
-          console.log("[VideoGenerator] Server jobs:", result.items.map(j => ({ id: j.id, status: j.status, progress: j.progress })));
-          // Sync server jobs to client-side job state
-          result.items.forEach(serverJob => {
-            const clientJob = videoJobs.find(j => j.params?.serverJobId === serverJob.id);
-            if (clientJob) {
-              console.log(`[VideoGenerator] Syncing job ${clientJob.id}: server status=${serverJob.status}, client status=${clientJob.status}`);
-              // Update client job status based on server job
-              if (serverJob.status === "completed" && clientJob.status !== "completed") {
-                console.log("[VideoGenerator] Marking job as completed:", clientJob.id);
-                updateJob(clientJob.id, {
-                  status: "completed",
-                  progress: 100,
-                  result: serverJob.result,
-                });
-                // Handle completion - save to history and library
-                if (serverJob.result) {
-                  const videoUrl = serverJob.result?.data?.[0]?.url || serverJob.result?.url;
-                  if (videoUrl) {
-                    const videoData = {
-                      url: videoUrl,
-                      thumbnail: serverJob.result?.data?.[0]?.thumbnail || null,
-                      id: serverJob.result?.id,
-                    };
-                    setGeneratedVideo(videoData);
-                    saveVideo(
-                      clientJob.params.videoId,
-                      clientJob.prompt,
-                      videoData,
-                      clientJob.model,
-                      clientJob.params.metadata,
-                    );
-                    addLibraryAsset({
-                      type: "video",
-                      source: "video",
-                      title: clientJob.prompt.slice(0, 80) || "Generated video",
-                      url: videoData.url,
-                      metadata: clientJob.params.metadata,
-                    });
-                  }
-                }
-              } else if (serverJob.status === "failed" && clientJob.status !== "failed") {
-                updateJob(clientJob.id, {
-                  status: "failed",
-                  error: serverJob.error?.message || serverJob.error || "Generation failed",
-                });
-              } else if (serverJob.status === "processing" && clientJob.status === "pending") {
-                updateJob(clientJob.id, {
-                  status: "running",
-                  progress: serverJob.progress || 10,
-                });
-              } else if (serverJob.status === "processing" && clientJob.status === "running") {
-                updateJob(clientJob.id, {
-                  progress: serverJob.progress || clientJob.progress,
-                });
-              }
-            }
+          const normalizedJobs = result.items.map((job) => ({
+            ...job,
+            status: mapServerStatus(job.status),
+          }));
+          setServerJobs((prev) => {
+            const prevSignature = prev
+              .map((job) => `${job.id}:${job.status}:${job.progress}:${job.updatedAt}`)
+              .join("|");
+            const nextSignature = normalizedJobs
+              .map((job) => `${job.id}:${job.status}:${job.progress}:${job.updatedAt}`)
+              .join("|");
+            return prevSignature === nextSignature ? prev : normalizedJobs;
           });
+
+          // Find the currently selected server job
+          const selectedServerJob = result.items.find(
+            (j) => j.id === selectedRunningJobId,
+          );
+
+          if (selectedRunningJobId && !selectedServerJob) {
+            // Job is gone from server (maybe server was restarted/cleared)
+            setSelectedRunningJobId(null);
+            setLocalError(
+              "Generation interrupted: Job no longer exists on server.",
+            );
+          } else if (selectedServerJob) {
+            const selectedServerJobStatus = mapServerStatus(selectedServerJob.status);
+
+            // Handle completion
+            if (selectedServerJobStatus === "completed") {
+              const videoUrl =
+                selectedServerJob.result?.data?.[0]?.url ||
+                selectedServerJob.result?.url;
+              if (videoUrl) {
+                const videoData = {
+                  url: videoUrl,
+                  thumbnail:
+                    selectedServerJob.result?.data?.[0]?.thumbnail || null,
+                  id: selectedServerJob.result?.id,
+                };
+                setGeneratedVideo(videoData);
+                // Save to history
+                const videoId =
+                  selectedServerJob.metadata?.videoId || generateVideoId();
+                saveVideoRef.current?.(
+                  videoId,
+                  selectedServerJob.payload?.prompt || promptRef.current,
+                  videoData,
+                  selectedServerJob.payload?.model ||
+                    selectedServerJob.metadata?.model,
+                  selectedServerJob.metadata,
+                );
+                // Add to library
+                addLibraryAssetRef.current?.({
+                  type: "video",
+                  source: "video",
+                  title:
+                    (selectedServerJob.payload?.prompt || promptRef.current).slice(
+                      0,
+                      80,
+                    ) || "Generated video",
+                  url: videoData.url,
+                  metadata: selectedServerJob.metadata,
+                });
+              } else {
+                setLocalError(
+                  "Generation completed but no video URL was returned.",
+                );
+              }
+              // Always clear selected job on terminal completion state
+              setSelectedRunningJobId(null);
+            } else if (
+              selectedServerJobStatus === "failed" ||
+              selectedServerJobStatus === "cancelled"
+            ) {
+              setLocalError(
+                selectedServerJob.error?.message ||
+                  selectedServerJob.error ||
+                  (selectedServerJobStatus === "cancelled"
+                    ? "Generation cancelled"
+                    : "Generation failed"),
+              );
+              setSelectedRunningJobId(null);
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to sync server jobs:", err);
@@ -161,22 +234,28 @@ export default function VideoGenerator() {
 
     syncServerJobs();
 
-    // Poll every 3 seconds
-    const pollInterval = setInterval(syncServerJobs, 3000);
+    // Keep polling only when there is an active/selected video job
+    if (!shouldPollServerJobs) return;
+
+    const pollInterval = setInterval(syncServerJobs, 10000);
 
     return () => clearInterval(pollInterval);
-  }, [videoJobs, updateJob, saveVideo, addLibraryAsset]);
+  }, [shouldPollServerJobs, selectedRunningJobId]);
 
   // Only show error from localError (current generation) or when a job is explicitly selected
   // Don't automatically show errors from failed jobs in the list
   const error = localError;
 
   // Get the selected running job for progress display
-  const selectedRunningJob = videoJobs.find(job => job.id === selectedRunningJobId);
+  const selectedRunningJob = serverJobs.find(
+    (job) => job.id === selectedRunningJobId,
+  );
   const selectedJobProgress = selectedRunningJob?.progress || 0;
 
   const [duration, setDuration] = useState(5);
   const [fps, setFps] = useState(24);
+
+  // serverJobs state is declared at the top of the component (before first usage)
 
   // Wan I2V controls
   const [wanImageData, setWanImageData] = useState("");
@@ -216,11 +295,7 @@ export default function VideoGenerator() {
 
   const isWanI2VSelected = selectedModelInfo?.id === WAN_I2V_MODEL_ID;
 
-  const imageLibraryAssets = useMemo(
-    () => (libraryAssets || []).filter((asset) => asset.type === "image"),
-    [libraryAssets],
-  );
-
+  // Load models on mount
   useEffect(() => {
     if (showModelSelector && searchInputRef.current) {
       searchInputRef.current.focus();
@@ -250,8 +325,9 @@ export default function VideoGenerator() {
           VIDEO_SELECTED_MODEL_KEY,
         );
 
-        const isProviderMatch = (model, providerId) => 
-          model.provider === providerId || model.configuredProvider === providerId;
+        const isProviderMatch = (model, providerId) =>
+          model.provider === providerId ||
+          model.configuredProvider === providerId;
 
         const persistedProviderValid =
           persistedProvider &&
@@ -264,23 +340,24 @@ export default function VideoGenerator() {
             : configuredGateways.find((gatewayId) =>
                 nextModels.some((model) => isProviderMatch(model, gatewayId)),
               )) ||
-          nextModels[0]?.configuredProvider || nextModels[0]?.provider ||
+          nextModels[0]?.configuredProvider ||
+          nextModels[0]?.provider ||
           "";
 
         setConfiguredProviderFilter(firstGateway);
 
         const persistedModelForGateway =
           persistedModelKey &&
-            nextModels.some(
-              (model) =>
-                isProviderMatch(model, firstGateway) &&
-                model.modelKey === persistedModelKey,
-            )
+          nextModels.some(
+            (model) =>
+              isProviderMatch(model, firstGateway) &&
+              model.modelKey === persistedModelKey,
+          )
             ? persistedModelKey
             : "";
 
-        const firstGatewayModel = nextModels.find(
-          (model) => isProviderMatch(model, firstGateway),
+        const firstGatewayModel = nextModels.find((model) =>
+          isProviderMatch(model, firstGateway),
         );
 
         setSelectedModel(
@@ -391,7 +468,10 @@ export default function VideoGenerator() {
       if (selectedJob.status === "failed") {
         setLocalError(selectedJob.error || "Generation failed");
         setSelectedRunningJobId(null);
-      } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
+      } else if (
+        selectedJob.status === "running" ||
+        selectedJob.status === "pending"
+      ) {
         // Track running/pending job to show progress
         // Don't clear generatedVideo - let user continue viewing previous/historical generations
         setSelectedRunningJobId(selectedJob.id);
@@ -406,7 +486,9 @@ export default function VideoGenerator() {
 
         // If no modelKey, try to find modelKey from availableModels using model ID
         if (!resolvedModelKey && selectedJob.model) {
-          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          const matchingModel = availableModels.find(
+            (m) => m.id === selectedJob.model,
+          );
           if (matchingModel) {
             resolvedModelKey = matchingModel.modelKey;
           } else {
@@ -436,14 +518,18 @@ export default function VideoGenerator() {
 
         // Load Wan-specific params
         if (options.wan) {
-          if (options.wan.frames != null) setWanFrames(Number(options.wan.frames));
+          if (options.wan.frames != null)
+            setWanFrames(Number(options.wan.frames));
           if (options.wan.fps != null) setWanFps(Number(options.wan.fps));
           if (options.wan.fast != null) setWanFast(Boolean(options.wan.fast));
           if (options.wan.seed != null) setWanSeed(String(options.wan.seed));
           if (options.wan.resolution) setWanResolution(options.wan.resolution);
-          if (options.wan.guidance_scale != null) setWanGuidanceScale(Number(options.wan.guidance_scale));
-          if (options.wan.guidance_scale_2 != null) setWanGuidanceScale2(Number(options.wan.guidance_scale_2));
-          if (options.wan.negative_prompt) setWanNegativePrompt(options.wan.negative_prompt);
+          if (options.wan.guidance_scale != null)
+            setWanGuidanceScale(Number(options.wan.guidance_scale));
+          if (options.wan.guidance_scale_2 != null)
+            setWanGuidanceScale2(Number(options.wan.guidance_scale_2));
+          if (options.wan.negative_prompt)
+            setWanNegativePrompt(options.wan.negative_prompt);
         }
       } else {
         setLocalError("");
@@ -458,7 +544,9 @@ export default function VideoGenerator() {
 
         // If no modelKey, try to find modelKey from availableModels using model ID
         if (!resolvedModelKey && selectedJob.model) {
-          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          const matchingModel = availableModels.find(
+            (m) => m.id === selectedJob.model,
+          );
           if (matchingModel) {
             resolvedModelKey = matchingModel.modelKey;
           } else {
@@ -488,24 +576,33 @@ export default function VideoGenerator() {
 
         // Load Wan-specific params
         if (options.wan) {
-          if (options.wan.frames != null) setWanFrames(Number(options.wan.frames));
+          if (options.wan.frames != null)
+            setWanFrames(Number(options.wan.frames));
           if (options.wan.fps != null) setWanFps(Number(options.wan.fps));
           if (options.wan.fast != null) setWanFast(Boolean(options.wan.fast));
           if (options.wan.seed != null) setWanSeed(String(options.wan.seed));
           if (options.wan.resolution) setWanResolution(options.wan.resolution);
-          if (options.wan.guidance_scale != null) setWanGuidanceScale(Number(options.wan.guidance_scale));
-          if (options.wan.guidance_scale_2 != null) setWanGuidanceScale2(Number(options.wan.guidance_scale_2));
-          if (options.wan.negative_prompt) setWanNegativePrompt(options.wan.negative_prompt);
+          if (options.wan.guidance_scale != null)
+            setWanGuidanceScale(Number(options.wan.guidance_scale));
+          if (options.wan.guidance_scale_2 != null)
+            setWanGuidanceScale2(Number(options.wan.guidance_scale_2));
+          if (options.wan.negative_prompt)
+            setWanNegativePrompt(options.wan.negative_prompt);
         }
 
         // If job is completed, try to load result
         if (selectedJob.status === "completed") {
-          // Use result directly from job (more reliable than history lookup)
-          if (selectedJob.result?.url) {
+          const completedVideoUrl =
+            selectedJob.result?.data?.[0]?.url ||
+            selectedJob.result?.url;
+          if (completedVideoUrl) {
             setGeneratedVideo({
-              url: selectedJob.result.url,
-              thumbnail: selectedJob.result.thumbnail || null,
-              id: selectedJob.result.id || selectedJob.params?.videoId,
+              url: completedVideoUrl,
+              thumbnail:
+                selectedJob.result?.data?.[0]?.thumbnail ||
+                selectedJob.result?.thumbnail ||
+                null,
+              id: selectedJob.result?.id || selectedJob.params?.videoId,
             });
           } else if (selectedJob.params?.videoId) {
             // Fallback to history lookup
@@ -523,39 +620,50 @@ export default function VideoGenerator() {
     }
   }, [selectedJob, setSelectedJob, getVideo, availableModels]);
 
-  // Auto-load result when selected running job completes
+  // Auto-load result when selected running job completes (via JobContext polling)
   useEffect(() => {
-    if (selectedRunningJobId) {
-      const job = videoJobs.find(j => j.id === selectedRunningJobId);
-      if (!job) {
-        // Job was removed
-        setSelectedRunningJobId(null);
-        return;
-      }
+    if (!selectedRunningJobId) return;
 
-      if (job.status === "completed") {
-        // Use result directly from job (more reliable than history lookup)
-        if (job.result?.url) {
-          setGeneratedVideo({
-            url: job.result.url,
-            thumbnail: job.result.thumbnail || null,
-            id: job.result.id || job.params?.videoId,
-          });
-        } else if (job.params?.videoId) {
-          // Fallback to history lookup
-          const historyItem = getVideo(job.params.videoId);
-          if (historyItem) {
-            setGeneratedVideo(historyItem.result || null);
-          }
+    const job = videoJobs.find((j) => j.id === selectedRunningJobId);
+    if (!job) {
+      // Job not in JobContext yet (hasn't been polled) — let VideoGenerator
+      // polling handle it instead of clearing the tracking prematurely.
+      return;
+    }
+
+    if (job.status === "completed") {
+      const videoUrl =
+        job.result?.data?.[0]?.url || job.result?.url;
+      if (videoUrl) {
+        const videoData = {
+          url: videoUrl,
+          thumbnail: job.result?.data?.[0]?.thumbnail || job.result?.thumbnail || null,
+          id: job.result?.id || job.params?.videoId,
+        };
+        setGeneratedVideo(videoData);
+
+        // Save to history (use refs to avoid stale closures)
+        const videoId =
+          job.params?.videoId || job.result?.id || generateVideoId();
+        saveVideoRef.current?.(
+          videoId,
+          job.prompt || job.params?.prompt || promptRef.current,
+          videoData,
+          job.model || job.params?.model,
+          job.params?.metadata || null,
+        );
+      } else if (job.params?.videoId) {
+        const historyItem = getVideo(job.params.videoId);
+        if (historyItem) {
+          setGeneratedVideo(historyItem.result || null);
         }
-        setSelectedRunningJobId(null);
-      } else if (job.status === "failed" || job.status === "cancelled") {
-        // Show error or clear
-        if (job.status === "failed") {
-          setLocalError(job.error || "Generation failed");
-        }
-        setSelectedRunningJobId(null);
       }
+      setSelectedRunningJobId(null);
+    } else if (job.status === "failed" || job.status === "cancelled") {
+      if (job.status === "failed") {
+        setLocalError(job.error || "Generation failed");
+      }
+      setSelectedRunningJobId(null);
     }
   }, [selectedRunningJobId, videoJobs, getVideo]);
 
@@ -567,26 +675,28 @@ export default function VideoGenerator() {
   }, [isWanI2VSelected]);
 
   // Handle navigation state from ImageGenerator "Send to Video"
+  const processedNavigationStateRef = useRef(false);
   useEffect(() => {
     const state = location.state;
-    if (state?.imageSource) {
+    if (state?.imageSource && !processedNavigationStateRef.current) {
+      processedNavigationStateRef.current = true;
       const imageSource = state.imageSource;
-      
+
       // Set the prompt if provided
       if (state.prompt) {
         setPrompt(state.prompt);
       }
-      
+
       // Select Wan I2V model
       setSelectedModel(WAN_I2V_MODEL_ID);
       localStorage.setItem(VIDEO_SELECTED_MODEL_KEY, WAN_I2V_MODEL_ID);
-      
+
       // Set provider to chutes
       setConfiguredProviderFilter("chutes");
       localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, "chutes");
-      
+
       // Check if imageSource is a data URL that needs to be uploaded
-      if (imageSource.startsWith('data:')) {
+      if (imageSource.startsWith("data:")) {
         // Upload to library
         const uploadImage = async () => {
           try {
@@ -598,7 +708,7 @@ export default function VideoGenerator() {
               title: "Image to Video",
               source: "wan-i2v-pipeline",
             });
-            
+
             if (uploadResult?.asset?.url) {
               setWanImageData(uploadResult.asset.url);
               setWanLibraryImageId(uploadResult.asset.id);
@@ -620,7 +730,7 @@ export default function VideoGenerator() {
         setWanImageSourceType("library");
         setWanLibraryImageId("");
       }
-      
+
       // Clear the navigation state to prevent re-processing
       window.history.replaceState({}, document.title);
     }
@@ -642,7 +752,7 @@ export default function VideoGenerator() {
     setLocalError("");
     try {
       const dataUrl = await fileToDataUrl(file);
-      
+
       // Upload to library
       const uploadResult = await uploadLibraryFile({
         fileName: file.name,
@@ -652,12 +762,12 @@ export default function VideoGenerator() {
         title: file.name,
         source: "wan-i2v-upload",
       });
-      
+
       if (uploadResult?.asset?.url) {
         setWanImageData(uploadResult.asset.url);
         setWanLibraryImageId(uploadResult.asset.id);
         setWanImageSourceType("upload");
-        
+
         // Refresh library assets to show the newly uploaded image
         refreshLibraryAssets?.({ type: "image" });
       } else {
@@ -709,7 +819,7 @@ export default function VideoGenerator() {
     if (!prompt.trim()) return;
 
     setLocalError("");
-    
+
     // Don't clear generatedVideo - let user continue viewing previous/historical generations
     // Clear selected running job to avoid showing stale errors
     setSelectedRunningJobId(null);
@@ -734,61 +844,10 @@ export default function VideoGenerator() {
       }
     }
 
-    const modelIdToSend = isLocalModelSelected ? selectedModel : selectedInfo?.id;
-    const localOpts = isLocalModelSelected ? { localOllamaUrl: ollamaLocal.localUrl } : {};
-
-    // Prepare job parameters
+    const modelIdToSend = isLocalModelSelected
+      ? selectedModel
+      : selectedInfo?.id;
     const videoId = generateVideoId();
-    const jobParams = {
-      prompt,
-      model: modelIdToSend,
-      videoId,
-      options: {
-        provider: effectiveProvider,
-        modelKey: isLocalModelSelected ? undefined : selectedInfo?.modelKey,
-        ...localOpts,
-        ...(isWanI2VSelected
-          ? {
-              image: wanImageData,
-              wanFrames: clamp(Number(wanFrames), 21, 140),
-              wanFps: clamp(Number(wanFps), 16, 24),
-              wanFast: Boolean(wanFast),
-              wanSeed: wanSeed === "" ? null : Number(wanSeed),
-              wanResolution: wanResolution === "720p" ? "720p" : "480p",
-              wanGuidanceScale: clamp(Number(wanGuidanceScale), 0, 10),
-              wanGuidanceScale2: clamp(Number(wanGuidanceScale2), 0, 10),
-              wanNegativePrompt:
-                wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
-            }
-          : {
-              duration,
-              fps,
-            }),
-      },
-      metadata: {
-        modelKey: selectedInfo?.modelKey || selectedModel,
-        provider: effectiveProvider,
-        ...(isWanI2VSelected
-          ? {
-              wan: {
-                frames: Number(wanFrames),
-                fps: Number(wanFps),
-                fast: Boolean(wanFast),
-                seed: wanSeed === "" ? null : Number(wanSeed),
-                resolution: wanResolution,
-                guidance_scale: Number(wanGuidanceScale),
-                guidance_scale_2: Number(wanGuidanceScale2),
-                negative_prompt:
-                  wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
-                imageSourceType: wanImageSourceType,
-              },
-            }
-          : {
-              duration,
-              fps,
-            }),
-      },
-    };
 
     // Enqueue job on server-side job queue for backend processing
     try {
@@ -798,7 +857,6 @@ export default function VideoGenerator() {
           prompt,
           model: modelIdToSend,
           provider: effectiveProvider,
-          modelKey: isLocalModelSelected ? undefined : selectedInfo?.modelKey,
           ...(isWanI2VSelected
             ? {
                 image: wanImageData,
@@ -844,19 +902,11 @@ export default function VideoGenerator() {
       });
 
       if (serverResult.success && serverResult.job) {
-        // Create client-side job to track the server job
-        const jobId = enqueueJob("video", {
-          prompt,
-          model: modelIdToSend,
-          videoId,
-          options: { provider: effectiveProvider, modelKey: selectedInfo?.modelKey },
-          metadata: jobParams.metadata,
-          serverJobId: serverResult.job.id, // Track server job ID
-        }, null); // No callback - we'll poll for status
-
-        setSelectedRunningJobId(jobId);
+        // Don't create client-side job - just track the server job ID directly
+        // The polling will sync the server job status
+        setSelectedRunningJobId(serverResult.job.id);
       } else {
-        throw new Error(serverResult.error || "Failed to enqueue job on server");
+        throw new Error(serverResult.error || "Failed to enqueue job");
       }
     } catch (err) {
       setLocalError(err.message || "Failed to start generation");
@@ -870,19 +920,6 @@ export default function VideoGenerator() {
     link.href = generatedVideo.url;
     link.download = `ai-video-${Date.now()}.mp4`;
     link.click();
-  };
-
-  const handleStopGeneration = () => {
-    // Cancel all running video jobs
-    cancelAllJobsByType("video");
-  };
-
-  const handleMusicToEditorPipeline = async () => {
-    if (!generatedVideo?.url) return;
-    await enqueuePipeline("music-to-editor", {
-      musicPayload: { prompt: "Background soundtrack for current video" },
-      videoPayload: { sourceVideoUrl: generatedVideo.url },
-    });
   };
 
   const handleModelSelect = (model) => {
@@ -930,9 +967,10 @@ export default function VideoGenerator() {
       setLocalError("");
       setSelectedRunningJobId(null); // Clear running job to prevent showing loading state
 
-      const metadata = videoItem?.metadata && typeof videoItem.metadata === "object"
-        ? videoItem.metadata
-        : null;
+      const metadata =
+        videoItem?.metadata && typeof videoItem.metadata === "object"
+          ? videoItem.metadata
+          : null;
       const legacyModel = videoItem?.model || "";
       const legacyProvider =
         typeof legacyModel === "string" && legacyModel.includes(":")
@@ -948,7 +986,9 @@ export default function VideoGenerator() {
         resolvedModelKey = rawModelKey;
       } else if (rawModelKey) {
         // Just a model ID - look up the modelKey from availableModels
-        const matchingModel = availableModels.find(m => m.id === rawModelKey || m.modelKey === rawModelKey);
+        const matchingModel = availableModels.find(
+          (m) => m.id === rawModelKey || m.modelKey === rawModelKey,
+        );
         if (matchingModel) {
           resolvedModelKey = matchingModel.modelKey;
         } else {
@@ -995,9 +1035,13 @@ export default function VideoGenerator() {
             <Film className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Video Generation</h2>
+            <h2 className="text-lg font-semibold text-white">
+              Video Generation
+            </h2>
             <p className="text-xs text-gray-400">
-              {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
+              {isLocalModelSelected
+                ? `${selectedModel} (Local)`
+                : selectedModelInfo?.name || "Select a model"}
             </p>
             {isWanI2VSelected && (
               <p className="text-xs text-indigo-400 mt-0.5">
@@ -1087,7 +1131,11 @@ export default function VideoGenerator() {
                         : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                     }`}
                   >
-                    {filter === "all" ? "All" : filter === "cloud" ? "☁ Cloud" : "💻 Local"}
+                    {filter === "all"
+                      ? "All"
+                      : filter === "cloud"
+                        ? "☁ Cloud"
+                        : "💻 Local"}
                   </button>
                 ))}
               </div>
@@ -1101,10 +1149,11 @@ export default function VideoGenerator() {
                     setConfiguredProviderFilter(provider);
                     localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, provider);
                   }}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${configuredProviderFilter === provider
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    configuredProviderFilter === provider
                       ? "bg-indigo-600 text-white"
                       : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                    }`}
+                  }`}
                 >
                   {providers.find((p) => p.id === provider)?.name || provider}
                 </button>
@@ -1133,54 +1182,55 @@ export default function VideoGenerator() {
             )}
 
             {!isOllamaLocalActive && (
-            <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
-              {filteredModels.length > 0 ? (
-                filteredModels.map((model) => (
-                  <button
-                    key={model.uniqueKey || model.id}
-                    onClick={() => handleModelSelect(model)}
-                    className={`p-3 rounded-lg text-left transition-colors ${selectedModel === model.modelKey
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-700 hover:bg-gray-600 text-gray-200"
+              <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
+                {filteredModels.length > 0 ? (
+                  filteredModels.map((model) => (
+                    <button
+                      key={model.uniqueKey || model.id}
+                      onClick={() => handleModelSelect(model)}
+                      className={`p-3 rounded-lg text-left transition-colors ${
+                        selectedModel === model.modelKey
+                          ? "bg-indigo-600 text-white"
+                          : "bg-gray-700 hover:bg-gray-600 text-gray-200"
                       }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">{model.name}</span>
-                      <div className="flex items-center gap-2">
-                        {model.isCloud ? (
-                          <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
-                            Cloud
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">{model.name}</span>
+                        <div className="flex items-center gap-2">
+                          {model.isCloud ? (
+                            <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
+                              Cloud
+                            </span>
+                          ) : configuredProviderFilter === "ollama" ? (
+                            <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
+                              Local
+                            </span>
+                          ) : null}
+                          <span className="text-xs px-2 py-0.5 bg-gray-600 rounded">
+                            {model.configuredProvider || model.provider}
                           </span>
-                        ) : configuredProviderFilter === "ollama" ? (
-                          <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
-                            Local
+                          <span className="text-xs px-2 py-0.5 bg-cyan-700 rounded">
+                            {model.modelProvider || "unknown"}
                           </span>
-                        ) : null}
-                        <span className="text-xs px-2 py-0.5 bg-gray-600 rounded">
-                          {model.configuredProvider || model.provider}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 bg-cyan-700 rounded">
-                          {model.modelProvider || "unknown"}
-                        </span>
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-xs text-gray-400 truncate block mt-1">
-                      {model.id}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <p>No models found matching "{modelSearch}"</p>
-                  <button
-                    onClick={() => setModelSearch("")}
-                    className="mt-2 text-indigo-400 hover:text-indigo-300"
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              )}
-            </div>
+                      <span className="text-xs text-gray-400 truncate block mt-1">
+                        {model.id}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <p>No models found matching "{modelSearch}"</p>
+                    <button
+                      onClick={() => setModelSearch("")}
+                      className="mt-2 text-indigo-400 hover:text-indigo-300"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1229,19 +1279,21 @@ export default function VideoGenerator() {
                             setWanImageSourceType("upload");
                             setWanLibraryImageId("");
                           }}
-                          className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "upload"
+                          className={`px-3 py-1.5 rounded text-sm ${
+                            wanImageSourceType === "upload"
                               ? "bg-indigo-600 text-white"
                               : "bg-gray-700 text-gray-200"
-                            }`}
+                          }`}
                         >
                           Upload
                         </button>
                         <button
                           onClick={() => setWanImageSourceType("library")}
-                          className={`px-3 py-1.5 rounded text-sm ${wanImageSourceType === "library"
+                          className={`px-3 py-1.5 rounded text-sm ${
+                            wanImageSourceType === "library"
                               ? "bg-indigo-600 text-white"
                               : "bg-gray-700 text-gray-200"
-                            }`}
+                          }`}
                         >
                           From Library
                         </button>
@@ -1300,7 +1352,9 @@ export default function VideoGenerator() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Resolution</label>
+                        <label className="block text-xs text-gray-400 mb-1">
+                          Resolution
+                        </label>
                         <select
                           value={wanResolution}
                           onChange={(e) => setWanResolution(e.target.value)}
@@ -1311,7 +1365,9 @@ export default function VideoGenerator() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Frames: {wanFrames}</label>
+                        <label className="block text-xs text-gray-400 mb-1">
+                          Frames: {wanFrames}
+                        </label>
                         <input
                           type="range"
                           min="25"
@@ -1325,7 +1381,9 @@ export default function VideoGenerator() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">FPS: {wanFps}</label>
+                        <label className="block text-xs text-gray-400 mb-1">
+                          FPS: {wanFps}
+                        </label>
                         <input
                           type="range"
                           min="8"
@@ -1336,21 +1394,27 @@ export default function VideoGenerator() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Guidance: {wanGuidanceScale}</label>
+                        <label className="block text-xs text-gray-400 mb-1">
+                          Guidance: {wanGuidanceScale}
+                        </label>
                         <input
                           type="range"
                           min="0"
                           max="10"
                           step="0.1"
                           value={wanGuidanceScale}
-                          onChange={(e) => setWanGuidanceScale(Number(e.target.value))}
+                          onChange={(e) =>
+                            setWanGuidanceScale(Number(e.target.value))
+                          }
                           className="w-full"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Seed (optional)</label>
+                      <label className="block text-xs text-gray-400 mb-1">
+                        Seed (optional)
+                      </label>
                       <input
                         type="text"
                         value={wanSeed}
@@ -1386,7 +1450,9 @@ export default function VideoGenerator() {
                 <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
                   <div className="flex items-center gap-2 text-yellow-400">
                     <Settings className="w-4 h-4" />
-                    <span className="text-sm font-medium">API Not Configured</span>
+                    <span className="text-sm font-medium">
+                      API Not Configured
+                    </span>
                   </div>
                   <p className="text-xs text-yellow-300/70 mt-1">
                     Configure API keys in Admin panel to generate videos.
@@ -1409,9 +1475,13 @@ export default function VideoGenerator() {
                         {runningCount} running
                       </span>
                     )}
-                    {runningCount > 0 && pendingCount > 0 && <span className="mx-1">,</span>}
+                    {runningCount > 0 && pendingCount > 0 && (
+                      <span className="mx-1">,</span>
+                    )}
                     {pendingCount > 0 && (
-                      <span className="text-gray-500">{pendingCount} queued</span>
+                      <span className="text-gray-500">
+                        {pendingCount} queued
+                      </span>
                     )}
                   </span>
                   <button
@@ -1423,9 +1493,14 @@ export default function VideoGenerator() {
                 </div>
                 {runningJobs.length > 0 && (
                   <div className="mt-2 space-y-1">
-                    {runningJobs.slice(0, 3).map(job => (
-                      <div key={job.id} className="flex items-center justify-between text-xs text-gray-500">
-                        <span className="truncate max-w-[180px]">{job.prompt?.slice(0, 40) || "Generating..."}</span>
+                    {runningJobs.slice(0, 3).map((job) => (
+                      <div
+                        key={job.id}
+                        className="flex items-center justify-between text-xs text-gray-500"
+                      >
+                        <span className="truncate max-w-[180px]">
+                          {job.prompt?.slice(0, 40) || "Generating..."}
+                        </span>
                         <div className="flex items-center gap-2">
                           <span>{job.progress || 10}%</span>
                           <button
@@ -1442,7 +1517,11 @@ export default function VideoGenerator() {
                 )}
                 {pendingJobs.length > 0 && runningJobs.length < 3 && (
                   <div className="mt-1 text-xs text-gray-600">
-                    Next: {pendingJobs.slice(0, 2).map(j => j.prompt?.slice(0, 30) || "Queued").join(", ")}
+                    Next:{" "}
+                    {pendingJobs
+                      .slice(0, 2)
+                      .map((j) => j.prompt?.slice(0, 30) || "Queued")
+                      .join(", ")}
                   </div>
                 )}
               </div>
@@ -1452,14 +1531,19 @@ export default function VideoGenerator() {
             <Button
               variant="primary"
               onClick={handleGenerate}
-              disabled={!isConfigured || !prompt.trim() || (isWanI2VSelected && !wanImageData)}
+              disabled={
+                !isConfigured ||
+                !prompt.trim() ||
+                (isWanI2VSelected && !wanImageData)
+              }
               leftIcon={<Sparkles className="w-4 h-4" />}
               className="w-full bg-indigo-600 hover:bg-indigo-500"
             >
               Generate Video
-              {hasActiveJobs && pendingCount >= maxConcurrentJobs - runningCount && (
-                <span className="ml-2 text-xs opacity-75">(Queued)</span>
-              )}
+              {hasActiveJobs &&
+                pendingCount >= maxConcurrentJobs - runningCount && (
+                  <span className="ml-2 text-xs opacity-75">(Queued)</span>
+                )}
             </Button>
           </div>
         </div>
@@ -1500,7 +1584,9 @@ export default function VideoGenerator() {
             onClearHistory={clearAllVideos}
             loading={hasActiveJobs}
             error={error}
-            progress={selectedRunningJobId !== null ? selectedJobProgress : null}
+            progress={
+              selectedRunningJobId !== null ? selectedJobProgress : null
+            }
             onClearError={() => {
               setLocalError("");
             }}

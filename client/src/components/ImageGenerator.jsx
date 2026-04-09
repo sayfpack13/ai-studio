@@ -791,13 +791,11 @@ export default function ImageGenerator() {
 
     // Enqueue the job with callback for UI updates (history saving is handled by registered saveImage)
     const jobId = enqueueJob("image", jobParams, (resultData) => {
-      console.log("[ImageGenerator] Job callback called with resultData:", resultData);
       const imageData = {
         url: resultData.url,
         revisedPrompt: resultData.revisedPrompt || prompt,
       };
       setGeneratedImage(imageData);
-      console.log("[ImageGenerator] setGeneratedImage called");
 
       // Add to library
       addLibraryAsset({
@@ -810,7 +808,6 @@ export default function ImageGenerator() {
           provider: effectiveProvider,
         },
       });
-      console.log("[ImageGenerator] addLibraryAsset called");
     });
     
     // Track this job to show result when complete

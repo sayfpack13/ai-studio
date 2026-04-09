@@ -99,7 +99,8 @@ class JobQueueService {
       message: err.message || String(err),
       name: err.name || "Error",
       code: err.code || undefined,
-      stack: typeof err.stack === "string" ? err.stack.slice(0, 2000) : undefined,
+      stack:
+        typeof err.stack === "string" ? err.stack.slice(0, 2000) : undefined,
     };
   }
 
@@ -115,7 +116,7 @@ class JobQueueService {
 
       for (const job of jobs) {
         if (!job?.id) continue;
-        
+
         // Load large data from files if referenced
         if (job.result?.__fileRef) {
           job.result = await this.#loadLargeData(job.result);
@@ -126,7 +127,20 @@ class JobQueueService {
         if (job.error?.__fileRef) {
           job.error = await this.#loadLargeData(job.error);
         }
-        
+
+        // Reset active jobs that were interrupted by server restart
+        if (job.status === STATUS.PROCESSING || job.status === STATUS.QUEUED) {
+          job.status = STATUS.FAILED;
+          job.error = { message: "Server restarted while job was active" };
+          job.updatedAt = new Date().toISOString();
+          job.history = job.history || [];
+          job.history.push({
+            at: job.updatedAt,
+            event: "failed",
+            details: { reason: "Server restarted" },
+          });
+        }
+
         this.jobs.set(job.id, job);
         this.order.push(job.id);
       }
@@ -146,36 +160,36 @@ class JobQueueService {
     this.writeInFlight = true;
     try {
       await this.#ensureDataDir();
-      
+
       // Extract large data and save to separate files
       const jobsToSave = [];
       for (const id of this.order) {
         const job = this.jobs.get(id);
         if (!job) continue;
-        
+
         const jobCopy = this.#clone(job);
-        
+
         // Extract large result data
         if (isLargeData(jobCopy.result)) {
-          const ref = await this.#saveLargeData(id, 'result', jobCopy.result);
+          const ref = await this.#saveLargeData(id, "result", jobCopy.result);
           jobCopy.result = ref;
         }
-        
+
         // Extract large payload data
         if (isLargeData(jobCopy.payload)) {
-          const ref = await this.#saveLargeData(id, 'payload', jobCopy.payload);
+          const ref = await this.#saveLargeData(id, "payload", jobCopy.payload);
           jobCopy.payload = ref;
         }
-        
+
         // Extract large error data
         if (isLargeData(jobCopy.error)) {
-          const ref = await this.#saveLargeData(id, 'error', jobCopy.error);
+          const ref = await this.#saveLargeData(id, "error", jobCopy.error);
           jobCopy.error = ref;
         }
-        
+
         jobsToSave.push(jobCopy);
       }
-      
+
       const payload = {
         updatedAt: new Date().toISOString(),
         jobs: jobsToSave,
@@ -224,11 +238,15 @@ class JobQueueService {
   async #cleanupJobLargeData(job) {
     if (!job) return;
     const { id } = job;
-    
+
     // Delete large data files if they exist
-    const dataTypes = ['result', 'payload', 'error'];
+    const dataTypes = ["result", "payload", "error"];
     for (const dataType of dataTypes) {
-      const ref = { __fileRef: true, filename: `${id}_${dataType}.json`, dataType };
+      const ref = {
+        __fileRef: true,
+        filename: `${id}_${dataType}.json`,
+        dataType,
+      };
       await this.#deleteLargeData(ref);
     }
   }
@@ -340,9 +358,7 @@ class JobQueueService {
     limit = 100,
     offset = 0,
   } = {}) {
-    let items = this.order
-      .map((id) => this.jobs.get(id))
-      .filter(Boolean);
+    let items = this.order.map((id) => this.jobs.get(id)).filter(Boolean);
 
     if (type) items = items.filter((j) => j.type === type);
     if (status) items = items.filter((j) => j.status === status);
@@ -353,7 +369,9 @@ class JobQueueService {
 
     return {
       total: items.length,
-      items: items.slice(safeOffset, safeOffset + safeLimit).map((j) => this.#clone(j)),
+      items: items
+        .slice(safeOffset, safeOffset + safeLimit)
+        .map((j) => this.#clone(j)),
     };
   }
 
@@ -364,7 +382,11 @@ class JobQueueService {
 
     const now = new Date().toISOString();
 
-    if (job.status === STATUS.COMPLETED || job.status === STATUS.FAILED || job.status === STATUS.CANCELED) {
+    if (
+      job.status === STATUS.COMPLETED ||
+      job.status === STATUS.FAILED ||
+      job.status === STATUS.CANCELED
+    ) {
       return this.#clone(job);
     }
 
@@ -382,7 +404,11 @@ class JobQueueService {
     if (job.status === STATUS.PROCESSING) {
       job.cancelRequested = true;
       job.updatedAt = now;
-      job.history.push({ at: now, event: "cancel_requested", details: { reason } });
+      job.history.push({
+        at: now,
+        event: "cancel_requested",
+        details: { reason },
+      });
       await this.#persist();
       return this.#clone(job);
     }
@@ -451,7 +477,7 @@ class JobQueueService {
       this.jobs.delete(id);
     }
 
-    this.order = this.order.filter((id) => !toDelete.some(t => t.id === id));
+    this.order = this.order.filter((id) => !toDelete.some((t) => t.id === id));
 
     if (toDelete.length > 0) {
       await this.#persist();
@@ -469,7 +495,11 @@ class JobQueueService {
 
     job.progress = normalized;
     job.updatedAt = now;
-    job.history.push({ at: now, event: "progress", details: details || { progress: normalized } });
+    job.history.push({
+      at: now,
+      event: "progress",
+      details: details || { progress: normalized },
+    });
 
     await this.#persist();
     return this.#clone(job);
@@ -480,7 +510,11 @@ class JobQueueService {
     return Boolean(job?.cancelRequested);
   }
 
-  async #setJobStatus(job, status, { result = null, error = null, details = null } = {}) {
+  async #setJobStatus(
+    job,
+    status,
+    { result = null, error = null, details = null } = {},
+  ) {
     const now = new Date().toISOString();
     job.status = status;
     job.updatedAt = now;
@@ -493,14 +527,22 @@ class JobQueueService {
       job.completedAt = now;
       job.progress = 100;
       job.result = result;
-      job.history.push({ at: now, event: "completed", details: details || null });
+      job.history.push({
+        at: now,
+        event: "completed",
+        details: details || null,
+      });
     } else if (status === STATUS.FAILED) {
       job.failedAt = now;
       job.error = error;
       job.history.push({ at: now, event: "failed", details: details || null });
     } else if (status === STATUS.CANCELED) {
       job.canceledAt = now;
-      job.history.push({ at: now, event: "canceled", details: details || null });
+      job.history.push({
+        at: now,
+        event: "canceled",
+        details: details || null,
+      });
     }
 
     await this.#persist();
@@ -560,7 +602,8 @@ class JobQueueService {
           payload: this.#clone(job.payload),
           metadata: this.#clone(job.metadata),
           requestedBy: job.requestedBy,
-          setProgress: async (value, details = null) => this.updateProgress(job.id, value, details),
+          setProgress: async (value, details = null) =>
+            this.updateProgress(job.id, value, details),
           isCanceled: () => this.isCancelRequested(job.id),
         };
 
@@ -599,8 +642,5 @@ class JobQueueService {
 
 const jobQueue = new JobQueueService();
 
-export {
-  jobQueue,
-  STATUS as JOB_STATUS,
-};
+export { jobQueue, STATUS as JOB_STATUS };
 export default jobQueue;

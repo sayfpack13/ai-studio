@@ -57,10 +57,16 @@ export function requireAdmin(req, res, next) {
 
 // Middleware to require API key for AI operations
 export function requireApiKey(req, res, next) {
+  // For job enqueue requests, provider is in payload.provider
+  // For other requests, provider is at top level
+  const requestedProvider = req.body?.payload?.provider || req.body?.provider || req.query?.provider;
+  const modelId = req.body?.payload?.model || req.body?.model;
+  const modelKey = req.body?.payload?.modelKey || req.body?.modelKey || req.query?.modelKey;
+
   resolveProviderContext(req.config, {
-    requestedProvider: req.body?.provider || req.query?.provider,
-    modelId: req.body?.model,
-    modelKey: req.body?.modelKey || req.query?.modelKey
+    requestedProvider,
+    modelId,
+    modelKey
   })
     .then((context) => {
       if (!context.provider || !isProviderConfigured(context.provider)) {

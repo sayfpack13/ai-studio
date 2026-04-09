@@ -92,7 +92,9 @@ export const generateMusic = async (prompt, model, options = {}) => {
 
   // If response is not OK, return error object
   if (!response.ok) {
-    return { error: data.error || `Request failed with status ${response.status}` };
+    return {
+      error: data.error || `Request failed with status ${response.status}`,
+    };
   }
 
   return data;
@@ -153,18 +155,24 @@ export const createLibraryAsset = async (asset) => {
 };
 
 export const updateLibraryAsset = async (assetId, patch) => {
-  const response = await authFetch(`${API_BASE_URL}/library/assets/${assetId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
+  const response = await authFetch(
+    `${API_BASE_URL}/library/assets/${assetId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
   return await response.json();
 };
 
 export const deleteLibraryAsset = async (assetId) => {
-  const response = await authFetch(`${API_BASE_URL}/library/assets/${assetId}`, {
-    method: "DELETE",
-  });
+  const response = await authFetch(
+    `${API_BASE_URL}/library/assets/${assetId}`,
+    {
+      method: "DELETE",
+    },
+  );
   return await response.json();
 };
 
@@ -187,9 +195,12 @@ export const searchLibraryAssets = async (payload) => {
 };
 
 export const cacheLibraryAsset = async (assetId) => {
-  const response = await authFetch(`${API_BASE_URL}/library/assets/${assetId}/cache`, {
-    method: "POST",
-  });
+  const response = await authFetch(
+    `${API_BASE_URL}/library/assets/${assetId}/cache`,
+    {
+      method: "POST",
+    },
+  );
   return await response.json();
 };
 
@@ -264,7 +275,7 @@ export const getJobEvents = async (jobId) => {
 };
 
 export const cancelServerJob = async (jobId, reason = "Canceled by user") => {
-  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/cancel`, {
+  const response = await authFetch(`${API_BASE_URL}/jobs/${jobId}/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason }),
@@ -409,7 +420,9 @@ export const generateImage = async (prompt, model, options = {}) => {
 
   // If response is not OK, return error object
   if (!response.ok) {
-    return { error: data.error || `Request failed with status ${response.status}` };
+    return {
+      error: data.error || `Request failed with status ${response.status}`,
+    };
   }
 
   return data;
@@ -435,7 +448,9 @@ export const generateVideo = async (prompt, model, options = {}) => {
 
   // If response is not OK, return error object
   if (!response.ok) {
-    return { error: data.error || `Request failed with status ${response.status}` };
+    return {
+      error: data.error || `Request failed with status ${response.status}`,
+    };
   }
 
   return data;

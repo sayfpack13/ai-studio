@@ -7,7 +7,9 @@ const router = express.Router();
 const ALLOWED_TYPES = new Set(["chat", "image", "video", "music", "pipeline"]);
 
 function normalizeType(value) {
-  const type = String(value || "").trim().toLowerCase();
+  const type = String(value || "")
+    .trim()
+    .toLowerCase();
   return ALLOWED_TYPES.has(type) ? type : null;
 }
 
@@ -46,9 +48,14 @@ router.post("/enqueue", requireApiKey, async (req, res) => {
       ...(req.body?.metadata && typeof req.body.metadata === "object"
         ? req.body.metadata
         : {}),
-      providerId: req.providerContext?.providerId || null,
+      // Use provider from payload/metadata if provided, otherwise fall back to API key context
+      providerId:
+        payload?.provider ||
+        req.body?.metadata?.provider ||
+        req.providerContext?.providerId ||
+        null,
       model: payload?.model || null,
-      modelKey: payload?.modelKey || null,
+      modelKey: payload?.modelKey || req.body?.metadata?.modelKey || null,
       promptPreview: safePromptPreview(payload),
       ip: req.ip || null,
       userAgent: req.headers["user-agent"] || null,
@@ -91,7 +98,9 @@ router.post("/pipeline", requireApiKey, async (req, res) => {
     });
     return res.status(202).json({ success: true, job: root });
   } catch (error) {
-    return res.status(500).json({ error: error.message || "Failed to enqueue pipeline" });
+    return res
+      .status(500)
+      .json({ error: error.message || "Failed to enqueue pipeline" });
   }
 });
 
@@ -106,7 +115,9 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const status = req.query?.status ? String(req.query.status).toLowerCase() : null;
+    const status = req.query?.status
+      ? String(req.query.status).toLowerCase()
+      : null;
     const allowedStatuses = Object.values(JOB_STATUS);
     if (status && !allowedStatuses.includes(status)) {
       return res.status(400).json({
@@ -162,12 +173,14 @@ router.get("/:id/events", async (req, res) => {
     const events = jobQueue.getJobEvents(req.params.id) || [];
     return res.json({ success: true, events });
   } catch (error) {
-    return res.status(500).json({ error: error.message || "Failed to fetch job events" });
+    return res
+      .status(500)
+      .json({ error: error.message || "Failed to fetch job events" });
   }
 });
 
-// POST /api/jobs/:id/cancel - requires API key
-router.post("/:id/cancel", requireApiKey, async (req, res) => {
+// POST /api/jobs/:id/cancel
+router.post("/:id/cancel", async (req, res) => {
   try {
     const existing = jobQueue.getJob(req.params.id);
     if (!existing) {

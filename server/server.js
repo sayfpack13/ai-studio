@@ -22,6 +22,14 @@ import { normalizeConfig } from "./utils/config.js";
 import { resolveProviderContext } from "./utils/provider-routing.js";
 import libraryService from "./services/library-service.js";
 import { findModel } from "./utils/models.js";
+import {
+  isWanI2VModel,
+  WAN_I2V_ENDPOINT,
+  buildWanI2VArgs,
+  validateWanI2VInput,
+  imageUrlToBase64,
+  localFileToBase64,
+} from "./routes/video.js";
 
 dotenv.config();
 
@@ -530,7 +538,10 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
         },
       );
 
-      const openaiResponse = transformOllamaToOpenAI(response.data, actualModelId);
+      const openaiResponse = transformOllamaToOpenAI(
+        response.data,
+        actualModelId,
+      );
       const transformed = toStandardImageResponse(openaiResponse, prompt);
       const out = transformed || openaiResponse;
       await setProgress(100, { stage: "completed" });
@@ -595,6 +606,19 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
   });
 
   const modelId = payload?.model || config.defaultModel;
+
+  // ── Wan I2V special path ──────────────────────────────────────────
+  if (isWanI2VModel(modelId)) {
+    return await processWanI2VJob({
+      payload,
+      prompt,
+      modelId,
+      providerContext,
+      setProgress,
+      isCanceled,
+    });
+  }
+
   const modelInfo = await findModel(
     config,
     modelId,
@@ -643,7 +667,10 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
         },
       );
 
-      const openaiResponse = transformOllamaToOpenAI(response.data, actualModelId);
+      const openaiResponse = transformOllamaToOpenAI(
+        response.data,
+        actualModelId,
+      );
       await setProgress(100, { stage: "completed" });
       return openaiResponse;
     } catch (error) {
@@ -708,6 +735,376 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
   }
 }
 
+/**
+ * Process a Wan I2V video generation job through the dedicated Chutes endpoint.
+ * This mirrors the logic in video.js handleWanI2VGeneration but works without
+ * req/res objects so it can run inside the job queue processor.
+ */
+async function processWanI2VJob({
+  payload,
+  prompt,
+  modelId,
+  providerContext,
+  setProgress,
+  isCanceled,
+}) {
+  const timeout = providerContext.provider?.timeout?.video || 300000;
+
+  // Build & validate Wan I2V args from the job payload
+  const args = buildWanI2VArgs(payload);
+  const validationError = validateWanI2VInput({
+    prompt: args.prompt,
+    image: args.image,
+    frames: args.frames,
+    fps: args.fps,
+    guidanceScale: args.guidance_scale,
+    guidanceScale2: args.guidance_scale_2,
+    seed: args.seed,
+    resolution: args.resolution,
+  });
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  // Convert image to base64 if needed
+  let imageBase64 = args.image;
+  if (args.image) {
+    if (args.image.startsWith("http://") || args.image.startsWith("https://")) {
+      console.log("[Wan I2V Job] Converting remote image URL to base64...");
+      try {
+        imageBase64 = await imageUrlToBase64(args.image);
+        console.log(
+          "[Wan I2V Job] Image converted, base64 length:",
+          imageBase64.length,
+        );
+      } catch (fetchError) {
+        console.error(
+          "[Wan I2V Job] Failed to fetch image:",
+          fetchError.message,
+        );
+        throw new Error(`Failed to fetch image: ${fetchError.message}`);
+      }
+    } else if (args.image.startsWith("/uploads/")) {
+      console.log("[Wan I2V Job] Converting local file to base64...");
+      try {
+        imageBase64 = await localFileToBase64(args.image);
+        console.log(
+          "[Wan I2V Job] Local file converted, base64 length:",
+          imageBase64.length,
+        );
+      } catch (fetchError) {
+        console.error(
+          "[Wan I2V Job] Failed to read local file:",
+          fetchError.message,
+        );
+        throw new Error(`Failed to read local file: ${fetchError.message}`);
+      }
+    } else if (
+      args.image.length > 100 &&
+      /^[A-Za-z0-9+/=]+$/.test(args.image)
+    ) {
+      console.log(
+        "[Wan I2V Job] Image appears to be base64 already, length:",
+        args.image.length,
+      );
+    } else {
+      console.log("[Wan I2V Job] Unknown image format, attempting to fetch...");
+      try {
+        if (args.image.startsWith("/") || args.image.startsWith(".")) {
+          imageBase64 = await localFileToBase64(args.image);
+        } else {
+          imageBase64 = await imageUrlToBase64(args.image);
+        }
+        console.log(
+          "[Wan I2V Job] Image converted, base64 length:",
+          imageBase64.length,
+        );
+      } catch (fetchError) {
+        console.error(
+          "[Wan I2V Job] Failed to process image:",
+          fetchError.message,
+        );
+        throw new Error(
+          "Invalid image format: expected base64, URL, or local file path",
+        );
+      }
+    }
+  }
+
+  if (isCanceled()) throw new Error("Canceled");
+
+  await setProgress(20, { stage: "requesting_provider" });
+
+  const requestData = { ...args, image: imageBase64 };
+
+  // Build headers — skip Authorization for public chutes
+  const isPublicChute = providerContext.isPublicChute;
+  const apiKey = providerContext.provider?.apiKey;
+  const requestHeaders = { "Content-Type": "application/json" };
+  if (!isPublicChute && apiKey && apiKey !== "public") {
+    requestHeaders.Authorization = `Bearer ${apiKey}`;
+  }
+
+  let response;
+  try {
+    console.log("[Wan I2V Job] Sending request to:", WAN_I2V_ENDPOINT);
+    console.log("[Wan I2V Job] Prompt length:", args.prompt?.length || 0);
+    console.log("[Wan I2V Job] Image length:", imageBase64?.length || 0);
+    console.log("[Wan I2V Job] Frames:", args.frames);
+
+    response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
+      headers: requestHeaders,
+      timeout,
+      responseType: "arraybuffer",
+    });
+  } catch (axiosError) {
+    let errorMessage = "Wan I2V generation failed";
+    const networkErrors = [
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "ENOTFOUND",
+      "ECONNREFUSED",
+      "ENETUNREACH",
+      "EAI_AGAIN",
+    ];
+    if (networkErrors.includes(axiosError.code)) {
+      errorMessage =
+        "Network error: Unable to connect to the video generation service.";
+    } else if (axiosError.code === "ECONNABORTED") {
+      errorMessage =
+        "Request timeout: The video generation service took too long to respond.";
+    } else if (axiosError.response?.data) {
+      try {
+        const errorBuffer = Buffer.from(axiosError.response.data);
+        const errorJson = JSON.parse(errorBuffer.toString("utf8"));
+        errorMessage =
+          errorJson.detail ||
+          errorJson.error?.message ||
+          errorJson.message ||
+          errorMessage;
+      } catch {
+        try {
+          const errorBuffer = Buffer.from(axiosError.response.data);
+          errorMessage = errorBuffer.toString("utf8").slice(0, 500);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    console.error("[Wan I2V Job] API error:", axiosError.message);
+    throw new Error(errorMessage);
+  }
+
+  await setProgress(80, { stage: "processing_response" });
+
+  // Parse the response — may be binary video data or JSON
+  const buffer = Buffer.from(response.data);
+  const isMp4Data =
+    buffer.length > 12 &&
+    (buffer.toString("ascii", 4, 8) === "ftyp" ||
+      buffer.includes(Buffer.from("ftyp"), 4));
+
+  let binaryBuffer = null;
+  let result = null;
+
+  if (isMp4Data || buffer.length > 100000) {
+    const isJson =
+      buffer.length > 0 && (buffer[0] === 0x7b || buffer[0] === 0x5b);
+    if (!isJson) {
+      binaryBuffer = buffer;
+    } else {
+      try {
+        result = JSON.parse(buffer.toString("utf8"));
+      } catch {
+        binaryBuffer = buffer;
+      }
+    }
+  } else {
+    try {
+      result = JSON.parse(buffer.toString("utf8"));
+    } catch {
+      binaryBuffer = buffer;
+    }
+  }
+
+  // Handle array / array-like responses (chutes.ai sometimes returns video as byte arrays)
+  if (!binaryBuffer && Array.isArray(result) && result.length > 10000) {
+    try {
+      binaryBuffer = Buffer.from(result);
+    } catch {
+      // ignore
+    }
+  }
+  if (!binaryBuffer && typeof result === "object" && result !== null) {
+    const keys = Object.keys(result);
+    if (keys.length > 10000 && keys.every((k) => /^\d+$/.test(k))) {
+      try {
+        const values = keys
+          .sort((a, b) => parseInt(a) - parseInt(b))
+          .map((k) => result[k]);
+        binaryBuffer = Buffer.from(values);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Check for base64-encoded video in string fields
+  let binaryData = null;
+  if (!binaryBuffer && result) {
+    for (const [, value] of Object.entries(result)) {
+      if (typeof value === "string" && value.length > 5000) {
+        if (
+          value.startsWith("AAAA") ||
+          value.includes("ftyp") ||
+          /^[A-Za-z0-9+/=]+$/.test(value.slice(0, 100))
+        ) {
+          binaryData = value;
+          break;
+        }
+      }
+    }
+    if (
+      !binaryData &&
+      result.providerResponse &&
+      typeof result.providerResponse === "string"
+    ) {
+      if (
+        result.providerResponse.includes("ftyp") ||
+        result.providerResponse.length > 10000
+      ) {
+        binaryData = result.providerResponse;
+      }
+    }
+    if (!binaryData && result.data && typeof result.data === "string") {
+      if (result.data.includes("ftyp") || result.data.length > 10000) {
+        binaryData = result.data;
+      }
+    }
+  }
+
+  const providerId = providerContext.providerId;
+
+  // ── Binary video data → save to disk ──────────────────────────────
+  if (binaryBuffer || binaryData) {
+    const fs = await import("fs");
+    const path = await import("path");
+    const crypto = await import("crypto");
+    const { exec } = await import("child_process");
+
+    const videoBuffer = binaryBuffer || Buffer.from(binaryData, "base64");
+    const videoHash = crypto
+      .createHash("md5")
+      .update(videoBuffer)
+      .digest("hex");
+    const filename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
+    const thumbFilename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.jpg`;
+    const videosDir = path.join(process.cwd(), "data", "uploads", "videos");
+
+    if (!fs.existsSync(videosDir)) {
+      fs.mkdirSync(videosDir, { recursive: true });
+    }
+
+    const videoPath = path.join(videosDir, filename);
+    const thumbPath = path.join(videosDir, thumbFilename);
+    fs.writeFileSync(videoPath, videoBuffer);
+
+    let thumbnailUrl = null;
+    try {
+      await new Promise((resolve) => {
+        exec(
+          `ffmpeg -y -i "${videoPath}" -ss 00:00:01 -vframes 1 -vf "scale=320:-1" "${thumbPath}"`,
+          { timeout: 10000 },
+          () => resolve(),
+        );
+      });
+      if (fs.existsSync(thumbPath)) {
+        thumbnailUrl = `/uploads/videos/${thumbFilename}`;
+      }
+    } catch {
+      // thumbnail generation is optional
+    }
+
+    const videoUrl = `/uploads/videos/${filename}`;
+
+    await libraryService.createAsset({
+      type: "video",
+      source: "video",
+      title: prompt.slice(0, 80) || "Generated video",
+      url: videoUrl,
+      metadata: { model: modelId, provider: providerId },
+    });
+
+    await setProgress(100, { stage: "completed" });
+    return {
+      success: true,
+      data: [
+        {
+          url: videoUrl,
+          thumbnail: thumbnailUrl,
+          revised_prompt: prompt,
+        },
+      ],
+      id: result?.id || result?.job_id || result?.request_id || null,
+    };
+  }
+
+  // ── JSON response with URL ────────────────────────────────────────
+  let videoUrl = null;
+  if (result) {
+    // Try common URL fields
+    videoUrl =
+      result.url ||
+      result.video_url ||
+      result.output?.url ||
+      result.data?.url ||
+      null;
+
+    // Try extracting URL from text content
+    if (!videoUrl && typeof result.data === "string") {
+      const urlMatch = result.data.match(/https?:\/\/[^\s"')\]]+/);
+      if (urlMatch) videoUrl = urlMatch[0];
+    }
+    if (!videoUrl && result.choices?.[0]?.message?.content) {
+      const content = result.choices[0].message.content;
+      const urlMatch = content.match(/https?:\/\/[^\s"')\]]+/);
+      if (urlMatch) videoUrl = urlMatch[0];
+    }
+    // Numeric keyed object — skip
+  }
+
+  if (!videoUrl) {
+    throw new Error(
+      "Wan I2V response did not include a video URL. Raw response: " +
+        JSON.stringify(result).slice(0, 500),
+    );
+  }
+
+  await libraryService.createAsset({
+    type: "video",
+    source: "video",
+    title: String(prompt).slice(0, 80) || "Generated video",
+    url: videoUrl,
+    metadata: {
+      model: modelId,
+      provider: providerId,
+      endpoint: "wan-i2v-fast",
+    },
+  });
+
+  await setProgress(100, { stage: "completed" });
+  return {
+    success: true,
+    data: [
+      {
+        url: videoUrl,
+        revised_prompt: prompt,
+      },
+    ],
+    id: result?.id || result?.job_id || result?.request_id || null,
+  };
+}
+
 async function processMusicJob({ payload, setProgress, isCanceled }) {
   const prompt = getPromptFromPayload(payload);
   if (!prompt) throw new Error("Prompt required");
@@ -769,7 +1166,10 @@ async function processMusicJob({ payload, setProgress, isCanceled }) {
         },
       );
 
-      const openaiResponse = transformOllamaToOpenAI(response.data, actualModelId);
+      const openaiResponse = transformOllamaToOpenAI(
+        response.data,
+        actualModelId,
+      );
       await setProgress(100, { stage: "completed" });
       return openaiResponse;
     } catch (error) {

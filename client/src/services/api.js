@@ -240,6 +240,15 @@ export const enqueuePipeline = async (pipelineType, payload) => {
   return await response.json();
 };
 
+export const enqueueJob = async ({ type, payload, metadata = {} }) => {
+  const response = await authFetch(`${API_BASE_URL}/jobs/enqueue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, payload, metadata }),
+  });
+  return await response.json();
+};
+
 export const getJobs = async (filters = {}) => {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {

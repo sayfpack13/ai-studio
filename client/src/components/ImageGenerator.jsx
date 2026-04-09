@@ -48,19 +48,30 @@ export default function ImageGenerator() {
   const [localError, setLocalError] = useState("");
   const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
 
-  // Get the most recent failed job error, only if recent
-  const latestFailedJob = failedJobs.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
-  const latestCompletedJob = imageJobs
-    .filter(job => job.status === "completed")
-    .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
-  const FIVE_MINUTES = 5 * 60 * 1000;
-  const isRecentFailure = latestFailedJob && (Date.now() - (latestFailedJob.completedAt || 0)) < FIVE_MINUTES;
-  const shouldShowFailedError = isRecentFailure && (
-    !latestCompletedJob ||
-    (latestFailedJob.completedAt || 0) > (latestCompletedJob.completedAt || 0)
-  );
-  const jobError = shouldShowFailedError ? (latestFailedJob?.error || "") : "";
-  const error = localError || jobError;
+  // Only show error from localError (current generation) or when a job is explicitly selected
+  // Don't automatically show errors from failed jobs in the list
+  const error = localError;
+
+  // Clear local error on component mount to prevent stale errors on page reload
+  useEffect(() => {
+    setLocalError("");
+  }, []);
+
+  // Auto-select the first running or pending image job after page reload to show progress
+  useEffect(() => {
+    // Only auto-select if no job is currently selected
+    if (selectedRunningJobId) return;
+
+    // Prioritize running jobs, then pending jobs
+    const firstRunningJob = runningJobs[0];
+    const firstPendingJob = pendingJobs[0];
+
+    if (firstRunningJob) {
+      setSelectedRunningJobId(firstRunningJob.id);
+    } else if (firstPendingJob) {
+      setSelectedRunningJobId(firstPendingJob.id);
+    }
+  }, [runningJobs, pendingJobs, selectedRunningJobId]);
 
   // Get the selected running job for progress display
   const selectedRunningJob = imageJobs.find(job => job.id === selectedRunningJobId);
@@ -778,19 +789,28 @@ export default function ImageGenerator() {
       },
     };
 
-    // Enqueue the job with save callback
-    const jobId = enqueueJob("image", jobParams, (result) => {
-      saveImage(imageId, prompt, result, modelIdToSend, jobParams.metadata);
+    // Enqueue the job with callback for UI updates (history saving is handled by registered saveImage)
+    const jobId = enqueueJob("image", jobParams, (resultData) => {
+      console.log("[ImageGenerator] Job callback called with resultData:", resultData);
+      const imageData = {
+        url: resultData.url,
+        revisedPrompt: resultData.revisedPrompt || prompt,
+      };
+      setGeneratedImage(imageData);
+      console.log("[ImageGenerator] setGeneratedImage called");
+
+      // Add to library
       addLibraryAsset({
         type: "image",
         source: "image",
         title: prompt.slice(0, 80) || "Generated image",
-        url: result.url,
+        url: imageData.url,
         metadata: {
           model: modelIdToSend,
           provider: effectiveProvider,
         },
       });
+      console.log("[ImageGenerator] addLibraryAsset called");
     });
     
     // Track this job to show result when complete
@@ -1484,9 +1504,6 @@ export default function ImageGenerator() {
             progress={selectedRunningJobId !== null ? selectedJobProgress : null}
             onClearError={() => {
               setLocalError("");
-              if (latestFailedJob) {
-                removeJob(latestFailedJob.id);
-              }
             }}
           />
         </div>

@@ -116,25 +116,17 @@ const serverJobToClient = (serverJob) => ({
 export function JobProvider({ children}) {
   const [jobs, setJobs] = useState(() => {
     const loaded = loadJobsFromStorage();
-    // Reset any stuck running jobs to pending on load
-    // Also clear old "connection lost" errors from previous bug
+    // Keep jobs as-is - they will sync with server via polling
     return loaded
       .map(job => {
-        if (job.status === "running") {
-          return { ...job, status: "pending", progress: 0 };
-        }
-        // Clear the old "Connection lost" error message from previous bug
-        if (job.status === "failed" && job.error === "Connection lost - job interrupted") {
+        // Clear old error messages from previous bugs
+        if (job.status === "failed" && (job.error === "Connection lost - job interrupted" || job.error === "Generation interrupted - page was closed. Please retry manually.")) {
           return { ...job, status: "pending", error: null, progress: 0 };
         }
         return job;
       })
       .filter(job => {
-        // Filter out jobs that are too old and still pending (stale jobs)
-        const MAX_PENDING_AGE_MS = 5 * 60 * 1000; // 5 minutes
-        if (job.status === "pending" && Date.now() - job.createdAt > MAX_PENDING_AGE_MS) {
-          return false;
-        }
+        // Keep all jobs - they will be processed or cleaned up by user action
         return true;
       });
   });
@@ -247,6 +239,7 @@ export function JobProvider({ children}) {
 
   // Update job status
   const updateJob = useCallback((jobId, updates) => {
+    console.log(`[JobContext] updateJob called for ${jobId} with updates:`, updates);
     setJobs((prev) =>
       prev.map((job) =>
         job.id === jobId ? { ...job, ...updates } : job
@@ -415,10 +408,12 @@ export function JobProvider({ children}) {
       const { type, params } = job;
 
       if (type === "image") {
+        console.log(`[JobContext] Processing image job ${job.id}`);
         result = await generateImage(params.prompt, params.model, {
           ...params.options,
           signal: controller.signal,
         });
+        console.log(`[JobContext] generateImage returned for job ${job.id}:`, result);
       } else if (type === "video") {
         result = await generateVideo(params.prompt, params.model, {
           ...params.options,
@@ -473,11 +468,13 @@ export function JobProvider({ children}) {
         };
       }
 
-      // Save to history
+      // Save to history (using registered save function)
       if (resultData?.url && saveResult) {
+        console.log(`[JobContext] Saving job ${job.id} to history via registered save function`);
         await saveResult(resultData);
       }
 
+      console.log(`[JobContext] Job ${job.id} completed successfully`);
       return { result: resultData };
     } catch (err) {
       if (err?.name === "AbortError") {
@@ -497,73 +494,79 @@ export function JobProvider({ children}) {
     if (pendingJobs.length === 0 || activeCount >= MAX_CONCURRENT_JOBS) return;
 
     const jobsToStart = pendingJobs.slice(0, MAX_CONCURRENT_JOBS - activeCount);
-    const now = Date.now();
-    const MAX_JOB_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
     jobsToStart.forEach((job) => {
       if (activeJobIdsRef.current.has(job.id)) return;
 
-      // Skip jobs that are too old (likely stale from a page refresh)
-      // They will be marked as failed in the next poll
-      if (now - job.createdAt > MAX_JOB_AGE_MS) {
-        updateJob(job.id, {
-          status: "failed",
-          error: "Job timed out - refresh page to generate again",
-          completedAt: now
-        });
+      // Skip client-side processing for jobs with serverJobId (processed on server)
+      if (job.params?.serverJobId) {
+        // Mark as running since server is processing it
+        updateJob(job.id, { status: "running", progress: 10 });
         return;
       }
 
       activeJobIdsRef.current.add(job.id);
 
-      // Build saveResult from registered save functions (works after page reload)
-      let saveResult = job.onSave || null;
-      if (!saveResult) {
-        const saveFn = saveFnsRef.current[job.type];
-        if (saveFn) {
-          if (job.type === "image") {
-            saveResult = (data) =>
-              saveFn(
-                job.params.imageId,
-                job.params.prompt,
-                data,
-                job.params.model,
-                job.params.metadata
-              );
-          } else if (job.type === "video") {
-            saveResult = (data) =>
-              saveFn(
-                job.params.videoId,
-                job.params.prompt,
-                data,
-                job.params.model,
-                job.params.metadata
-              );
-          } else if (job.type === "music") {
-            saveResult = (data) =>
-              saveFn(
-                job.params.musicId,
-                job.params.prompt,
-                data,
-                job.params.model
-              );
-          }
+      // Build saveResult from registered save functions (for history - always called)
+      let saveResult = null;
+      const saveFn = saveFnsRef.current[job.type];
+      if (saveFn) {
+        if (job.type === "image") {
+          saveResult = (data) =>
+            saveFn(
+              job.params.imageId,
+              job.params.prompt,
+              data,
+              job.params.model,
+              job.params.metadata
+            );
+        } else if (job.type === "video") {
+          saveResult = (data) =>
+            saveFn(
+              job.params.videoId,
+              job.params.prompt,
+              data,
+              job.params.model,
+              job.params.metadata
+            );
+        } else if (job.type === "music") {
+          saveResult = (data) =>
+            saveFn(
+              job.params.musicId,
+              job.params.prompt,
+              data,
+              job.params.model
+            );
         }
       }
 
       // Process job asynchronously
-      processJob(job, saveResult).then((outcome) => {
+      processJob(job, saveResult).then(async (outcome) => {
+        console.log(`[JobContext] Job ${job.id} processJob returned:`, { cancelled: outcome.cancelled, error: outcome.error, hasResult: !!outcome.result });
+        
+        // Call job.onSave callback if exists (for UI updates like setGeneratedVideo, addLibraryAsset)
+        if (job.onSave && outcome.result) {
+          console.log(`[JobContext] Calling job.onSave callback for job ${job.id}`);
+          try {
+            await job.onSave(outcome.result);
+          } catch (err) {
+            console.error("Error in job.onSave callback:", err);
+          }
+        }
         activeJobIdsRef.current.delete(job.id);
 
         if (outcome.cancelled) {
+          console.log(`[JobContext] Job ${job.id} cancelled`);
           updateJob(job.id, { status: "cancelled", completedAt: Date.now() });
         } else if (outcome.error) {
+          console.log(`[JobContext] Job ${job.id} failed:`, outcome.error);
           updateJob(job.id, {
             status: "failed",
             error: outcome.error,
             completedAt: Date.now(),
           });
         } else {
+          console.log(`[JobContext] Job ${job.id} completed, updating status`);
           updateJob(job.id, {
             status: "completed",
             result: outcome.result,
@@ -571,6 +574,13 @@ export function JobProvider({ children}) {
             completedAt: Date.now(),
           });
         }
+      }).catch(err => {
+        console.error(`[JobContext] Unhandled error processing job ${job.id}:`, err);
+        updateJob(job.id, {
+          status: "failed",
+          error: err.message || "Processing error",
+          completedAt: Date.now(),
+        });
       });
     });
   }, [jobs, processJob, updateJob]);
@@ -597,6 +607,7 @@ export function JobProvider({ children}) {
     getJobsByType,
     updateJob,
     registerSaveFns,
+    processQueue: () => {}, // Placeholder for future queue management
     sidebarOpen,
     setSidebarOpen,
     selectedJob,

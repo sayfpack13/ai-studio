@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
-import { enqueuePipeline, getModels, generateVideo, uploadLibraryFile } from "../services/api";
+import { enqueuePipeline, getModels, generateVideo, uploadLibraryFile, enqueueJob as enqueueServerJob, getJobs } from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
@@ -72,6 +72,100 @@ export default function VideoGenerator() {
   useEffect(() => {
     setLocalError("");
   }, []);
+
+  // Auto-select the first running or pending video job after page reload to show progress
+  useEffect(() => {
+    // Only auto-select if no job is currently selected
+    if (selectedRunningJobId) return;
+
+    // Prioritize running jobs, then pending jobs
+    const firstRunningJob = runningJobs[0];
+    const firstPendingJob = pendingJobs[0];
+
+    if (firstRunningJob) {
+      setSelectedRunningJobId(firstRunningJob.id);
+    } else if (firstPendingJob) {
+      setSelectedRunningJobId(firstPendingJob.id);
+    }
+  }, [runningJobs, pendingJobs, selectedRunningJobId]);
+
+  // Poll server jobs to sync status with client-side jobs
+  useEffect(() => {
+    // Initial sync on mount
+    const syncServerJobs = async () => {
+      try {
+        const result = await getJobs({ type: "video", limit: 100 });
+        if (result.success && result.items) {
+          console.log("[VideoGenerator] Server jobs:", result.items.map(j => ({ id: j.id, status: j.status, progress: j.progress })));
+          // Sync server jobs to client-side job state
+          result.items.forEach(serverJob => {
+            const clientJob = videoJobs.find(j => j.params?.serverJobId === serverJob.id);
+            if (clientJob) {
+              console.log(`[VideoGenerator] Syncing job ${clientJob.id}: server status=${serverJob.status}, client status=${clientJob.status}`);
+              // Update client job status based on server job
+              if (serverJob.status === "completed" && clientJob.status !== "completed") {
+                console.log("[VideoGenerator] Marking job as completed:", clientJob.id);
+                updateJob(clientJob.id, {
+                  status: "completed",
+                  progress: 100,
+                  result: serverJob.result,
+                });
+                // Handle completion - save to history and library
+                if (serverJob.result) {
+                  const videoUrl = serverJob.result?.data?.[0]?.url || serverJob.result?.url;
+                  if (videoUrl) {
+                    const videoData = {
+                      url: videoUrl,
+                      thumbnail: serverJob.result?.data?.[0]?.thumbnail || null,
+                      id: serverJob.result?.id,
+                    };
+                    setGeneratedVideo(videoData);
+                    saveVideo(
+                      clientJob.params.videoId,
+                      clientJob.prompt,
+                      videoData,
+                      clientJob.model,
+                      clientJob.params.metadata,
+                    );
+                    addLibraryAsset({
+                      type: "video",
+                      source: "video",
+                      title: clientJob.prompt.slice(0, 80) || "Generated video",
+                      url: videoData.url,
+                      metadata: clientJob.params.metadata,
+                    });
+                  }
+                }
+              } else if (serverJob.status === "failed" && clientJob.status !== "failed") {
+                updateJob(clientJob.id, {
+                  status: "failed",
+                  error: serverJob.error?.message || serverJob.error || "Generation failed",
+                });
+              } else if (serverJob.status === "processing" && clientJob.status === "pending") {
+                updateJob(clientJob.id, {
+                  status: "running",
+                  progress: serverJob.progress || 10,
+                });
+              } else if (serverJob.status === "processing" && clientJob.status === "running") {
+                updateJob(clientJob.id, {
+                  progress: serverJob.progress || clientJob.progress,
+                });
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Failed to sync server jobs:", err);
+      }
+    };
+
+    syncServerJobs();
+
+    // Poll every 3 seconds
+    const pollInterval = setInterval(syncServerJobs, 3000);
+
+    return () => clearInterval(pollInterval);
+  }, [videoJobs, updateJob, saveVideo, addLibraryAsset]);
 
   // Only show error from localError (current generation) or when a job is explicitly selected
   // Don't automatically show errors from failed jobs in the list
@@ -696,33 +790,36 @@ export default function VideoGenerator() {
       },
     };
 
-    // Enqueue the job with save callback
-    const jobId = enqueueJob("video", jobParams, (result) => {
-      const videoUrl = result.data?.[0]?.url || result.video || result.url;
-      const thumbnail = result.data?.[0]?.thumbnail || null;
-      const videoData = {
-        url: videoUrl,
-        thumbnail,
-        id: result.id,
-      };
-      setGeneratedVideo(videoData);
-
-      // Save to history
-      saveVideo(
-        videoId,
-        prompt,
-        videoData,
-        modelIdToSend,
-        jobParams.metadata,
-      );
-
-      addLibraryAsset({
+    // Enqueue job on server-side job queue for backend processing
+    try {
+      const serverResult = await enqueueServerJob({
         type: "video",
-        source: "video",
-        title: prompt.slice(0, 80) || "Generated video",
-        url: videoData.url,
-        metadata: {
+        payload: {
+          prompt,
           model: modelIdToSend,
+          provider: effectiveProvider,
+          modelKey: isLocalModelSelected ? undefined : selectedInfo?.modelKey,
+          ...(isWanI2VSelected
+            ? {
+                image: wanImageData,
+                wanFrames: clamp(Number(wanFrames), 21, 140),
+                wanFps: clamp(Number(wanFps), 16, 24),
+                wanFast: Boolean(wanFast),
+                wanSeed: wanSeed === "" ? null : Number(wanSeed),
+                wanResolution: wanResolution === "720p" ? "720p" : "480p",
+                wanGuidanceScale: clamp(Number(wanGuidanceScale), 0, 10),
+                wanGuidanceScale2: clamp(Number(wanGuidanceScale2), 0, 10),
+                wanNegativePrompt:
+                  wanNegativePrompt?.trim() || WAN_DEFAULT_NEGATIVE_PROMPT,
+              }
+            : {
+                duration,
+                fps,
+              }),
+        },
+        metadata: {
+          videoId,
+          modelKey: selectedInfo?.modelKey || selectedModel,
           provider: effectiveProvider,
           ...(isWanI2VSelected
             ? {
@@ -739,13 +836,32 @@ export default function VideoGenerator() {
                   imageSourceType: wanImageSourceType,
                 },
               }
-            : {}),
+            : {
+                duration,
+                fps,
+              }),
         },
       });
-    });
 
-    // Track this job to show result when complete
-    setSelectedRunningJobId(jobId);
+      if (serverResult.success && serverResult.job) {
+        // Create client-side job to track the server job
+        const jobId = enqueueJob("video", {
+          prompt,
+          model: modelIdToSend,
+          videoId,
+          options: { provider: effectiveProvider, modelKey: selectedInfo?.modelKey },
+          metadata: jobParams.metadata,
+          serverJobId: serverResult.job.id, // Track server job ID
+        }, null); // No callback - we'll poll for status
+
+        setSelectedRunningJobId(jobId);
+      } else {
+        throw new Error(serverResult.error || "Failed to enqueue job on server");
+      }
+    } catch (err) {
+      setLocalError(err.message || "Failed to start generation");
+      return;
+    }
   };
 
   const handleDownload = () => {

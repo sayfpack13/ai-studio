@@ -433,7 +433,17 @@ async function handleWanI2VGeneration({
     let errorMessage = "Wan I2V generation failed";
     let errorDetail = null;
     
-    if (axiosError.response?.data) {
+    // Detect network-related errors
+    const networkErrors = ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNREFUSED', 'ENETUNREACH', 'EAI_AGAIN'];
+    const errorCode = axiosError.code;
+    
+    if (errorCode && networkErrors.includes(errorCode)) {
+      errorMessage = "Network error: Unable to connect to the video generation service. Please check your internet connection and try again.";
+      errorDetail = { code: errorCode, message: axiosError.message };
+    } else if (axiosError.code === 'ECONNABORTED') {
+      errorMessage = "Request timeout: The video generation service took too long to respond. Please try again.";
+      errorDetail = { code: errorCode, message: axiosError.message };
+    } else if (axiosError.response?.data) {
       try {
         const errorBuffer = Buffer.from(axiosError.response.data);
         const errorJson = JSON.parse(errorBuffer.toString('utf8'));

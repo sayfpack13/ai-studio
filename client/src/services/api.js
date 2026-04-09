@@ -456,6 +456,19 @@ export const generateVideo = async (prompt, model, options = {}) => {
   return data;
 };
 
+export const stitchVideos = async (videoUrls) => {
+  const response = await authFetch(`${API_BASE_URL}/video/stitch`, {
+    method: "POST",
+    body: JSON.stringify({ videoUrls }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || `Stitch failed with status ${response.status}`);
+  }
+  return data;
+};
+
 export const getModels = async ({
   category,
   provider = "all",

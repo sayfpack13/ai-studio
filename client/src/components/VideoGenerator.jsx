@@ -9,6 +9,7 @@ import {
   getJobs,
 } from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
+import StitchDialog from "./StitchDialog";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
@@ -21,6 +22,7 @@ import {
   Settings,
   X,
   ChevronDown,
+  Scissors,
 } from "lucide-react";
 
 // Generate unique video ID
@@ -252,6 +254,7 @@ export default function VideoGenerator() {
                   thumbnail:
                     selectedServerJob.result?.data?.[0]?.thumbnail || null,
                   id: selectedServerJob.result?.id,
+                  prompt: selectedServerJob.payload?.prompt || promptRef.current,
                 };
                 setGeneratedVideo(videoData);
                 // Save to history
@@ -349,6 +352,7 @@ export default function VideoGenerator() {
   const [wanShowAdvanced, setWanShowAdvanced] = useState(false);
   const [wanExtractingFrame, setWanExtractingFrame] = useState(false);
   const [wanSourceVideoTitle, setWanSourceVideoTitle] = useState("");
+  const [showStitchDialog, setShowStitchDialog] = useState(false);
 
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -679,12 +683,13 @@ export default function VideoGenerator() {
                 selectedJob.result?.thumbnail ||
                 null,
               id: selectedJob.result?.id || selectedJob.params?.videoId,
+              prompt: selectedJob.payload?.prompt || selectedJob.params?.prompt,
             });
           } else if (selectedJob.params?.videoId) {
             // Fallback to history lookup
             const historyItem = getVideo(selectedJob.params.videoId);
             if (historyItem) {
-              setGeneratedVideo(historyItem.result || null);
+              setGeneratedVideo({ ...historyItem.result, prompt: historyItem.prompt } || null);
             }
           }
         }
@@ -711,10 +716,12 @@ export default function VideoGenerator() {
       const videoUrl =
         job.result?.data?.[0]?.url || job.result?.url;
       if (videoUrl) {
+        const jobPrompt = job.prompt || job.params?.prompt || promptRef.current;
         const videoData = {
           url: videoUrl,
           thumbnail: job.result?.data?.[0]?.thumbnail || job.result?.thumbnail || null,
           id: job.result?.id || job.params?.videoId,
+          prompt: jobPrompt,
         };
         setGeneratedVideo(videoData);
 
@@ -723,7 +730,7 @@ export default function VideoGenerator() {
           job.params?.videoId || job.result?.id || generateVideoId();
         saveVideoRef.current?.(
           videoId,
-          job.prompt || job.params?.prompt || promptRef.current,
+          jobPrompt,
           videoData,
           job.model || job.params?.model,
           job.params?.metadata || null,
@@ -731,7 +738,7 @@ export default function VideoGenerator() {
       } else if (job.params?.videoId) {
         const historyItem = getVideo(job.params.videoId);
         if (historyItem) {
-          setGeneratedVideo(historyItem.result || null);
+          setGeneratedVideo({ ...historyItem.result, prompt: historyItem.prompt } || null);
         }
       }
       setSelectedRunningJobId(null);
@@ -1071,7 +1078,7 @@ export default function VideoGenerator() {
       const videoItem = getVideo(videoId);
       if (!videoItem) return;
 
-      setGeneratedVideo(videoItem.result || null);
+      setGeneratedVideo(videoItem.result ? { ...videoItem.result, prompt: videoItem.prompt } : null);
       setPrompt(videoItem.prompt || "");
       setLocalError("");
       setSelectedRunningJobId(null); // Clear running job to prevent showing loading state
@@ -1907,6 +1914,58 @@ export default function VideoGenerator() {
                   <span className="ml-2 text-xs opacity-75">(Queued)</span>
                 )}
             </Button>
+
+            <Button
+              variant="ghost"
+              onClick={() => setShowStitchDialog(true)}
+              leftIcon={<Scissors className="w-4 h-4" />}
+              className="w-full text-gray-300 hover:text-white"
+            >
+              Stitch Clips
+            </Button>
+
+            {/* Mobile Output — visible only below lg */}
+            <div className="lg:hidden mt-4">
+              <MediaOutputPanel
+                mediaType="video"
+                generatedMedia={generatedVideo}
+                mediaHistory={videoHistory}
+                getMediaIds={getVideoIds}
+                onDownload={handleDownload}
+                onPreview={(video) => {
+                  setSelectedRunningJobId(null);
+                  setGeneratedVideo({
+                    url: video.url,
+                    model: video.model,
+                    prompt: video.prompt,
+                  });
+                }}
+                onReloadPrompt={(video) => {
+                  setSelectedRunningJobId(null);
+                  setPrompt(video.prompt || "");
+                  setGeneratedVideo({
+                    url: video.url,
+                    model: video.model,
+                    prompt: video.prompt,
+                  });
+                }}
+                onDeleteMedia={(videoId) => {
+                  deleteVideo(videoId);
+                  if (generatedVideo?.id === videoId) {
+                    setGeneratedVideo(null);
+                  }
+                }}
+                onClearHistory={clearAllVideos}
+                loading={hasActiveJobs}
+                error={error}
+                progress={
+                  selectedRunningJobId !== null ? selectedJobProgress : null
+                }
+                onClearError={() => {
+                  setLocalError("");
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -1919,22 +1978,20 @@ export default function VideoGenerator() {
             getMediaIds={getVideoIds}
             onDownload={handleDownload}
             onPreview={(video) => {
-              // Just preview the video without loading prompt
-              // Clear selectedRunningJobId so loading state is correct
               setSelectedRunningJobId(null);
               setGeneratedVideo({
                 url: video.url,
                 model: video.model,
+                prompt: video.prompt,
               });
             }}
             onReloadPrompt={(video) => {
-              // Clear selectedRunningJobId so loading state is correct
               setSelectedRunningJobId(null);
-              // Load prompt and model for regeneration
               setPrompt(video.prompt || "");
               setGeneratedVideo({
                 url: video.url,
                 model: video.model,
+                prompt: video.prompt,
               });
             }}
             onDeleteMedia={(videoId) => {
@@ -1972,6 +2029,19 @@ export default function VideoGenerator() {
         onSelect={handleVideoAssetSelect}
         type="video"
         title="Select Video to Continue (last frame)"
+      />
+
+      {/* Stitch Dialog */}
+      <StitchDialog
+        open={showStitchDialog}
+        onClose={() => setShowStitchDialog(false)}
+        onStitchComplete={(data) => {
+          setGeneratedVideo({
+            url: data.url,
+            thumbnail: data.thumbnail,
+            prompt: `Stitched video (${data.clipCount} clips)`,
+          });
+        }}
       />
     </div>
   );

@@ -6,6 +6,148 @@ import libraryService from "../services/library-service.js";
 import { saveBuffer } from "../services/file-storage.js";
 
 const router = express.Router();
+
+// Stitch route does not need a provider — it's a local ffmpeg operation
+router.post("/stitch", async (req, res) => {
+  const fs = await import("fs");
+  const fsp = await import("fs/promises");
+  const path = await import("path");
+  const crypto = await import("crypto");
+  const { exec } = await import("child_process");
+
+  const tempFiles = [];
+
+  const cleanup = async () => {
+    for (const f of tempFiles) {
+      try { await fsp.unlink(f); } catch {}
+    }
+  };
+
+  try {
+    const { videoUrls } = req.body || {};
+
+    if (!Array.isArray(videoUrls) || videoUrls.length < 2) {
+      return res.status(400).json({ error: "At least 2 video URLs are required" });
+    }
+    if (videoUrls.length > 20) {
+      return res.status(400).json({ error: "Maximum 20 videos can be stitched at once" });
+    }
+
+    const videosDir = path.join(process.cwd(), "data", "uploads", "videos");
+    if (!fs.existsSync(videosDir)) {
+      fs.mkdirSync(videosDir, { recursive: true });
+    }
+
+    const localPaths = [];
+    for (const url of videoUrls) {
+      if (url.startsWith("/uploads/")) {
+        const localPath = path.join(process.cwd(), "data", url);
+        if (!fs.existsSync(localPath)) {
+          await cleanup();
+          return res.status(400).json({ error: `Local file not found: ${url}` });
+        }
+        localPaths.push(localPath);
+      } else if (url.startsWith("http://") || url.startsWith("https://")) {
+        const tmpName = `stitch_tmp_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.mp4`;
+        const tmpPath = path.join(videosDir, tmpName);
+        tempFiles.push(tmpPath);
+        try {
+          const response = await (await import("axios")).default.get(url, {
+            responseType: "arraybuffer",
+            timeout: 60000,
+          });
+          fs.writeFileSync(tmpPath, Buffer.from(response.data));
+          localPaths.push(tmpPath);
+        } catch (err) {
+          await cleanup();
+          return res.status(400).json({ error: `Failed to download video: ${url}` });
+        }
+      } else {
+        await cleanup();
+        return res.status(400).json({ error: `Invalid video URL: ${url}` });
+      }
+    }
+
+    const listName = `stitch_list_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.txt`;
+    const listPath = path.join(videosDir, listName);
+    tempFiles.push(listPath);
+    const listContent = localPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n");
+    fs.writeFileSync(listPath, listContent);
+
+    const outputName = `stitched_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.mp4`;
+    const outputPath = path.join(videosDir, outputName);
+    const thumbName = `stitched_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.jpg`;
+    const thumbPath = path.join(videosDir, thumbName);
+
+    const tryStitch = (reencode) => {
+      return new Promise((resolve, reject) => {
+        const codec = reencode
+          ? "-c:v libx264 -c:a aac -movflags +faststart"
+          : "-c copy";
+        const cmd = `ffmpeg -y -f concat -safe 0 -i "${listPath}" ${codec} "${outputPath}"`;
+        exec(cmd, { timeout: 120000 }, (error, _stdout, stderr) => {
+          if (error) reject(new Error(stderr || error.message));
+          else resolve();
+        });
+      });
+    };
+
+    try {
+      await tryStitch(false);
+    } catch {
+      try {
+        await tryStitch(true);
+      } catch (err) {
+        await cleanup();
+        return res.status(500).json({ error: "FFmpeg stitching failed: " + err.message });
+      }
+    }
+
+    let thumbnailUrl = null;
+    try {
+      await new Promise((resolve) => {
+        exec(
+          `ffmpeg -y -i "${outputPath}" -ss 00:00:01 -vframes 1 -vf "scale=320:-1" "${thumbPath}"`,
+          { timeout: 10000 },
+          () => resolve(),
+        );
+      });
+      if (fs.existsSync(thumbPath)) {
+        thumbnailUrl = `/uploads/videos/${thumbName}`;
+      }
+    } catch {}
+
+    const videoUrl = `/uploads/videos/${outputName}`;
+
+    await libraryService.createAsset({
+      type: "video",
+      source: "video-stitch",
+      title: `Stitched video (${videoUrls.length} clips)`,
+      url: videoUrl,
+      metadata: {
+        clipCount: videoUrls.length,
+        sourceUrls: videoUrls,
+        stitchedAt: Date.now(),
+      },
+    });
+
+    await cleanup();
+
+    return res.json({
+      success: true,
+      data: {
+        url: videoUrl,
+        thumbnail: thumbnailUrl,
+        clipCount: videoUrls.length,
+      },
+    });
+  } catch (error) {
+    await cleanup();
+    console.error("Video stitch error:", error.message);
+    return res.status(500).json({ error: "Video stitch failed: " + error.message });
+  }
+});
+
 router.use(requireApiKey);
 
 export const WAN_I2V_MODEL_ID = "chutes/Wan-AI/Wan2.2-I2V-14B-Fast";
@@ -987,36 +1129,6 @@ router.get("/status/:id", async (req, res) => {
     res.status(error.response?.status || 500).json({
       error: "Failed to get video status",
     });
-  }
-});
-
-router.post("/edit", async (req, res) => {
-  try {
-    const {
-      sourceVideoUrl,
-      edits = [],
-      outputFormat = "mp4",
-      fps = 30,
-      resolution = "1920x1080",
-    } = req.body || {};
-
-    if (!sourceVideoUrl) {
-      return res.status(400).json({ error: "sourceVideoUrl is required" });
-    }
-
-    return res.json({
-      success: true,
-      data: {
-        sourceVideoUrl,
-        outputFormat,
-        fps,
-        resolution,
-        edits,
-        status: "queued",
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({ error: "Video edit request failed" });
   }
 });
 

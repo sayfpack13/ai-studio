@@ -62,6 +62,54 @@ function clamp(num, min, max) {
   return Math.min(max, Math.max(min, num));
 }
 
+function extractLastFrame(videoUrl) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.crossOrigin = "anonymous";
+    video.preload = "auto";
+    video.muted = true;
+
+    let settled = false;
+    const fail = (msg) => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(msg));
+      }
+    };
+
+    video.onerror = () => fail("Failed to load video for frame extraction");
+
+    video.onloadedmetadata = () => {
+      if (!video.duration || !isFinite(video.duration)) {
+        return fail("Video has no valid duration");
+      }
+      const seekTarget = Math.max(0, video.duration - 0.05);
+      video.currentTime = seekTarget;
+    };
+
+    video.onseeked = () => {
+      if (settled) return;
+      settled = true;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/png");
+        resolve({ dataUrl, width: canvas.width, height: canvas.height });
+      } catch (err) {
+        reject(new Error("Failed to capture frame: " + err.message));
+      }
+    };
+
+    video.src = videoUrl;
+    video.load();
+
+    setTimeout(() => fail("Frame extraction timed out"), 30000);
+  });
+}
+
 // Map raw server job statuses to client-side statuses
 const mapServerStatus = (status) => {
   const statusMap = {
@@ -283,7 +331,7 @@ export default function VideoGenerator() {
 
   // Wan I2V controls
   const [wanImageData, setWanImageData] = useState("");
-  const [wanImageSourceType, setWanImageSourceType] = useState("none"); // none | upload | library
+  const [wanImageSourceType, setWanImageSourceType] = useState("none"); // none | upload | library | video
   const [wanFrames, setWanFrames] = useState(81);
   const [wanFps, setWanFps] = useState(16);
   const [wanFast, setWanFast] = useState(true);
@@ -297,7 +345,10 @@ export default function VideoGenerator() {
   const [wanLibraryImageId, setWanLibraryImageId] = useState("");
   const [wanUploadingImage, setWanUploadingImage] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [showVideoAssetPicker, setShowVideoAssetPicker] = useState(false);
   const [wanShowAdvanced, setWanShowAdvanced] = useState(false);
+  const [wanExtractingFrame, setWanExtractingFrame] = useState(false);
+  const [wanSourceVideoTitle, setWanSourceVideoTitle] = useState("");
 
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -769,6 +820,39 @@ export default function VideoGenerator() {
     }
   };
 
+  const handleVideoAssetSelect = async (asset) => {
+    if (!asset?.url) return;
+    setWanExtractingFrame(true);
+    setLocalError("");
+    setWanSourceVideoTitle(asset.title || "Video");
+    try {
+      const { dataUrl } = await extractLastFrame(asset.url);
+
+      const uploadResult = await uploadLibraryFile({
+        fileName: `last-frame-${Date.now()}.png`,
+        fileBase64: dataUrl,
+        mimeType: "image/png",
+        type: "image",
+        title: `Last frame of "${(asset.title || "Video").slice(0, 80)}"`,
+        source: "wan-i2v-video-frame",
+      });
+
+      if (uploadResult?.asset?.url) {
+        setWanImageData(uploadResult.asset.url);
+        setWanLibraryImageId(uploadResult.asset.id);
+        setWanImageSourceType("video");
+        refreshLibraryAssets?.({ type: "image" });
+      } else {
+        throw new Error("Failed to upload extracted frame");
+      }
+    } catch (err) {
+      setLocalError(err.message || "Failed to extract last frame from video");
+      setWanSourceVideoTitle("");
+    } finally {
+      setWanExtractingFrame(false);
+    }
+  };
+
   const handleWanImageUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -810,7 +894,7 @@ export default function VideoGenerator() {
       return "Prompt must be at least 3 characters.";
     }
     if (!wanImageData) {
-      return "Please upload an image or select one from library.";
+      return "Please upload an image, select from library, or pick a video to continue.";
     }
     if (
       !Number.isInteger(Number(wanFrames)) ||
@@ -1302,6 +1386,7 @@ export default function VideoGenerator() {
                         onClick={() => {
                           setWanImageSourceType("upload");
                           setWanLibraryImageId("");
+                          setWanSourceVideoTitle("");
                         }}
                         className={`px-3 py-1.5 rounded text-sm ${
                           wanImageSourceType === "upload"
@@ -1312,7 +1397,10 @@ export default function VideoGenerator() {
                         Upload
                       </button>
                       <button
-                        onClick={() => setWanImageSourceType("library")}
+                        onClick={() => {
+                          setWanImageSourceType("library");
+                          setWanSourceVideoTitle("");
+                        }}
                         className={`px-3 py-1.5 rounded text-sm ${
                           wanImageSourceType === "library"
                             ? "bg-indigo-600 text-white"
@@ -1320,6 +1408,22 @@ export default function VideoGenerator() {
                         }`}
                       >
                         From Library
+                      </button>
+                      <button
+                        onClick={() => {
+                          setWanImageSourceType("video");
+                          setWanLibraryImageId("");
+                        }}
+                        className={`px-3 py-1.5 rounded text-sm ${
+                          wanImageSourceType === "video"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-gray-700 text-gray-200"
+                        }`}
+                      >
+                        <span className="flex items-center gap-1">
+                          <Film className="w-3.5 h-3.5" />
+                          From Video
+                        </span>
                       </button>
                     </div>
 
@@ -1354,7 +1458,7 @@ export default function VideoGenerator() {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             strokeWidth={2}
-                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z"
                           />
                         </svg>
                         {wanLibraryImageId
@@ -1363,13 +1467,48 @@ export default function VideoGenerator() {
                       </button>
                     )}
 
+                    {wanImageSourceType === "video" && (
+                      <div className="space-y-2">
+                        <button
+                          onClick={() => setShowVideoAssetPicker(true)}
+                          disabled={wanExtractingFrame}
+                          className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                        >
+                          <Film className="w-4 h-4" />
+                          {wanSourceVideoTitle
+                            ? "Change Source Video"
+                            : "Select Video from Library"}
+                        </button>
+                        {wanExtractingFrame && (
+                          <div className="flex items-center gap-2 text-xs text-indigo-400">
+                            <LoadingSpinner size="sm" />
+                            Extracting last frame...
+                          </div>
+                        )}
+                        {wanSourceVideoTitle && !wanExtractingFrame && (
+                          <p className="text-xs text-gray-400">
+                            Continuing from:{" "}
+                            <span className="text-indigo-400">
+                              {wanSourceVideoTitle}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {wanImageData && (
-                      <div className="rounded border border-gray-700 overflow-hidden">
+                      <div className="rounded border border-gray-700 overflow-hidden relative">
                         <img
                           src={wanImageData}
                           alt="Wan input preview"
                           className="w-full h-32 object-cover"
                         />
+                        {wanImageSourceType === "video" && (
+                          <div className="absolute top-1.5 left-1.5 bg-black/70 text-[10px] text-indigo-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                            <Film className="w-3 h-3" />
+                            Last frame
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1817,13 +1956,22 @@ export default function VideoGenerator() {
         </div>
       </div>
 
-      {/* Asset Picker Dialog */}
+      {/* Asset Picker Dialog - Images */}
       <AssetPickerDialog
         open={showAssetPicker}
         onClose={() => setShowAssetPicker(false)}
         onSelect={handleAssetPickerSelect}
         type="image"
         title="Select Image for Wan I2V"
+      />
+
+      {/* Asset Picker Dialog - Videos (for last frame extraction) */}
+      <AssetPickerDialog
+        open={showVideoAssetPicker}
+        onClose={() => setShowVideoAssetPicker(false)}
+        onSelect={handleVideoAssetSelect}
+        type="video"
+        title="Select Video to Continue (last frame)"
       />
     </div>
   );

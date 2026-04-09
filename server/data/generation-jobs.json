@@ -1,6 +1,95 @@
 {
-  "updatedAt": "2026-04-09T15:51:10.841Z",
+  "updatedAt": "2026-04-09T15:53:14.686Z",
   "jobs": [
+    {
+      "id": "video_1775749994000_a83ac116a505",
+      "type": "video",
+      "status": "processing",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly turns head to the left, brief pause, then turns head to the right, rigid mechanical motion, no smooth human movement\n\nbody remains completely still\n\ncamera very subtle push in, dark cinematic lighting, dust minimal, photorealistic, same design, consistent character",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775749955808_0ef916074631.png",
+        "wanFrames": 140,
+        "wanFps": 16,
+        "wanFast": false,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775749993996_d9wkugdei",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 140,
+          "fps": 16,
+          "fast": false,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "upload"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly turns head to the left, brief pause, then turns head to the right, rigid mechanical motion, no smooth h",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-09T15:53:14.000Z",
+      "updatedAt": "2026-04-09T15:53:14.527Z",
+      "startedAt": "2026-04-09T15:53:14.173Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-09T15:53:14.000Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-09T15:53:14.173Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-09T15:53:14.366Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-09T15:53:14.527Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        }
+      ]
+    },
     {
       "id": "video_1775749785267_b9a97fb24a95",
       "type": "video",

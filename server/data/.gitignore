@@ -4,3 +4,4 @@ job-results
 uploads
 assets.db
 assets.db-wal
+assets.db-shm

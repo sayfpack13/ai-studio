@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
-import { enqueuePipeline, getModels, generateVideo } from "../services/api";
+import { enqueuePipeline, getModels, generateVideo, uploadLibraryFile } from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
@@ -485,9 +485,7 @@ export default function VideoGenerator() {
   useEffect(() => {
     const state = location.state;
     if (state?.imageSource) {
-      // Set the image data
-      setWanImageData(state.imageSource);
-      setWanImageSourceType("upload");
+      const imageSource = state.imageSource;
       
       // Set the prompt if provided
       if (state.prompt) {
@@ -502,10 +500,46 @@ export default function VideoGenerator() {
       setConfiguredProviderFilter("chutes");
       localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, "chutes");
       
+      // Check if imageSource is a data URL that needs to be uploaded
+      if (imageSource.startsWith('data:')) {
+        // Upload to library
+        const uploadImage = async () => {
+          try {
+            const uploadResult = await uploadLibraryFile({
+              fileName: `image-to-video-${Date.now()}.png`,
+              fileBase64: imageSource,
+              mimeType: "image/png",
+              type: "image",
+              title: "Image to Video",
+              source: "wan-i2v-pipeline",
+            });
+            
+            if (uploadResult?.asset?.url) {
+              setWanImageData(uploadResult.asset.url);
+              setWanLibraryImageId(uploadResult.asset.id);
+              setWanImageSourceType("upload");
+              refreshLibraryAssets?.({ type: "image" });
+            }
+          } catch (err) {
+            console.error("Failed to upload image to library:", err);
+            // Fallback to using the data URL directly
+            setWanImageData(imageSource);
+            setWanImageSourceType("upload");
+            setWanLibraryImageId("");
+          }
+        };
+        uploadImage();
+      } else {
+        // It's already a URL (library URL or external URL), use it directly
+        setWanImageData(imageSource);
+        setWanImageSourceType("library");
+        setWanLibraryImageId("");
+      }
+      
       // Clear the navigation state to prevent re-processing
       window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+  }, [location.state, refreshLibraryAssets]);
 
   const handleAssetPickerSelect = (asset) => {
     if (asset?.url) {
@@ -523,9 +557,27 @@ export default function VideoGenerator() {
     setLocalError("");
     try {
       const dataUrl = await fileToDataUrl(file);
-      setWanImageData(dataUrl);
-      setWanImageSourceType("upload");
-      setWanLibraryImageId("");
+      
+      // Upload to library
+      const uploadResult = await uploadLibraryFile({
+        fileName: file.name,
+        fileBase64: dataUrl,
+        mimeType: file.type,
+        type: "image",
+        title: file.name,
+        source: "wan-i2v-upload",
+      });
+      
+      if (uploadResult?.asset?.url) {
+        setWanImageData(uploadResult.asset.url);
+        setWanLibraryImageId(uploadResult.asset.id);
+        setWanImageSourceType("upload");
+        
+        // Refresh library assets to show the newly uploaded image
+        refreshLibraryAssets?.({ type: "image" });
+      } else {
+        throw new Error("Failed to upload image to library");
+      }
     } catch (err) {
       setLocalError(err.message || "Failed to process image file");
     } finally {

@@ -1,9 +1,9 @@
 import express from "express";
-import { requireApiKey } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import libraryService from "../services/library-service.js";
 
 const router = express.Router();
-router.use(requireApiKey);
+router.use(requireAuth);
 
 function sanitizeName(name = "") {
   return String(name || "")

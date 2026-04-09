@@ -132,19 +132,19 @@ export const listLibraryAssets = async (filters = {}) => {
   Object.entries(filters).forEach(([key, value]) => {
     if (value != null && value !== "") params.set(key, String(value));
   });
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/library/assets?${params.toString()}`,
   );
   return await response.json();
 };
 
 export const getLibraryAsset = async (assetId) => {
-  const response = await fetch(`${API_BASE_URL}/library/assets/${assetId}`);
+  const response = await authFetch(`${API_BASE_URL}/library/assets/${assetId}`);
   return await response.json();
 };
 
 export const createLibraryAsset = async (asset) => {
-  const response = await fetch(`${API_BASE_URL}/library/assets`, {
+  const response = await authFetch(`${API_BASE_URL}/library/assets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(asset),
@@ -153,7 +153,7 @@ export const createLibraryAsset = async (asset) => {
 };
 
 export const updateLibraryAsset = async (assetId, patch) => {
-  const response = await fetch(`${API_BASE_URL}/library/assets/${assetId}`, {
+  const response = await authFetch(`${API_BASE_URL}/library/assets/${assetId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -162,14 +162,14 @@ export const updateLibraryAsset = async (assetId, patch) => {
 };
 
 export const deleteLibraryAsset = async (assetId) => {
-  const response = await fetch(`${API_BASE_URL}/library/assets/${assetId}`, {
+  const response = await authFetch(`${API_BASE_URL}/library/assets/${assetId}`, {
     method: "DELETE",
   });
   return await response.json();
 };
 
 export const deleteLibraryAssets = async (assetIds) => {
-  const response = await fetch(`${API_BASE_URL}/library/assets`, {
+  const response = await authFetch(`${API_BASE_URL}/library/assets`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids: assetIds }),
@@ -178,7 +178,7 @@ export const deleteLibraryAssets = async (assetIds) => {
 };
 
 export const searchLibraryAssets = async (payload) => {
-  const response = await fetch(`${API_BASE_URL}/library/search`, {
+  const response = await authFetch(`${API_BASE_URL}/library/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload || {}),
@@ -187,14 +187,14 @@ export const searchLibraryAssets = async (payload) => {
 };
 
 export const cacheLibraryAsset = async (assetId) => {
-  const response = await fetch(`${API_BASE_URL}/library/assets/${assetId}/cache`, {
+  const response = await authFetch(`${API_BASE_URL}/library/assets/${assetId}/cache`, {
     method: "POST",
   });
   return await response.json();
 };
 
 export const cleanupLibraryAssets = async (maxAgeDays = 30) => {
-  const response = await fetch(`${API_BASE_URL}/library/cleanup`, {
+  const response = await authFetch(`${API_BASE_URL}/library/cleanup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ maxAgeDays }),
@@ -213,7 +213,7 @@ export const uploadLibraryFile = async ({
   metadata = {},
   type,
 }) => {
-  const response = await fetch(`${API_BASE_URL}/library/upload`, {
+  const response = await authFetch(`${API_BASE_URL}/library/upload`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

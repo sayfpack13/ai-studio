@@ -1,11 +1,247 @@
 {
-  "updatedAt": "2026-04-09T15:42:00.737Z",
+  "updatedAt": "2026-04-09T15:51:10.841Z",
   "jobs": [
+    {
+      "id": "video_1775749785267_b9a97fb24a95",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly turns head forward and stops, eyes glowing brighter, rigid mechanical motion, no smooth human movement\n\nrobot remains still after movement\n\ncamera slow push in, dark cinematic lighting, dust almost gone, photorealistic, same design, consistent character",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775749764844_2b170847fa21.png",
+        "wanFrames": 140,
+        "wanFps": 16,
+        "wanFast": false,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775749785260_nnxb3dosg",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 140,
+          "fps": 16,
+          "fast": false,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "upload"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly turns head forward and stops, eyes glowing brighter, rigid mechanical motion, no smooth human movement\n",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_1775749870370_7e781622.mp4",
+            "thumbnail": null,
+            "revised_prompt": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly turns head forward and stops, eyes glowing brighter, rigid mechanical motion, no smooth human movement\n\nrobot remains still after movement\n\ncamera slow push in, dark cinematic lighting, dust almost gone, photorealistic, same design, consistent character"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-09T15:49:45.267Z",
+      "updatedAt": "2026-04-09T15:51:10.543Z",
+      "startedAt": "2026-04-09T15:49:45.439Z",
+      "completedAt": "2026-04-09T15:51:10.543Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-09T15:49:45.267Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-09T15:49:45.439Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-09T15:49:45.634Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-09T15:49:45.790Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-09T15:51:10.218Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-09T15:51:10.387Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-09T15:51:10.543Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775749524339_be6f175c55a2",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly becomes visible through dust, upper body and skull clearly seen, metallic reflections, standing still\n\ncamera slow forward move, dust drifting, cinematic lighting, photorealistic, same design, consistent character",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775748062635_dcdb75a5fad3.png",
+        "wanFrames": 140,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775749524333_aq77sj5kz",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 140,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly becomes visible through dust, upper body and skull clearly seen, metallic reflections, standing still\n\n",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_1775749594563_027bfbc8.mp4",
+            "thumbnail": null,
+            "revised_prompt": "continue from previous frame, same robot, T-800, chrome skeleton, red glowing eyes\n\nrobot slowly becomes visible through dust, upper body and skull clearly seen, metallic reflections, standing still\n\ncamera slow forward move, dust drifting, cinematic lighting, photorealistic, same design, consistent character"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-09T15:45:24.339Z",
+      "updatedAt": "2026-04-09T15:46:34.733Z",
+      "startedAt": "2026-04-09T15:45:24.504Z",
+      "completedAt": "2026-04-09T15:46:34.733Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-09T15:45:24.339Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-09T15:45:24.504Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-09T15:45:24.699Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-09T15:45:24.849Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-09T15:46:34.406Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-09T15:46:34.581Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-09T15:46:34.733Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1775749320049_638a9f30addd",
       "type": "video",
-      "status": "processing",
-      "progress": 20,
+      "status": "completed",
+      "progress": 100,
       "priority": 0,
       "parentJobId": null,
       "pipelineId": null,
@@ -48,14 +284,24 @@
         "enqueuedVia": "api"
       },
       "requestedBy": "anonymous",
-      "result": null,
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_1775749448730_cfb2f148.mp4",
+            "thumbnail": null,
+            "revised_prompt": "Start from previous frame: dust continues clearing revealing a Terminator T-800 Endoskeleton, exposed hydraulic pistons at elbows and knees, thin metallic rib cage structure, visible spine rods, skull with fixed grin, polished chrome metal reflecting dim fire light, proportions strictly human-like skeleton, no armor, no bulky parts, no sci-fi redesign\n\nrobot stands upright and performs slow mechanical stabilization movement: slight torso adjustment, minimal arm micro-movements, head remains mostly steady, movement is rigid, precise, servo-driven (no smooth human motion)\n\ncamera slowly moves sideways (not rotating too much), keeping full body centered, dust and embers drifting naturally, cinematic lighting, ultra realistic, photoreal, consistent with previous frame"
+          }
+        ],
+        "id": null
+      },
       "error": null,
       "cancelRequested": false,
       "attempts": 1,
       "createdAt": "2026-04-09T15:42:00.049Z",
-      "updatedAt": "2026-04-09T15:42:00.585Z",
+      "updatedAt": "2026-04-09T15:44:08.901Z",
       "startedAt": "2026-04-09T15:42:00.232Z",
-      "completedAt": null,
+      "completedAt": "2026-04-09T15:44:08.901Z",
       "canceledAt": null,
       "failedAt": null,
       "history": [
@@ -87,6 +333,25 @@
           "details": {
             "stage": "requesting_provider"
           }
+        },
+        {
+          "at": "2026-04-09T15:44:08.564Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-09T15:44:08.747Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-09T15:44:08.901Z",
+          "event": "completed",
+          "details": null
         }
       ]
     },

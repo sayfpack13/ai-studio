@@ -13,7 +13,15 @@ import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
 import { LoadingSpinner, VideoPresetPanel, MediaOutputPanel } from "./shared";
-import { Film, Sparkles, Download, Music, Settings, X } from "lucide-react";
+import {
+  Film,
+  Sparkles,
+  Download,
+  Music,
+  Settings,
+  X,
+  ChevronDown,
+} from "lucide-react";
 
 // Generate unique video ID
 const generateVideoId = () =>
@@ -24,6 +32,22 @@ const VIDEO_SELECTED_PROVIDER_KEY = "blackbox_ai_video_selected_provider";
 
 const WAN_I2V_MODEL_ID = "chutes/Wan-AI/Wan2.2-I2V-14B-Fast";
 const WAN_DEFAULT_NEGATIVE_PROMPT = "";
+
+// Duration presets (frames at 16fps baseline)
+const WAN_DURATION_PRESETS = [
+  { id: "quick", label: "~2s", frames: 33, desc: "Quick clip" },
+  { id: "short", label: "~3s", frames: 49, desc: "Short clip" },
+  { id: "medium", label: "~5s", frames: 81, desc: "Standard" },
+  { id: "long", label: "~7s", frames: 113, desc: "Long clip" },
+  { id: "extended", label: "~9s", frames: 140, desc: "Maximum" },
+];
+
+// Quality presets (resolution + fast mode)
+const WAN_QUALITY_PRESETS = [
+  { id: "draft", label: "Draft", resolution: "480p", fast: true, desc: "480p / Fastest" },
+  { id: "standard", label: "Standard", resolution: "720p", fast: true, desc: "720p / Fast" },
+  { id: "quality", label: "Quality", resolution: "720p", fast: false, desc: "720p / Best" },
+];
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -273,6 +297,7 @@ export default function VideoGenerator() {
   const [wanLibraryImageId, setWanLibraryImageId] = useState("");
   const [wanUploadingImage, setWanUploadingImage] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [wanShowAdvanced, setWanShowAdvanced] = useState(false);
 
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -1262,168 +1287,366 @@ export default function VideoGenerator() {
 
               {/* Wan I2V Controls or Video Preset Panel */}
               {isWanI2VSelected ? (
-                <div className="space-y-3 p-3 bg-gray-800 rounded-lg">
+                <div className="space-y-4 p-3 bg-gray-800 rounded-lg">
                   <h3 className="text-sm font-semibold text-gray-200">
-                    Wan 2.2 I2V Controls
+                    Wan 2.2 I2V Settings
                   </h3>
 
-                  <div className="grid grid-cols-1 gap-3">
-                    <div className="space-y-2">
-                      <label className="block text-sm text-gray-300">
-                        Image Source
-                      </label>
-
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => {
-                            setWanImageSourceType("upload");
-                            setWanLibraryImageId("");
-                          }}
-                          className={`px-3 py-1.5 rounded text-sm ${
-                            wanImageSourceType === "upload"
-                              ? "bg-indigo-600 text-white"
-                              : "bg-gray-700 text-gray-200"
-                          }`}
-                        >
-                          Upload
-                        </button>
-                        <button
-                          onClick={() => setWanImageSourceType("library")}
-                          className={`px-3 py-1.5 rounded text-sm ${
-                            wanImageSourceType === "library"
-                              ? "bg-indigo-600 text-white"
-                              : "bg-gray-700 text-gray-200"
-                          }`}
-                        >
-                          From Library
-                        </button>
-                      </div>
-
-                      {wanImageSourceType === "upload" && (
-                        <div className="space-y-2">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleWanImageUpload}
-                            className="w-full text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white"
-                          />
-                          {wanUploadingImage && (
-                            <p className="text-xs text-gray-400">
-                              Processing image...
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {wanImageSourceType === "library" && (
-                        <button
-                          onClick={() => setShowAssetPicker(true)}
-                          className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />
-                          </svg>
-                          {wanLibraryImageId
-                            ? "Change Image from Library"
-                            : "Select Image from Library"}
-                        </button>
-                      )}
-
-                      {wanImageData && (
-                        <div className="rounded border border-gray-700 overflow-hidden">
-                          <img
-                            src={wanImageData}
-                            alt="Wan input preview"
-                            className="w-full h-32 object-cover"
-                          />
-                        </div>
-                      )}
+                  {/* Image Source */}
+                  <div className="space-y-2">
+                    <label className="block text-sm text-gray-300">
+                      Image Source
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => {
+                          setWanImageSourceType("upload");
+                          setWanLibraryImageId("");
+                        }}
+                        className={`px-3 py-1.5 rounded text-sm ${
+                          wanImageSourceType === "upload"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-gray-700 text-gray-200"
+                        }`}
+                      >
+                        Upload
+                      </button>
+                      <button
+                        onClick={() => setWanImageSourceType("library")}
+                        className={`px-3 py-1.5 rounded text-sm ${
+                          wanImageSourceType === "library"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-gray-700 text-gray-200"
+                        }`}
+                      >
+                        From Library
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">
-                          Resolution
-                        </label>
-                        <select
-                          value={wanResolution}
-                          onChange={(e) => setWanResolution(e.target.value)}
-                          className="w-full bg-gray-700 text-white p-2 rounded text-sm"
-                        >
-                          <option value="480p">480p</option>
-                          <option value="720p">720p</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">
-                          Frames: {wanFrames}
-                        </label>
+                    {wanImageSourceType === "upload" && (
+                      <div className="space-y-2">
                         <input
-                          type="range"
-                          min="25"
-                          max="200"
-                          value={wanFrames}
-                          onChange={(e) => setWanFrames(Number(e.target.value))}
-                          className="w-full"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleWanImageUpload}
+                          className="w-full text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white"
+                        />
+                        {wanUploadingImage && (
+                          <p className="text-xs text-gray-400">
+                            Processing image...
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {wanImageSourceType === "library" && (
+                      <button
+                        onClick={() => setShowAssetPicker(true)}
+                        className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                        {wanLibraryImageId
+                          ? "Change Image from Library"
+                          : "Select Image from Library"}
+                      </button>
+                    )}
+
+                    {wanImageData && (
+                      <div className="rounded border border-gray-700 overflow-hidden">
+                        <img
+                          src={wanImageData}
+                          alt="Wan input preview"
+                          className="w-full h-32 object-cover"
                         />
                       </div>
-                    </div>
+                    )}
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                  {/* Duration Presets */}
+                  <div>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <label className="text-sm text-gray-300">Duration</label>
+                      <span className="text-xs text-gray-500">
+                        {(wanFrames / wanFps).toFixed(1)}s
+                        {!WAN_DURATION_PRESETS.some(
+                          (p) => p.frames === wanFrames,
+                        ) && (
+                          <span className="ml-1 text-indigo-400">Custom</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {WAN_DURATION_PRESETS.map((preset) => {
+                        const isActive = preset.frames === wanFrames;
+                        return (
+                          <button
+                            key={preset.id}
+                            onClick={() => setWanFrames(preset.frames)}
+                            className={`py-2 px-1 rounded-lg text-center transition-all ${
+                              isActive
+                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            }`}
+                          >
+                            <div className="text-sm font-medium">
+                              {preset.label}
+                            </div>
+                            <div
+                              className={`text-[10px] ${isActive ? "text-indigo-200" : "text-gray-500"}`}
+                            >
+                              {preset.desc}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Quality Presets */}
+                  <div>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <label className="text-sm text-gray-300">Quality</label>
+                      <span className="text-xs text-gray-500">
+                        {wanResolution}
+                        {wanFast ? " / Fast" : ""}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {WAN_QUALITY_PRESETS.map((preset) => {
+                        const isActive =
+                          preset.resolution === wanResolution &&
+                          preset.fast === wanFast;
+                        return (
+                          <button
+                            key={preset.id}
+                            onClick={() => {
+                              setWanResolution(preset.resolution);
+                              setWanFast(preset.fast);
+                            }}
+                            className={`py-2.5 px-2 rounded-lg text-center transition-all ${
+                              isActive
+                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            }`}
+                          >
+                            <div className="text-sm font-medium">
+                              {preset.label}
+                            </div>
+                            <div
+                              className={`text-[10px] ${isActive ? "text-indigo-200" : "text-gray-500"}`}
+                            >
+                              {preset.desc}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Advanced Settings Toggle */}
+                  <button
+                    onClick={() => setWanShowAdvanced((v) => !v)}
+                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-300 transition-colors w-full"
+                  >
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform ${wanShowAdvanced ? "rotate-180" : ""}`}
+                    />
+                    Advanced Settings
+                  </button>
+
+                  {wanShowAdvanced && (
+                    <div className="space-y-3 pt-2 border-t border-gray-700">
+                      {/* Frames */}
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">
-                          FPS: {wanFps}
-                        </label>
+                        <div className="flex items-baseline justify-between mb-1">
+                          <label className="text-xs text-gray-400">
+                            Frames
+                          </label>
+                          <span className="text-xs text-gray-500">
+                            {wanFrames}{" "}
+                            <span className="text-gray-600">
+                              ({(wanFrames / wanFps).toFixed(1)}s)
+                            </span>
+                          </span>
+                        </div>
                         <input
                           type="range"
-                          min="8"
+                          min="21"
+                          max="140"
+                          value={wanFrames}
+                          onChange={(e) =>
+                            setWanFrames(Number(e.target.value))
+                          }
+                          className="w-full accent-indigo-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                          <span>21</span>
+                          <span>140</span>
+                        </div>
+                      </div>
+
+                      {/* FPS */}
+                      <div>
+                        <div className="flex items-baseline justify-between mb-1">
+                          <label className="text-xs text-gray-400">
+                            FPS
+                          </label>
+                          <span className="text-xs text-gray-500">
+                            {wanFps}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="16"
                           max="24"
                           value={wanFps}
-                          onChange={(e) => setWanFps(Number(e.target.value))}
-                          className="w-full"
+                          onChange={(e) =>
+                            setWanFps(Number(e.target.value))
+                          }
+                          className="w-full accent-indigo-500"
                         />
+                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                          <span>16</span>
+                          <span>24</span>
+                        </div>
                       </div>
+
+                      {/* Resolution */}
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">
-                          Guidance: {wanGuidanceScale}
+                        <label className="block text-xs text-gray-400 mb-1.5">
+                          Resolution
                         </label>
+                        <div className="flex gap-1.5">
+                          {["480p", "720p"].map((res) => (
+                            <button
+                              key={res}
+                              onClick={() => setWanResolution(res)}
+                              className={`flex-1 py-1.5 rounded text-sm transition-colors ${
+                                wanResolution === res
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                              }`}
+                            >
+                              {res}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Fast Mode */}
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-gray-400">
+                          Fast Mode
+                        </label>
+                        <button
+                          onClick={() => setWanFast((v) => !v)}
+                          className={`relative w-9 h-5 rounded-full transition-colors ${
+                            wanFast ? "bg-indigo-600" : "bg-gray-600"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                              wanFast ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Guidance Scale */}
+                      <div>
+                        <div className="flex items-baseline justify-between mb-1">
+                          <label className="text-xs text-gray-400">
+                            Guidance Scale
+                          </label>
+                          <span className="text-xs text-gray-500">
+                            {wanGuidanceScale}
+                          </span>
+                        </div>
                         <input
                           type="range"
                           min="0"
                           max="10"
-                          step="0.1"
+                          step="0.5"
                           value={wanGuidanceScale}
                           onChange={(e) =>
                             setWanGuidanceScale(Number(e.target.value))
                           }
-                          className="w-full"
+                          className="w-full accent-indigo-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                          <span>0</span>
+                          <span>10</span>
+                        </div>
+                      </div>
+
+                      {/* Guidance Scale 2 */}
+                      <div>
+                        <div className="flex items-baseline justify-between mb-1">
+                          <label className="text-xs text-gray-400">
+                            Guidance Scale 2
+                          </label>
+                          <span className="text-xs text-gray-500">
+                            {wanGuidanceScale2}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="10"
+                          step="0.5"
+                          value={wanGuidanceScale2}
+                          onChange={(e) =>
+                            setWanGuidanceScale2(Number(e.target.value))
+                          }
+                          className="w-full accent-indigo-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                          <span>0</span>
+                          <span>10</span>
+                        </div>
+                      </div>
+
+                      {/* Seed */}
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">
+                          Seed
+                        </label>
+                        <input
+                          type="text"
+                          value={wanSeed}
+                          onChange={(e) => setWanSeed(e.target.value)}
+                          placeholder="Random"
+                          className="w-full bg-gray-700 text-white p-2 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Negative Prompt */}
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">
+                          Negative Prompt
+                        </label>
+                        <textarea
+                          value={wanNegativePrompt}
+                          onChange={(e) => setWanNegativePrompt(e.target.value)}
+                          placeholder="Leave empty for default quality filter"
+                          rows={2}
+                          className="w-full bg-gray-700 text-white p-2 rounded text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                       </div>
                     </div>
-
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">
-                        Seed (optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={wanSeed}
-                        onChange={(e) => setWanSeed(e.target.value)}
-                        placeholder="Random"
-                        className="w-full bg-gray-700 text-white p-2 rounded text-sm"
-                      />
-                    </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <VideoPresetPanel

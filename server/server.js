@@ -1003,8 +1003,14 @@ async function processWanI2VJob({
       .createHash("md5")
       .update(videoBuffer)
       .digest("hex");
-    const filename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
-    const thumbFilename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.jpg`;
+    const slug = String(prompt || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 48);
+    const namePrefix = slug ? `wan_i2v_${slug}` : "wan_i2v";
+    const filename = `${namePrefix}_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
+    const thumbFilename = `${namePrefix}_${Date.now()}_${videoHash.substring(0, 8)}.jpg`;
     const videosDir = path.join(process.cwd(), "data", "uploads", "videos");
 
     if (!fs.existsSync(videosDir)) {

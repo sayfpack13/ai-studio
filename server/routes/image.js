@@ -280,80 +280,97 @@ function extractFirstBase64Image(value, depth = 0) {
 
 // Detect if response contains binary image data (PNG, JPEG signatures)
 function containsBinaryImageData(result) {
-  if (!result || typeof result !== 'object') return false;
-  
+  if (!result || typeof result !== "object") return false;
+
   const checkBinary = (value) => {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       // Check for PNG signature (89 50 4E 47 0D 0A 1A 0A)
-      if (value.includes('\x89PNG') || value.startsWith('\x89PNG')) return true;
+      if (value.includes("\x89PNG") || value.startsWith("\x89PNG")) return true;
       // Check for JPEG signature (FF D8 FF)
-      if (value.includes('\xFF\xD8\xFF') || value.startsWith('\xFF\xD8\xFF')) return true;
+      if (value.includes("\xFF\xD8\xFF") || value.startsWith("\xFF\xD8\xFF"))
+        return true;
       // Check for GIF signature (GIF89a or GIF87a)
-      if (value.includes('GIF89a') || value.includes('GIF87a')) return true;
+      if (value.includes("GIF89a") || value.includes("GIF87a")) return true;
       // Check for WebP signature (RIFF....WEBP)
-      if (value.includes('RIFF') && value.includes('WEBP')) return true;
+      if (value.includes("RIFF") && value.includes("WEBP")) return true;
     }
     return false;
   };
-  
+
   // Check providerResponse for binary data
   if (result.providerResponse && checkBinary(result.providerResponse)) {
     return true;
   }
-  
+
   // Check common response fields
-  for (const field of ['image', 'data', 'result', 'content', 'b64_json', 'base64']) {
+  for (const field of [
+    "image",
+    "data",
+    "result",
+    "content",
+    "b64_json",
+    "base64",
+  ]) {
     if (result[field] && checkBinary(result[field])) {
       return true;
     }
   }
-  
+
   return false;
+}
+
+function slugifyPrompt(value = "", maxLength = 48) {
+  const cleaned = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!cleaned) return "";
+  return cleaned.slice(0, maxLength);
 }
 
 async function saveBinaryImageResponse(result, prompt, modelId, providerId) {
   try {
-    const crypto = await import('crypto');
-    const path = await import('path');
-    
     // Find the binary data
     let binaryData = null;
-    let mimeType = 'image/png'; // default
-    
-    if (result.providerResponse && typeof result.providerResponse === 'string') {
+    let mimeType = "image/png"; // default
+
+    if (
+      result.providerResponse &&
+      typeof result.providerResponse === "string"
+    ) {
       binaryData = result.providerResponse;
-      if (binaryData.includes('\xFF\xD8\xFF')) mimeType = 'image/jpeg';
-      else if (binaryData.includes('GIF')) mimeType = 'image/gif';
-      else if (binaryData.includes('WEBP')) mimeType = 'image/webp';
+      if (binaryData.includes("\xFF\xD8\xFF")) mimeType = "image/jpeg";
+      else if (binaryData.includes("GIF")) mimeType = "image/gif";
+      else if (binaryData.includes("WEBP")) mimeType = "image/webp";
     }
-    
+
     if (!binaryData) return null;
-    
+
     // Save to file
-    const imageHash = crypto.createHash('md5').update(binaryData).digest('hex');
-    const filename = `generated_image_${Date.now()}_${imageHash.substring(0, 8)}${mimeType === 'image/jpeg' ? '.jpg' : mimeType === 'image/png' ? '.png' : mimeType === 'image/gif' ? '.gif' : '.webp'}`;
-    
-    const buffer = Buffer.from(binaryData, 'base64');
-    const saved = await saveBuffer(buffer, mimeType, 'generated_image');
-    
+    const buffer = Buffer.from(binaryData, "base64");
+    const slug = slugifyPrompt(prompt);
+    const prefix = slug ? `image_${slug}` : "generated_image";
+    const saved = await saveBuffer(buffer, mimeType, prefix);
+
     // Add to library
     await libraryService.createAsset({
-      type: 'image',
-      source: 'image',
-      title: prompt.slice(0, 80) || 'Generated image',
+      type: "image",
+      source: "image",
+      title: prompt.slice(0, 80) || "Generated image",
       url: saved.url,
       filePath: saved.filepath,
       metadata: {
+        prompt,
         model: modelId,
         provider: providerId,
         sizeBytes: saved.size,
-        storage: 'local',
+        storage: "local",
       },
     });
-    
+
     return saved.url;
   } catch (err) {
-    console.error('Failed to save binary image:', err.message);
+    console.error("Failed to save binary image:", err.message);
     return null;
   }
 }
@@ -473,7 +490,7 @@ router.post("/generate", async (req, res) => {
     const apiBaseUrl = provider.apiBaseUrl;
     const timeout = provider.timeout?.image || 120000;
 
-    const isLocalOllama = !!(localOllamaUrl && providerId === 'ollama');
+    const isLocalOllama = !!(localOllamaUrl && providerId === "ollama");
 
     if (!isLocalOllama) {
       const modelInfo = await findModel(
@@ -490,7 +507,12 @@ router.post("/generate", async (req, res) => {
     }
 
     if (providerId === "chutes") {
-      const modelInfo = await findModel(req.config, modelId, providerId, modelKey);
+      const modelInfo = await findModel(
+        req.config,
+        modelId,
+        providerId,
+        modelKey,
+      );
       const chutesModel = normalizeChutesImageModel(modelInfo.id || modelId);
       let endpoint = null;
       let requestData = null;
@@ -741,7 +763,7 @@ router.post("/generate", async (req, res) => {
       const requestHeaders = {
         "Content-Type": "application/json",
       };
-      if (!isPublicChute && apiKey && apiKey !== 'public') {
+      if (!isPublicChute && apiKey && apiKey !== "public") {
         requestHeaders.Authorization = `Bearer ${apiKey}`;
       }
 
@@ -992,9 +1014,11 @@ router.post("/generate", async (req, res) => {
 
     // Determine endpoint and request format
     const isOllamaNative =
-      isLocalOllama || provider.apiType === "ollama-native" || providerId === "ollama";
+      isLocalOllama ||
+      provider.apiType === "ollama-native" ||
+      providerId === "ollama";
     const effectiveBaseUrl = isLocalOllama
-      ? localOllamaUrl.replace(/\/+$/, '')
+      ? localOllamaUrl.replace(/\/+$/, "")
       : apiBaseUrl;
 
     const fullPrompt = negativePrompt
@@ -1028,7 +1052,10 @@ router.post("/generate", async (req, res) => {
 
       const ollamaHeaders = isLocalOllama
         ? { "Content-Type": "application/json" }
-        : { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+        : {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          };
 
       response = await axios.post(
         `${effectiveBaseUrl}/api/chat`,
@@ -1090,19 +1117,26 @@ router.post("/generate", async (req, res) => {
         transformed.debug = {
           provider: providerId,
           model: actualModelId,
-          endpoint: isOllamaNative ? `${apiBaseUrl}/api/chat` : `${apiBaseUrl}/chat/completions`,
+          endpoint: isOllamaNative
+            ? `${apiBaseUrl}/api/chat`
+            : `${apiBaseUrl}/chat/completions`,
           rawResponse: sanitizeDebugValue(result),
         };
       }
       if (transformed?.data?.[0]?.url) {
         // Check if response contains binary image data
         if (containsBinaryImageData(result)) {
-          const fileUrl = await saveBinaryImageResponse(result, effectivePrompt, actualModelId, providerId);
+          const fileUrl = await saveBinaryImageResponse(
+            result,
+            effectivePrompt,
+            actualModelId,
+            providerId,
+          );
           if (fileUrl) {
             transformed.data[0].url = fileUrl;
           }
         }
-        
+
         await libraryService.createAsset({
           type: "image",
           source: "image",
@@ -1120,7 +1154,9 @@ router.post("/generate", async (req, res) => {
         debug: {
           provider: providerId,
           model: actualModelId,
-          endpoint: isOllamaNative ? `${apiBaseUrl}/api/chat` : `${apiBaseUrl}/chat/completions`,
+          endpoint: isOllamaNative
+            ? `${apiBaseUrl}/api/chat`
+            : `${apiBaseUrl}/chat/completions`,
           rawResponse: sanitizeDebugValue(result),
         },
       });

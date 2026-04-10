@@ -1213,28 +1213,38 @@ export default function VideoGenerator() {
 
       {showModelSelector && (
         <div
-          className="absolute inset-0 bg-black/50 flex items-center justify-center z-50"
+          className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseModelSelector();
           }}
         >
-          <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden mx-4 flex flex-col">
+          <div className="bg-gray-950 border border-gray-800 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden mx-4 flex flex-col shadow-2xl">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-white">
-                Select Video Model
-              </h3>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center">
+                  <Film className="w-5 h-5 text-indigo-300" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">
+                    Select Video Model
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Choose a model and provider to get started
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={handleCloseModelSelector}
-                className="text-gray-400 hover:text-white text-xl"
+                className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600 transition-colors"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="mb-4">
               <div className="relative">
                 <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
                   fill="none"
@@ -1252,14 +1262,14 @@ export default function VideoGenerator() {
                   value={modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
                   placeholder="Search models by name, provider, or ID..."
-                  className="w-full bg-gray-700 text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-900/70 text-white pl-10 pr-10 py-3 rounded-xl border border-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 />
                 {modelSearch && (
                   <button
                     onClick={() => setModelSearch("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -1272,14 +1282,14 @@ export default function VideoGenerator() {
                   <button
                     key={filter}
                     onClick={() => setCloudFilter(filter)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
                       cloudFilter === filter
                         ? filter === "cloud"
-                          ? "bg-purple-600 text-white"
+                          ? "bg-purple-600/20 text-purple-200 border-purple-500/40"
                           : filter === "local"
-                            ? "bg-emerald-600 text-white"
-                            : "bg-blue-600 text-white"
-                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            ? "bg-emerald-600/20 text-emerald-200 border-emerald-500/40"
+                            : "bg-blue-600/20 text-blue-200 border-blue-500/40"
+                        : "bg-gray-900/70 text-gray-300 border-gray-800 hover:border-gray-700"
                     }`}
                   >
                     {filter === "all"
@@ -1300,10 +1310,10 @@ export default function VideoGenerator() {
                     setConfiguredProviderFilter(provider);
                     localStorage.setItem(VIDEO_SELECTED_PROVIDER_KEY, provider);
                   }}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
                     configuredProviderFilter === provider
-                      ? "bg-indigo-600 text-white"
-                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      ? "bg-indigo-600/20 text-indigo-200 border-indigo-500/40"
+                      : "bg-gray-900/70 text-gray-300 border-gray-800 hover:border-gray-700"
                   }`}
                 >
                   {providers.find((p) => p.id === provider)?.name || provider}
@@ -1339,28 +1349,28 @@ export default function VideoGenerator() {
                     <button
                       key={model.uniqueKey || model.id}
                       onClick={() => handleModelSelect(model)}
-                      className={`p-3 rounded-lg text-left transition-colors ${
+                      className={`p-3 rounded-xl text-left border transition-all ${
                         selectedModel === model.modelKey
-                          ? "bg-indigo-600 text-white"
-                          : "bg-gray-700 hover:bg-gray-600 text-gray-200"
+                          ? "bg-indigo-600/15 border-indigo-500/40 text-white"
+                          : "bg-gray-900/70 border-gray-800 text-gray-200 hover:border-gray-700"
                       }`}
                     >
                       <div className="flex justify-between items-center">
                         <span className="font-medium">{model.name}</span>
                         <div className="flex items-center gap-2">
                           {model.isCloud ? (
-                            <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
+                            <span className="text-[10px] px-2 py-0.5 bg-purple-600/30 text-purple-200 rounded">
                               Cloud
                             </span>
                           ) : configuredProviderFilter === "ollama" ? (
-                            <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
+                            <span className="text-[10px] px-2 py-0.5 bg-emerald-700/40 text-emerald-200 rounded">
                               Local
                             </span>
                           ) : null}
-                          <span className="text-xs px-2 py-0.5 bg-gray-600 rounded">
+                          <span className="text-[10px] px-2 py-0.5 bg-gray-800/80 text-gray-300 rounded">
                             {model.configuredProvider || model.provider}
                           </span>
-                          <span className="text-xs px-2 py-0.5 bg-cyan-700 rounded">
+                          <span className="text-[10px] px-2 py-0.5 bg-cyan-700/40 text-cyan-200 rounded">
                             {model.modelProvider || "unknown"}
                           </span>
                         </div>

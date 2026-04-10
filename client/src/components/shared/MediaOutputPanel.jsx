@@ -19,11 +19,14 @@ import {
   Sparkles,
   Volume2,
   AlertCircle,
+  Clock,
+  Trash2,
 } from "lucide-react";
 import { Button } from "../ui";
 import { resolveAssetUrl } from "../../services/api";
 import MediaGalleryGrid from "./MediaGalleryGrid";
 import MediaCompareView from "./MediaCompareView";
+import MediaPreviewDialog from "./MediaPreviewDialog";
 
 const MEDIA_CONFIG = {
   image: {
@@ -32,6 +35,11 @@ const MEDIA_CONFIG = {
     loadingMessage: "Generating image...",
     emptyMessage: "No image generated yet",
     supportsComparison: true,
+    accent: "violet",
+    activeTab: "bg-violet-500/15 text-violet-300 border-violet-500/30",
+    progressBg: "bg-violet-500",
+    loadingBg: "bg-violet-600/10 border-purple-500/30",
+    loadingText: "text-violet-300",
   },
   video: {
     icon: VideoIcon,
@@ -39,6 +47,11 @@ const MEDIA_CONFIG = {
     loadingMessage: "Generating video...",
     emptyMessage: "No video generated yet",
     supportsComparison: false,
+    accent: "rose",
+    activeTab: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+    progressBg: "bg-rose-500",
+    loadingBg: "bg-rose-600/10 border-rose-500/30",
+    loadingText: "text-rose-300",
   },
   music: {
     icon: MusicIcon,
@@ -46,6 +59,11 @@ const MEDIA_CONFIG = {
     loadingMessage: "Generating music...",
     emptyMessage: "No music generated yet",
     supportsComparison: false,
+    accent: "emerald",
+    activeTab: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    progressBg: "bg-emerald-500",
+    loadingBg: "bg-emerald-600/10 border-emerald-500/30",
+    loadingText: "text-emerald-300",
   },
 };
 
@@ -83,6 +101,7 @@ export default function MediaOutputPanel({
   const [activeTab, setActiveTab] = useState("current");
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [zoomedMedia, setZoomedMedia] = useState(null);
+  const [previewMedia, setPreviewMedia] = useState(null);
   const [compareItems, setCompareItems] = useState([]);
 
   // Get history items as array
@@ -108,6 +127,8 @@ export default function MediaOutputPanel({
       })
       .filter((item) => item?.url);
   }, [mediaHistory, getMediaIds]);
+
+  const historyCount = historyItems.length;
 
   // Handle add to compare
   const handleAddToCompare = (item) => {
@@ -159,10 +180,49 @@ export default function MediaOutputPanel({
     }
   };
 
+  const handlePreviewDownload = async (asset) => {
+    if (!asset?.url) return;
+    const resolved = resolveAssetUrl(asset.url);
+    const sanitize = (value) =>
+      String(value || "generated")
+        .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+        .trim() || "generated";
+    const ext =
+      mediaType === "image" ? ".png" : mediaType === "video" ? ".mp4" : ".mp3";
+    const baseName = sanitize(
+      asset.prompt || `generated-${asset.id || "media"}`,
+    );
+    const filename = baseName.toLowerCase().endsWith(ext)
+      ? baseName
+      : `${baseName}${ext}`;
+
+    try {
+      const response = await fetch(resolved);
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      const link = document.createElement("a");
+      link.href = resolved;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Handle select from history - preview only
   const handleSelectFromHistory = (item) => {
-    onPreview?.(item);
-    setActiveTab("current");
+    setPreviewMedia(item);
   };
 
   // Handle reload prompt - loads prompt and model
@@ -180,7 +240,7 @@ export default function MediaOutputPanel({
         <img
           src={url}
           alt={item.prompt || "Generated image"}
-          className="w-full h-auto max-h-[50vh] object-contain"
+          className="w-full h-auto max-h-[50vh] object-contain rounded-lg"
         />
       );
     }
@@ -190,7 +250,7 @@ export default function MediaOutputPanel({
           key={url}
           src={url}
           controls={showControls}
-          className="w-full h-auto max-h-[50vh]"
+          className="w-full h-auto max-h-[50vh] rounded-lg"
         >
           Your browser does not support the video tag.
         </video>
@@ -198,13 +258,15 @@ export default function MediaOutputPanel({
     }
     if (mediaType === "music") {
       return (
-        <div className="bg-gray-800 rounded-lg p-6 flex flex-col items-center">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4">
-            <Volume2 className="w-12 h-12 text-white" />
+        <div
+          className={`bg-gradient-to-br ${config.loadingBg === "bg-emerald-600/10 border-emerald-500/30" ? "from-emerald-950/40 via-gray-900 to-gray-950" : config.loadingBg === "bg-rose-600/10 border-rose-500/30" ? "from-rose-950/40 via-gray-900 to-gray-950" : "from-violet-950/40 via-gray-900 to-gray-950"} rounded-xl p-6 flex flex-col items-center border border-gray-800`}
+        >
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/20">
+            <Volume2 className="w-10 h-10 text-white" />
           </div>
           <audio key={url} src={url} controls className="w-full max-w-md" />
           {item.prompt && (
-            <p className="text-sm text-gray-400 mt-4 text-center">
+            <p className="text-sm text-gray-400 mt-4 text-center max-w-md">
               {item.prompt}
             </p>
           )}
@@ -215,16 +277,16 @@ export default function MediaOutputPanel({
   };
 
   return (
-    <div className={`flex flex-col h-full bg-gray-900/50 ${className}`}>
+    <div
+      className={`flex flex-col h-full bg-gray-950/60 border border-gray-800 rounded-2xl overflow-hidden ${className}`}
+    >
       {/* Tabs Header */}
-      <div className="flex items-center gap-1 p-2 border-b border-gray-700">
+      <div className="flex items-center gap-2 p-3 border-b border-gray-800 bg-gray-950/80">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           const badge =
-            tab.id === "history" && historyItems.length > 0
-              ? historyItems.length
-              : null;
+            tab.id === "history" && historyCount > 0 ? historyCount : null;
           const compareBadge =
             tab.id === "compare" && compareItems.length > 0
               ? compareItems.length
@@ -234,18 +296,20 @@ export default function MediaOutputPanel({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 border ${
                 isActive
-                  ? "bg-purple-600/20 text-purple-300"
-                  : "text-gray-400 hover:text-white hover:bg-gray-800"
+                  ? config.activeTab
+                  : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 border-transparent"
               }`}
             >
               <Icon className="w-4 h-4" />
               {tab.label}
               {(badge || compareBadge) && (
                 <span
-                  className={`px-1.5 py-0.5 rounded-full text-xs ${
-                    isActive ? "bg-purple-600/30" : "bg-gray-700"
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${
+                    isActive
+                      ? "bg-white/10 text-white"
+                      : "bg-gray-700 text-gray-400"
                   }`}
                 >
                   {badge || compareBadge}
@@ -271,16 +335,20 @@ export default function MediaOutputPanel({
             >
               {/* Show loading indicator at top if generating, but don't block content */}
               {loading && (
-                <div className="mb-3 p-3 bg-purple-600/10 border border-purple-500/30 rounded-lg flex items-center gap-3">
-                  <RefreshCw className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
+                <div
+                  className={`mb-3 p-3 ${config.loadingBg} rounded-xl flex items-center gap-3`}
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${config.loadingText} animate-spin flex-shrink-0`}
+                  />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-purple-300 font-medium">
+                    <p className={`text-sm ${config.loadingText} font-medium`}>
                       {config.loadingMessage}
                     </p>
                     {progress !== null && progress !== undefined && (
                       <div className="mt-1.5 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-purple-500 transition-all duration-300"
+                          className={`h-full ${config.progressBg} transition-all duration-300`}
                           style={{ width: `${progress}%` }}
                         />
                       </div>
@@ -291,21 +359,21 @@ export default function MediaOutputPanel({
 
               {error ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
-                  <div className="w-20 h-20 rounded-2xl bg-red-600/20 flex items-center justify-center mb-4">
+                  <div className="w-20 h-20 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
                     <AlertCircle className="w-10 h-10 text-red-400" />
                   </div>
-                  <p className="text-red-400 font-medium text-center px-4">
+                  <p className="text-red-400 font-semibold text-center px-4 text-lg">
                     Generation Failed
                   </p>
-                  <div className="mt-3 p-3 bg-red-900/20 border border-red-700/50 rounded-lg max-w-md mx-4">
+                  <div className="mt-3 p-4 bg-red-950/30 border border-red-700/40 rounded-xl max-w-md mx-4">
                     <p className="text-sm text-red-300 break-words">{error}</p>
                   </div>
                   {onClearError && (
                     <button
                       onClick={onClearError}
-                      className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                      className="mt-5 px-5 py-2.5 text-sm rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors"
                     >
-                      Clear Error
+                      Dismiss
                     </button>
                   )}
                 </div>
@@ -313,7 +381,7 @@ export default function MediaOutputPanel({
                 <div className="space-y-4">
                   {/* Media Display */}
                   <div
-                    className={`relative rounded-xl overflow-hidden bg-gray-800 border border-gray-700 ${
+                    className={`relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 ${
                       mediaType === "image" ? "cursor-pointer group" : ""
                     }`}
                     onClick={() =>
@@ -322,38 +390,43 @@ export default function MediaOutputPanel({
                   >
                     {renderMediaPlayer(generatedMedia)}
                     {mediaType === "image" && (
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                        <Maximize2 className="w-8 h-8 text-white" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <div className="w-12 h-12 rounded-xl bg-black/40 backdrop-blur-sm flex items-center justify-center border border-white/10">
+                          <Maximize2 className="w-6 h-6 text-white" />
+                        </div>
                       </div>
                     )}
                   </div>
 
                   {/* Revised Prompt */}
                   {generatedMedia.revisedPrompt && (
-                    <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-                      <p className="text-xs text-gray-500 mb-1">
-                        Revised prompt:
+                    <div className="p-3 bg-gray-900/80 rounded-xl border border-gray-800">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">
+                        Revised prompt
                       </p>
-                      <p className="text-sm text-gray-300">
+                      <p className="text-sm text-gray-300 leading-relaxed">
                         {generatedMedia.revisedPrompt}
                       </p>
                     </div>
                   )}
 
                   {/* Metadata */}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {generatedMedia.model && (
-                      <span className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-400">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${config.activeTab}`}
+                      >
                         {generatedMedia.model}
                       </span>
                     )}
                     {generatedMedia.duration && (
-                      <span className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-400">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                        <Clock className="w-3 h-3" />
                         {generatedMedia.duration}s
                       </span>
                     )}
                     {generatedMedia.width && generatedMedia.height && (
-                      <span className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-400">
+                      <span className="px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
                         {generatedMedia.width}×{generatedMedia.height}
                       </span>
                     )}
@@ -415,10 +488,12 @@ export default function MediaOutputPanel({
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                  <div className="w-20 h-20 rounded-2xl bg-gray-800 flex items-center justify-center mb-4">
+                  <div className="w-20 h-20 rounded-2xl bg-gray-800/60 border border-gray-700/50 flex items-center justify-center mb-4">
                     <Sparkles className="w-10 h-10 text-gray-600" />
                   </div>
-                  <p className="text-sm font-medium">{config.emptyMessage}</p>
+                  <p className="text-sm font-medium text-gray-300">
+                    {config.emptyMessage}
+                  </p>
                   <p className="text-xs text-gray-500 mt-1">
                     Enter a prompt and click Generate
                   </p>
@@ -437,17 +512,20 @@ export default function MediaOutputPanel({
               transition={{ duration: 0.15 }}
               className="flex flex-col h-full"
             >
-              <div className="flex items-center justify-between p-2 border-b border-gray-700">
-                <span className="text-sm text-gray-400">
-                  {historyItems.length}{" "}
-                  {historyItems.length === 1 ? "item" : "items"}
-                </span>
+              <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-gray-950/70">
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <History className="w-4 h-4" />
+                  <span>
+                    {historyCount} {historyCount === 1 ? "item" : "items"}
+                  </span>
+                </div>
                 {onClearHistory && (
                   <button
                     onClick={onClearHistory}
-                    className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
+                    className="inline-flex items-center gap-1.5 text-xs text-red-300 px-2.5 py-1 rounded-lg border border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 transition-colors"
                   >
-                    Clear History
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Clear
                   </button>
                 )}
               </div>
@@ -456,6 +534,7 @@ export default function MediaOutputPanel({
                   mediaType={mediaType}
                   items={historyItems}
                   onSelect={handleSelectFromHistory}
+                  onView={(item) => setPreviewMedia(item)}
                   onCompare={
                     config.supportsComparison ? handleAddToCompare : undefined
                   }
@@ -494,7 +573,7 @@ export default function MediaOutputPanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
             onClick={() => setZoomedMedia(null)}
           >
             <motion.img
@@ -504,23 +583,41 @@ export default function MediaOutputPanel({
               transition={{ duration: 0.15 }}
               src={resolveAssetUrl(zoomedMedia.url)}
               alt={zoomedMedia.prompt || "Generated image"}
-              className="max-w-full max-h-full object-contain"
+              className="max-w-full max-h-full object-contain rounded-2xl border border-gray-800"
               onClick={(e) => e.stopPropagation()}
             />
             <button
               onClick={() => setZoomedMedia(null)}
-              className="absolute top-4 right-4 p-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700"
+              className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-gray-900/80 border border-gray-700 text-white hover:border-gray-600 hover:bg-gray-800 flex items-center justify-center"
             >
               <X className="w-6 h-6" />
             </button>
             {zoomedMedia.prompt && (
-              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-gray-900/90 rounded-lg p-3">
+              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-gray-950/90 border border-gray-800 rounded-xl p-3">
                 <p className="text-sm text-gray-300">{zoomedMedia.prompt}</p>
               </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      <MediaPreviewDialog
+        open={Boolean(previewMedia)}
+        asset={
+          previewMedia
+            ? {
+                ...previewMedia,
+                type: mediaType,
+                title: previewMedia.prompt || `Generated ${config.label}`,
+              }
+            : null
+        }
+        onClose={() => setPreviewMedia(null)}
+        onDownload={handlePreviewDownload}
+        showLoad={false}
+        showDelete={false}
+        showDownload={Boolean(previewMedia?.url)}
+      />
     </div>
   );
 }

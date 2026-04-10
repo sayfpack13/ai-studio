@@ -251,11 +251,17 @@ function containsBinaryVideoData(result) {
   return false;
 }
 
+function slugifyPrompt(value = "", maxLength = 48) {
+  const cleaned = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!cleaned) return "";
+  return cleaned.slice(0, maxLength);
+}
+
 async function saveBinaryVideoResponse(result, prompt, modelId, providerId) {
   try {
-    const crypto = await import("crypto");
-    const path = await import("path");
-
     // Find the binary data
     let binaryData = null;
     let mimeType = "video/mp4"; // default
@@ -271,11 +277,10 @@ async function saveBinaryVideoResponse(result, prompt, modelId, providerId) {
     if (!binaryData) return null;
 
     // Save to file
-    const videoHash = crypto.createHash("md5").update(binaryData).digest("hex");
-    const filename = `generated_video_${Date.now()}_${videoHash.substring(0, 8)}${mimeType === "video/webm" ? ".webm" : ".mp4"}`;
-
     const buffer = Buffer.from(binaryData, "base64");
-    const saved = await saveBuffer(buffer, mimeType, "generated_video");
+    const slug = slugifyPrompt(prompt);
+    const prefix = slug ? `video_${slug}` : "generated_video";
+    const saved = await saveBuffer(buffer, mimeType, prefix);
 
     // Add to library
     await libraryService.createAsset({
@@ -285,6 +290,7 @@ async function saveBinaryVideoResponse(result, prompt, modelId, providerId) {
       url: saved.url,
       filePath: saved.filepath,
       metadata: {
+        prompt,
         model: modelId,
         provider: providerId,
         sizeBytes: saved.size,
@@ -836,8 +842,10 @@ async function handleWanI2VGeneration({
     // Use binaryBuffer if available (from array), otherwise decode binaryData (from base64)
     const buffer = binaryBuffer || Buffer.from(binaryData, "base64");
     const videoHash = crypto.createHash("md5").update(buffer).digest("hex");
-    const filename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
-    const thumbFilename = `wan_i2v_${Date.now()}_${videoHash.substring(0, 8)}.jpg`;
+    const slug = slugifyPrompt(prompt);
+    const namePrefix = slug ? `wan_i2v_${slug}` : "wan_i2v";
+    const filename = `${namePrefix}_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
+    const thumbFilename = `${namePrefix}_${Date.now()}_${videoHash.substring(0, 8)}.jpg`;
     const videosDir = path.join(process.cwd(), "data", "uploads", "videos");
 
     // Ensure videos directory exists

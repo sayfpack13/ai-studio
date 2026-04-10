@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useApp } from "../context/AppContext";
-import { stitchVideos } from "../services/api";
+import { resolveAssetUrl, stitchVideos } from "../services/api";
 import { Modal, Button } from "./ui";
 import { LoadingSpinner } from "./shared";
 import {
@@ -17,13 +17,8 @@ import {
 
 function normalizeAsset(item, id, type, source) {
   if (!item) return null;
-  const title =
-    item.title || item.prompt || item.name || `Video ${id}`;
-  const url =
-    item?.url ||
-    item?.result?.url ||
-    item?.result?.video ||
-    "";
+  const title = item.title || item.prompt || item.name || `Video ${id}`;
+  const url = item?.url || item?.result?.url || item?.result?.video || "";
   return {
     id: `hist_${type}_${id}`,
     title: String(title).slice(0, 120),
@@ -45,12 +40,8 @@ function normalizeLibrary(asset) {
 }
 
 export default function StitchDialog({ open, onClose, onStitchComplete }) {
-  const {
-    libraryAssets,
-    videoHistory,
-    getVideoIds,
-    refreshLibraryAssets,
-  } = useApp();
+  const { libraryAssets, videoHistory, getVideoIds, refreshLibraryAssets } =
+    useApp();
 
   const [selectedClips, setSelectedClips] = useState([]);
   const [stitching, setStitching] = useState(false);
@@ -67,7 +58,9 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
       .filter(Boolean);
 
     const fromHistory = (getVideoIds?.() || [])
-      .map((id) => normalizeAsset(videoHistory?.[id], id, "video", "video-history"))
+      .map((id) =>
+        normalizeAsset(videoHistory?.[id], id, "video", "video-history"),
+      )
       .filter(Boolean)
       .filter((h) => h.url);
 
@@ -91,8 +84,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
     const q = searchQuery.toLowerCase();
     return availableVideos.filter(
       (v) =>
-        v.title.toLowerCase().includes(q) ||
-        v.source.toLowerCase().includes(q),
+        v.title.toLowerCase().includes(q) || v.source.toLowerCase().includes(q),
     );
   }, [availableVideos, searchQuery]);
 
@@ -159,7 +151,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
   const handleDownload = () => {
     if (!result?.url) return;
     const a = document.createElement("a");
-    a.href = result.url;
+    a.href = resolveAssetUrl(result.url);
     a.download = "stitched-video.mp4";
     a.click();
   };
@@ -221,7 +213,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
             Successfully stitched {result.clipCount} clips
           </div>
           <video
-            src={result.url}
+            src={resolveAssetUrl(result.url)}
             controls
             autoPlay
             className="w-full max-h-[50vh] rounded-lg bg-black"
@@ -246,7 +238,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
               <video
                 ref={previewRef}
                 key={previewVideo.url}
-                src={previewVideo.url}
+                src={resolveAssetUrl(previewVideo.url)}
                 controls
                 autoPlay
                 className="w-full max-h-[200px] bg-black"
@@ -306,13 +298,17 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                           title="Preview video"
                         >
                           <video
-                            src={video.url}
+                            src={resolveAssetUrl(video.url)}
                             className="w-full h-full object-cover"
                             muted
                             preload="metadata"
                           />
-                          <div className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ${isPreviewing ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}>
-                            <Play className={`w-4 h-4 ${isPreviewing ? "text-indigo-400" : "text-white"}`} />
+                          <div
+                            className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ${isPreviewing ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}
+                          >
+                            <Play
+                              className={`w-4 h-4 ${isPreviewing ? "text-indigo-400" : "text-white"}`}
+                            />
                           </div>
                         </button>
                         <button
@@ -323,13 +319,17 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                           <p className="text-sm text-white truncate">
                             {video.title}
                           </p>
-                          <p className="text-[10px] text-gray-500">{video.source}</p>
+                          <p className="text-[10px] text-gray-500">
+                            {video.source}
+                          </p>
                         </button>
                         <button
                           onClick={() => addClip(video)}
                           disabled={isSelected}
                           className="flex-shrink-0"
-                          title={isSelected ? "Already added" : "Add to clip order"}
+                          title={
+                            isSelected ? "Already added" : "Add to clip order"
+                          }
                         >
                           {isSelected ? (
                             <Check className="w-4 h-4 text-indigo-400" />
@@ -389,18 +389,24 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                           {index + 1}
                         </span>
                         <button
-                          onClick={() => setPreviewVideo(isPreviewing ? null : clip)}
+                          onClick={() =>
+                            setPreviewVideo(isPreviewing ? null : clip)
+                          }
                           className="relative w-12 h-8 flex-shrink-0 bg-gray-900 rounded overflow-hidden group/thumb"
                           title="Preview video"
                         >
                           <video
-                            src={clip.url}
+                            src={resolveAssetUrl(clip.url)}
                             className="w-full h-full object-cover"
                             muted
                             preload="metadata"
                           />
-                          <div className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ${isPreviewing ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}>
-                            <Play className={`w-3 h-3 ${isPreviewing ? "text-indigo-400" : "text-white"}`} />
+                          <div
+                            className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ${isPreviewing ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}
+                          >
+                            <Play
+                              className={`w-3 h-3 ${isPreviewing ? "text-indigo-400" : "text-white"}`}
+                            />
                           </div>
                         </button>
                         <p className="flex-1 text-xs text-white truncate min-w-0">

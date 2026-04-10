@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { resolveAssetUrl, uploadLibraryFile } from "../../services/api";
+import MediaPreviewDialog from "../shared/MediaPreviewDialog";
 
 const fallbackTime = 0;
 
@@ -100,16 +101,118 @@ function fileToDataUrl(file) {
   });
 }
 
-function handleDownload(url, title) {
+async function handleDownload(url, title, type, metadata = {}) {
   const resolved = resolveAssetUrl(url);
-  const link = document.createElement("a");
-  link.href = resolved;
-  link.download = title || "download";
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  const sanitize = (value) => {
+    const cleaned = String(value || "download")
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+      .trim();
+    return cleaned || "download";
+  };
+
+  const getExtensionFromUrl = (resolvedUrl) => {
+    try {
+      const parsed = new URL(resolvedUrl, window.location.origin);
+      const pathname = parsed.pathname || "";
+      const dot = pathname.lastIndexOf(".");
+      if (dot !== -1 && pathname.length - dot <= 6) {
+        return pathname.slice(dot);
+      }
+    } catch {
+      const dot = String(resolvedUrl || "").lastIndexOf(".");
+      if (dot !== -1 && String(resolvedUrl || "").length - dot <= 6) {
+        return String(resolvedUrl || "").slice(dot);
+      }
+    }
+    return "";
+  };
+
+  const getFilenameFromUrl = (resolvedUrl) => {
+    try {
+      const parsed = new URL(resolvedUrl, window.location.origin);
+      const parts = (parsed.pathname || "").split("/").filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : "";
+    } catch {
+      const parts = String(resolvedUrl || "")
+        .split("/")
+        .filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : "";
+    }
+  };
+
+  const stripExtension = (name) => {
+    const idx = name.lastIndexOf(".");
+    return idx > 0 ? name.slice(0, idx) : name;
+  };
+
+  const getExtensionFromType = (assetType, meta) => {
+    const mime = String(meta?.mimeType || meta?.mimetype || "").toLowerCase();
+    const mimeMap = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/webp": ".webp",
+      "image/gif": ".gif",
+      "video/mp4": ".mp4",
+      "video/webm": ".webm",
+      "audio/mpeg": ".mp3",
+      "audio/mp3": ".mp3",
+      "audio/wav": ".wav",
+      "audio/ogg": ".ogg",
+      "audio/webm": ".weba",
+    };
+    if (mimeMap[mime]) return mimeMap[mime];
+    if (assetType === "image") return ".png";
+    if (assetType === "video") return ".mp4";
+    if (assetType === "audio") return ".mp3";
+    if (assetType === "project") return ".json";
+    return "";
+  };
+
+  const urlFilename = getFilenameFromUrl(resolved);
+  const urlBase = stripExtension(urlFilename);
+  const promptBase =
+    metadata?.prompt || metadata?.revised_prompt || metadata?.title || "";
+  const isGenericTitle =
+    /^asset_\d+_/i.test(String(title || "")) ||
+    /^uploaded-\d+/i.test(String(title || ""));
+
+  const chosenBase =
+    promptBase?.trim() ||
+    (!title || isGenericTitle ? urlBase : title) ||
+    urlBase ||
+    "download";
+
+  const baseName = sanitize(chosenBase);
+  const extFromUrl = getExtensionFromUrl(resolved);
+  const ext = extFromUrl || getExtensionFromType(type, metadata);
+  const filename =
+    ext && !baseName.toLowerCase().endsWith(ext.toLowerCase())
+      ? `${baseName}${ext}`
+      : baseName;
+
+  try {
+    const response = await fetch(resolved);
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status}`);
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename || "download";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    const link = document.createElement("a");
+    link.href = resolved;
+    link.download = filename || "download";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }
 
 export default function MediaLibrary() {
@@ -136,8 +239,7 @@ export default function MediaLibrary() {
   const [loading, setLoading] = useState(false);
   const [previewAsset, setPreviewAsset] = useState(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [copiedId, setCopiedId] = useState(null);
-  const [metaExpanded, setMetaExpanded] = useState(false);
+
   const [imgErrors, setImgErrors] = useState({});
   const [imgVideoErrors, setImgVideoErrors] = useState({});
 
@@ -379,16 +481,6 @@ export default function MediaLibrary() {
         }),
       );
       navigate(route);
-    }
-  };
-
-  const handleCopyUrl = async (asset) => {
-    try {
-      await navigator.clipboard.writeText(resolveAssetUrl(asset.url));
-      setCopiedId(asset.id);
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      /* noop */
     }
   };
 
@@ -755,53 +847,61 @@ export default function MediaLibrary() {
                 </div>
 
                 {/* ── Hover Actions ── */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-1.5">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPreviewAsset(asset);
-                    }}
-                    className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-indigo-500 hover:bg-indigo-600/20 text-gray-300 hover:text-indigo-300 transition-all"
-                    title="Preview"
-                  >
-                    <Maximize2 className="w-4 h-4" />
-                  </button>
-                  {asset.url && (
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <div className="absolute top-2 right-2 flex gap-1.5">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDownload(asset.url, asset.title);
+                        setPreviewAsset(asset);
                       }}
                       className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-indigo-500 hover:bg-indigo-600/20 text-gray-300 hover:text-indigo-300 transition-all"
-                      title="Download"
+                      title="Preview"
                     >
-                      <Download className="w-4 h-4" />
+                      <Maximize2 className="w-4 h-4" />
                     </button>
-                  )}
-                  {asset._origin === "library" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeLibraryAsset(asset.id);
-                      }}
-                      className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-red-500 hover:bg-red-600/20 text-gray-300 hover:text-red-300 transition-all"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                  {asset._origin === "history" && asset.type !== "project" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleLoadHistory(asset);
-                      }}
-                      className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-purple-500 hover:bg-purple-600/20 text-gray-300 hover:text-purple-300 transition-all"
-                      title="Load in editor"
-                    >
-                      <Upload className="w-4 h-4" />
-                    </button>
-                  )}
+                    {asset.url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(
+                            asset.url,
+                            asset.title,
+                            asset.type,
+                            asset.metadata,
+                          );
+                        }}
+                        className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-indigo-500 hover:bg-indigo-600/20 text-gray-300 hover:text-indigo-300 transition-all"
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
+                    {asset._origin === "library" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeLibraryAsset(asset.id);
+                        }}
+                        className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-red-500 hover:bg-red-600/20 text-gray-300 hover:text-red-300 transition-all"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {asset._origin === "history" &&
+                      asset.type !== "project" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLoadHistory(asset);
+                          }}
+                          className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-purple-500 hover:bg-purple-600/20 text-gray-300 hover:text-purple-300 transition-all"
+                          title="Load in editor"
+                        >
+                          <Upload className="w-4 h-4" />
+                        </button>
+                      )}
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -809,224 +909,25 @@ export default function MediaLibrary() {
         )}
 
         {/* ── Preview Dialog ── */}
-        <AnimatePresence>
-          {previewAsset && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-              onClick={(e) => {
-                if (e.target === e.currentTarget) setPreviewAsset(null);
-              }}
-            >
-              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="relative w-full max-w-4xl max-h-[90vh] bg-gray-950 border border-gray-800 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col z-10"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
-                  <div className="min-w-0 flex items-center gap-3">
-                    <div
-                      className={`p-2 rounded-lg bg-gradient-to-br ${typeAccent(previewAsset.type)} to-transparent shrink-0`}
-                    >
-                      {typeIcon(previewAsset.type)}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-gray-100 truncate">
-                        {previewAsset.title || "Untitled"}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span
-                          className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md ${typeBadgeBg(previewAsset.type)}`}
-                        >
-                          {typeIcon(previewAsset.type)}
-                          {previewAsset.type}
-                        </span>
-                        <span className="text-[11px] text-gray-500">
-                          {previewAsset.source || "unknown"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setPreviewAsset(null)}
-                    className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-all"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Media */}
-                <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/30">
-                  {previewAsset.type === "image" && previewAsset.url && (
-                    <img
-                      src={resolveAssetUrl(previewAsset.url)}
-                      alt={previewAsset.title || "Preview"}
-                      className="max-w-full max-h-[55vh] rounded-lg object-contain shadow-xl"
-                    />
-                  )}
-                  {previewAsset.type === "video" && previewAsset.url && (
-                    <video
-                      src={resolveAssetUrl(previewAsset.url)}
-                      controls
-                      autoPlay
-                      className="max-w-full max-h-[55vh] rounded-lg shadow-xl"
-                    />
-                  )}
-                  {previewAsset.type === "audio" && previewAsset.url && (
-                    <div className="w-full max-w-lg space-y-6 flex flex-col items-center py-8">
-                      <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-950/60 via-gray-900 to-gray-950 border border-emerald-500/15 shadow-lg">
-                        <Music className="w-16 h-16 text-emerald-400/60" />
-                      </div>
-                      <p className="text-sm text-gray-300 text-center">
-                        {previewAsset.title}
-                      </p>
-                      <audio
-                        src={resolveAssetUrl(previewAsset.url)}
-                        controls
-                        autoPlay
-                        className="w-full"
-                      />
-                    </div>
-                  )}
-                  {previewAsset.type === "project" && (
-                    <div className="text-center space-y-2 py-8">
-                      <FileText className="w-12 h-12 text-amber-400/50 mx-auto" />
-                      <p className="text-sm text-gray-400">
-                        Project – no direct media preview
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Bar */}
-                <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-800 shrink-0 flex-wrap">
-                  {previewAsset.url && (
-                    <button
-                      onClick={() =>
-                        handleDownload(previewAsset.url, previewAsset.title)
-                      }
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white transition-all"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
-                    </button>
-                  )}
-                  {previewAsset.url && (
-                    <button
-                      onClick={() => handleCopyUrl(previewAsset)}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm text-gray-300 transition-all"
-                    >
-                      {copiedId === previewAsset.id ? (
-                        <>
-                          <Check className="w-4 h-4 text-emerald-400" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4" />
-                          Copy URL
-                        </>
-                      )}
-                    </button>
-                  )}
-                  {previewAsset._origin === "history" &&
-                    previewAsset.type !== "project" && (
-                      <button
-                        onClick={() => handleLoadHistory(previewAsset)}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm font-medium text-white transition-all"
-                      >
-                        <Upload className="w-4 h-4" />
-                        Load
-                      </button>
-                    )}
-                  {previewAsset._origin === "library" && (
-                    <button
-                      onClick={() => {
-                        removeLibraryAsset(previewAsset.id);
-                        setPreviewAsset(null);
-                      }}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-sm font-medium text-white transition-all ml-auto"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </button>
-                  )}
-                </div>
-
-                {/* Metadata */}
-                <div className="px-4 pb-4 shrink-0">
-                  <div className="bg-gray-900/70 border border-gray-800 rounded-xl p-3 space-y-2">
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-                      <div>
-                        <span className="text-gray-500">Source</span>
-                        <p className="text-gray-200 truncate">
-                          {previewAsset.source || "unknown"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Type</span>
-                        <p className="text-gray-200">{previewAsset.type}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Created</span>
-                        <p className="text-gray-200">
-                          {previewAsset.createdAt
-                            ? new Date(previewAsset.createdAt).toLocaleString()
-                            : "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Updated</span>
-                        <p className="text-gray-200">
-                          {previewAsset.updatedAt
-                            ? new Date(previewAsset.updatedAt).toLocaleString()
-                            : "N/A"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {previewAsset.metadata &&
-                      Object.keys(previewAsset.metadata).length > 0 && (
-                        <div>
-                          <button
-                            onClick={() => setMetaExpanded((v) => !v)}
-                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
-                          >
-                            {metaExpanded ? (
-                              <ChevronUp className="w-3 h-3" />
-                            ) : (
-                              <ChevronDown className="w-3 h-3" />
-                            )}
-                            Raw metadata
-                          </button>
-                          <AnimatePresence>
-                            {metaExpanded && (
-                              <motion.pre
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: "auto", opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="overflow-hidden mt-2 bg-gray-950 border border-gray-800 rounded-lg p-3 text-[11px] text-gray-400 overflow-auto max-h-48"
-                              >
-                                {JSON.stringify(previewAsset.metadata, null, 2)}
-                              </motion.pre>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <MediaPreviewDialog
+          open={Boolean(previewAsset)}
+          asset={previewAsset}
+          onClose={() => setPreviewAsset(null)}
+          onDownload={(asset) =>
+            handleDownload(asset.url, asset.title, asset.type, asset.metadata)
+          }
+          onDelete={(asset) => {
+            removeLibraryAsset(asset.id);
+            setPreviewAsset(null);
+          }}
+          onLoad={(asset) => handleLoadHistory(asset)}
+          showLoad={
+            previewAsset?._origin === "history" &&
+            previewAsset?.type !== "project"
+          }
+          showDelete={previewAsset?._origin === "library"}
+          showDownload={Boolean(previewAsset?.url)}
+        />
       </div>
     </div>
   );

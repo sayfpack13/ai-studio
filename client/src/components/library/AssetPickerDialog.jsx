@@ -1,6 +1,18 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { resolveAssetUrl } from "../../services/api";
+import {
+  Search,
+  X,
+  Check,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Music as MusicIcon,
+  ImageOff,
+  Play,
+  Maximize2,
+  FolderOpen,
+} from "lucide-react";
 
 const fallbackTime = 0;
 
@@ -225,65 +237,53 @@ export default function AssetPickerDialog({
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className="w-full max-w-5xl max-h-[90vh] bg-gray-900 border border-gray-700 rounded-xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-5xl max-h-[90vh] bg-gray-950 border border-gray-800 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          <div>
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
-            <p className="text-sm text-gray-400">
-              {filteredAssets.length} {type !== "all" ? type + " " : ""}asset
-              {filteredAssets.length !== 1 ? "s" : ""} available
-            </p>
+        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center">
+              {type === "video" ? (
+                <VideoIcon className="w-5 h-5 text-rose-300" />
+              ) : type === "audio" ? (
+                <MusicIcon className="w-5 h-5 text-emerald-300" />
+              ) : (
+                <ImageIcon className="w-5 h-5 text-violet-300" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">{title}</h2>
+              <p className="text-sm text-gray-400">
+                {filteredAssets.length} {type !== "all" ? type + " " : ""}asset
+                {filteredAssets.length !== 1 ? "s" : ""} available
+              </p>
+            </div>
           </div>
           <button
             onClick={handleClose}
-            className="px-3 py-1.5 text-sm rounded bg-gray-800 hover:bg-gray-700 text-gray-300"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-gray-800/80 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600 transition-colors"
           >
-            Cancel
+            <X className="w-4 h-4" />
+            Close
           </button>
         </div>
 
         {/* Search */}
-        <div className="p-3 border-b border-gray-800">
+        <div className="p-3 border-b border-gray-800 bg-gray-950/80">
           <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search assets..."
-              className="w-full bg-gray-800 text-white pl-9 pr-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-gray-900/70 text-white pl-9 pr-9 py-2 rounded-lg text-sm border border-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -293,29 +293,15 @@ export default function AssetPickerDialog({
         <div className="flex-1 overflow-y-auto p-4">
           {filteredAssets.length === 0 ? (
             <div className="text-center py-12">
-              <svg
-                className="w-12 h-12 mx-auto mb-3 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-              <p className="text-gray-400">
+              <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center">
+                <FolderOpen className="w-8 h-8 text-gray-600" />
+              </div>
+              <p className="text-gray-300 font-medium">No assets yet</p>
+              <p className="text-sm text-gray-500 mt-1">
                 {searchQuery
                   ? "No assets match your search"
                   : `No ${type !== "all" ? type + " " : ""}assets in library`}
               </p>
-              {!searchQuery && (
-                <p className="text-sm text-gray-500 mt-1">
-                  Upload some files to the library first
-                </p>
-              )}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -323,77 +309,55 @@ export default function AssetPickerDialog({
                 <div
                   key={asset.id}
                   onClick={() => handleAssetClick(asset)}
-                  className={`group relative rounded-lg overflow-hidden cursor-pointer transition-all ${
+                  className={`group relative aspect-square rounded-2xl overflow-hidden cursor-pointer border transition-all ${
                     selectedAssetId === asset.id
-                      ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900"
-                      : "hover:ring-2 hover:ring-gray-600"
+                      ? "border-purple-500/60 ring-2 ring-purple-500/30"
+                      : "border-gray-800 hover:border-gray-700"
                   }`}
                 >
                   {/* Thumbnail */}
-                  <div className="aspect-square bg-gray-800">
+                  <div className="absolute inset-0">
                     {asset.type === "image" && asset.url && (
                       <img
                         src={resolveAssetUrl(asset.url)}
                         alt={asset.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
                     )}
                     {asset.type === "video" && asset.url && (
-                      <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                      <div className="w-full h-full flex items-center justify-center bg-gray-900">
                         <video
                           src={resolveAssetUrl(asset.url)}
                           className="w-full h-full object-cover"
                           muted
+                          preload="metadata"
                         />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <svg
-                            className="w-8 h-8 text-white/80"
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <div className="w-9 h-9 rounded-full bg-black/60 flex items-center justify-center">
+                            <Play className="w-4 h-4 text-white" />
+                          </div>
                         </div>
                       </div>
                     )}
                     {asset.type === "audio" && asset.url && (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900 to-gray-800">
-                        <svg
-                          className="w-12 h-12 text-purple-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-                          />
-                        </svg>
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-950/70 via-gray-900 to-gray-950">
+                        <MusicIcon className="w-10 h-10 text-emerald-400/70" />
+                      </div>
+                    )}
+                    {asset.type === "project" && (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-950/70 via-gray-900 to-gray-950">
+                        <FolderOpen className="w-9 h-9 text-amber-400/70" />
                       </div>
                     )}
                     {!asset.url && (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <svg
-                          className="w-8 h-8 text-gray-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
+                      <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                        <ImageOff className="w-8 h-8 text-gray-600" />
                       </div>
                     )}
                   </div>
 
-                  {/* Info overlay */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                  {/* Overlay */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gray-950/90 via-gray-950/50 to-transparent pt-6 pb-2 px-2.5">
                     <p className="text-xs text-white truncate font-medium">
                       {asset.title}
                     </p>
@@ -405,22 +369,35 @@ export default function AssetPickerDialog({
 
                   {/* Selected indicator */}
                   {selectedAssetId === asset.id && (
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                      <svg
-                        className="w-4 h-4 text-white"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={3}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
+                    <div className="absolute top-2 right-2 w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                      <Check className="w-4 h-4 text-white" />
                     </div>
                   )}
+
+                  {/* Hover actions */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewAsset(asset);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs font-medium hover:bg-white/20 flex items-center gap-1.5"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" />
+                      Preview
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onSelect) onSelect(asset);
+                        handleClose();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600/90 text-white text-xs font-medium hover:bg-purple-500 flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Select
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -428,7 +405,7 @@ export default function AssetPickerDialog({
         </div>
 
         {/* Footer with Select button */}
-        <div className="p-4 border-t border-gray-800 flex items-center justify-between">
+        <div className="p-4 border-t border-gray-800 flex items-center justify-between bg-gray-950/80">
           <p className="text-sm text-gray-400">
             {selectedAssetId
               ? `Selected: ${mergedAssets.find((a) => a.id === selectedAssetId)?.title || "Asset"}`
@@ -437,7 +414,7 @@ export default function AssetPickerDialog({
           <button
             onClick={handleSelectClick}
             disabled={!selectedAssetId}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors text-sm font-medium"
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors text-sm font-medium"
           >
             Select
           </button>
@@ -452,7 +429,7 @@ export default function AssetPickerDialog({
             if (e.target === e.currentTarget) setPreviewAsset(null);
           }}
         >
-          <div className="max-w-4xl w-full bg-gray-900 border border-gray-700 rounded-xl overflow-hidden">
+          <div className="max-w-4xl w-full bg-gray-950 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between p-3 border-b border-gray-800">
               <div>
                 <p className="text-sm font-semibold text-white truncate">
@@ -466,20 +443,20 @@ export default function AssetPickerDialog({
                 onClick={() => setPreviewAsset(null)}
                 className="px-2 py-1 text-sm rounded bg-gray-800 hover:bg-gray-700"
               >
-                Close
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-4 flex items-center justify-center bg-black/50">
+            <div className="p-4 flex items-center justify-center bg-black/60">
               {previewAsset.type === "image" && previewAsset.url && (
                 <img
-                  src={previewAsset.url}
+                  src={resolveAssetUrl(previewAsset.url)}
                   alt={previewAsset.title}
                   className="max-w-full max-h-[70vh] object-contain rounded"
                 />
               )}
               {previewAsset.type === "video" && previewAsset.url && (
                 <video
-                  src={previewAsset.url}
+                  src={resolveAssetUrl(previewAsset.url)}
                   controls
                   autoPlay
                   className="max-w-full max-h-[70vh] rounded"
@@ -487,7 +464,7 @@ export default function AssetPickerDialog({
               )}
               {previewAsset.type === "audio" && previewAsset.url && (
                 <audio
-                  src={previewAsset.url}
+                  src={resolveAssetUrl(previewAsset.url)}
                   controls
                   autoPlay
                   className="w-full max-w-md"

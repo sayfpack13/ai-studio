@@ -424,11 +424,12 @@ export function buildWanI2VArgs(body) {
     }
   }
 
-  // Chutes API expects 'image' parameter with base64 data (not 'image_b64')
+  // Chutes Wan 2.2 I2V API expects 'image' parameter with base64 or URL data.
   // See: https://chutes.ai/app/chute/4f82321e-3e58-55da-ba44-051686ddbfe5
+  // The API wraps all parameters in an "args" object: { args: { prompt, image, ... } }
   const args = {
     prompt,
-    image, // Chutes Wan 2.2 I2V uses 'image' for base64 data
+    image, // Supports both https URLs and base64 encoded data
   };
 
   // Only include optional parameters if explicitly provided
@@ -552,35 +553,27 @@ async function handleWanI2VGeneration({
     return res.status(400).json({ error: validationError });
   }
 
-  // Convert image to base64 if needed
-  let imageBase64 = args.image;
+  // The Chutes Wan 2.2 I2V API supports both URLs and base64 for the image field.
+  // Pass URLs directly to avoid unnecessary base64 conversion (reduces payload size).
+  // Local files and data URIs still need conversion to base64.
+  let imageValue = args.image;
 
   if (args.image) {
-    // Check if it's a full URL
+    // Pass remote URLs directly — the API supports them natively
     if (args.image.startsWith("http://") || args.image.startsWith("https://")) {
-      console.log("[Wan I2V] Converting remote image URL to base64...");
-      try {
-        imageBase64 = await imageUrlToBase64(args.image);
-        console.log(
-          "[Wan I2V] Image converted, base64 length:",
-          imageBase64.length,
-        );
-      } catch (fetchError) {
-        console.error("[Wan I2V] Failed to fetch image:", fetchError.message);
-        return res
-          .status(400)
-          .json({ error: `Failed to fetch image: ${fetchError.message}` });
-      }
+      console.log("[Wan I2V] Passing remote image URL directly to API");
+      imageValue = args.image;
     }
     // Check if it's a local file path (starts with /uploads/)
     else if (args.image.startsWith("/uploads/")) {
       console.log("[Wan I2V] Converting local file to base64...");
       try {
-        imageBase64 = await localFileToBase64(args.image);
+        const b64 = await localFileToBase64(args.image);
         console.log(
           "[Wan I2V] Local file converted, base64 length:",
-          imageBase64.length,
+          b64.length,
         );
+        imageValue = b64;
       } catch (fetchError) {
         console.error(
           "[Wan I2V] Failed to read local file:",
@@ -597,23 +590,23 @@ async function handleWanI2VGeneration({
         "[Wan I2V] Image appears to be base64 already, length:",
         args.image.length,
       );
-      imageBase64 = args.image;
+      imageValue = args.image;
     }
     // Otherwise, try to treat it as a URL or file path
     else {
       console.log(
-        "[Wan I2V] Unknown image format, attempting to fetch as URL...",
+        "[Wan I2V] Unknown image format, attempting to fetch...",
       );
       try {
-        // Try as URL first
         if (args.image.startsWith("/") || args.image.startsWith(".")) {
-          imageBase64 = await localFileToBase64(args.image);
+          imageValue = await localFileToBase64(args.image);
         } else {
-          imageBase64 = await imageUrlToBase64(args.image);
+          // Try passing as URL first — fallback to base64 conversion on failure
+          imageValue = args.image;
         }
         console.log(
-          "[Wan I2V] Image converted, base64 length:",
-          imageBase64.length,
+          "[Wan I2V] Image resolved, length:",
+          typeof imageValue === "string" ? imageValue.length : "URL",
         );
       } catch (fetchError) {
         console.error("[Wan I2V] Failed to process image:", fetchError.message);
@@ -624,9 +617,9 @@ async function handleWanI2VGeneration({
     }
   }
 
+  // Chutes Wan 2.2 I2V API requires parameters wrapped in { args: { ... } }
   const requestData = {
-    ...args,
-    image: imageBase64,
+    args: { ...args, image: imageValue },
   };
 
   // Build headers - skip Authorization for public chutes
@@ -638,79 +631,131 @@ async function handleWanI2VGeneration({
     requestHeaders.Authorization = `Bearer ${apiKey}`;
   }
 
+  // Retry logic for transient Chutes infrastructure errors (500, 502, 503)
+  const MAX_WAN_RETRIES = 3;
+  const RETRY_DELAYS = [15000, 30000, 60000]; // 15s, 30s, 60s exponential backoff
   let response;
-  try {
-    // Log request for debugging
-    console.log("[Wan I2V] Sending request to:", WAN_I2V_ENDPOINT);
-    console.log("[Wan I2V] Request data keys:", Object.keys(requestData));
-    console.log("[Wan I2V] Prompt length:", args.prompt?.length || 0);
-    console.log("[Wan I2V] Image length:", args.image?.length || 0);
-    console.log("[Wan I2V] Frames:", args.frames);
+  let lastAxiosError = null;
 
-    const wanTimeoutMs = getWanI2VTimeoutMs({
-      providerTimeoutMs: timeout,
-      frames: args.frames,
-    });
+  for (let attempt = 0; attempt <= MAX_WAN_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`[Wan I2V] Retry attempt ${attempt}/${MAX_WAN_RETRIES} after ${RETRY_DELAYS[attempt - 1] / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt - 1]));
+      }
 
-    response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
-      headers: requestHeaders,
-      timeout: wanTimeoutMs,
-      responseType: "arraybuffer", // Important: preserve binary data
-    });
-  } catch (axiosError) {
-    // Handle error response - decode buffer if present
-    let errorMessage = "Wan I2V generation failed";
-    let errorDetail = null;
+      // Log request for debugging
+      console.log("[Wan I2V] Sending request to:", WAN_I2V_ENDPOINT, attempt > 0 ? `(attempt ${attempt + 1})` : "");
+      console.log("[Wan I2V] Request data keys:", Object.keys(requestData));
+      console.log("[Wan I2V] Args keys:", Object.keys(requestData.args));
+      console.log("[Wan I2V] Prompt length:", args.prompt?.length || 0);
+      console.log(
+        "[Wan I2V] Image type:",
+        imageValue.startsWith("http") ? "URL" : "base64",
+        "length:",
+        imageValue?.length || 0,
+      );
+      console.log("[Wan I2V] Frames:", args.frames);
 
-    // Detect network-related errors
-    const networkErrors = [
-      "ECONNRESET",
-      "ETIMEDOUT",
-      "ENOTFOUND",
-      "ECONNREFUSED",
-      "ENETUNREACH",
-      "EAI_AGAIN",
-    ];
-    const errorCode = axiosError.code;
+      const wanTimeoutMs = getWanI2VTimeoutMs({
+        providerTimeoutMs: timeout,
+        frames: args.frames,
+      });
 
-    if (errorCode && networkErrors.includes(errorCode)) {
-      errorMessage =
-        "Network error: Unable to connect to the video generation service. Please check your internet connection and try again.";
-      errorDetail = { code: errorCode, message: axiosError.message };
-    } else if (axiosError.code === "ECONNABORTED") {
-      errorMessage =
-        "Request timeout: The video generation service took too long to respond. Please try again.";
-      errorDetail = { code: errorCode, message: axiosError.message };
-    } else if (axiosError.response?.data) {
-      try {
-        const errorBuffer = Buffer.from(axiosError.response.data);
-        const errorJson = JSON.parse(errorBuffer.toString("utf8"));
-        errorDetail = errorJson;
+      response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
+        headers: requestHeaders,
+        timeout: wanTimeoutMs,
+        responseType: "arraybuffer", // Important: preserve binary data
+      });
+
+      // Success — break out of retry loop
+      break;
+    } catch (axiosError) {
+      lastAxiosError = axiosError;
+
+      // Handle error response - decode buffer if present
+      let errorMessage = "Wan I2V generation failed";
+      let errorDetail = null;
+
+      // Detect network-related errors
+      const networkErrors = [
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "ENOTFOUND",
+        "ECONNREFUSED",
+        "ENETUNREACH",
+        "EAI_AGAIN",
+      ];
+      const errorCode = axiosError.code;
+
+      if (errorCode && networkErrors.includes(errorCode)) {
         errorMessage =
-          errorJson.detail ||
-          errorJson.error?.message ||
-          errorJson.message ||
-          errorMessage;
-      } catch {
-        // If not JSON, try to use as string
+          "Network error: Unable to connect to the video generation service. Please check your internet connection and try again.";
+        errorDetail = { code: errorCode, message: axiosError.message };
+      } else if (axiosError.code === "ECONNABORTED") {
+        errorMessage =
+          "Request timeout: The video generation service took too long to respond. Please try again.";
+        errorDetail = { code: errorCode, message: axiosError.message };
+      } else if (axiosError.response?.data) {
         try {
           const errorBuffer = Buffer.from(axiosError.response.data);
-          errorMessage = errorBuffer.toString("utf8").slice(0, 500);
+          const errorJson = JSON.parse(errorBuffer.toString("utf8"));
+          errorDetail = errorJson;
+          errorMessage =
+            errorJson.detail ||
+            errorJson.error?.message ||
+            errorJson.message ||
+            errorMessage;
         } catch {
-          // Ignore
+          // If not JSON, try to use as string
+          try {
+            const errorBuffer = Buffer.from(axiosError.response.data);
+            errorMessage = errorBuffer.toString("utf8").slice(0, 500);
+          } catch {
+            // Ignore
+          }
         }
       }
+
+      console.error(
+        "[Wan I2V] API error:",
+        axiosError.message,
+        "Status:",
+        axiosError.response?.status,
+        "Data length:",
+        axiosError.response?.data?.length ?? 0,
+        errorDetail || "",
+      );
+
+      // Only retry on server errors that may be transient
+      const isRetryable =
+        axiosError.response?.status === 500 ||
+        axiosError.response?.status === 502 ||
+        axiosError.response?.status === 503;
+
+      if (isRetryable && attempt < MAX_WAN_RETRIES) {
+        console.warn(
+          `[Wan I2V] Retriable error (${axiosError.response?.status}): "${errorMessage}". Will retry...`,
+        );
+        continue;
+      }
+
+      // Provide friendlier messages for common Chutes infrastructure errors
+      if (typeof errorMessage === "string" && errorMessage.toLowerCase().includes("infrastructure")) {
+        errorMessage = "The video generation service is currently busy. Please try again in a few minutes.";
+      }
+
+      return res.status(axiosError.response?.status || 500).json({
+        error: errorMessage,
+        detail: errorDetail,
+      });
     }
+  }
 
-    console.error(
-      "[Wan I2V] API error:",
-      axiosError.message,
-      errorDetail || "",
-    );
-
-    return res.status(axiosError.response?.status || 500).json({
-      error: errorMessage,
-      detail: errorDetail,
+  // Guard against missing response
+  if (!response) {
+    return res.status(500).json({
+      error: lastAxiosError?.message || "Wan I2V generation failed — no response",
     });
   }
 

@@ -767,32 +767,24 @@ async function processWanI2VJob({
     throw new Error(validationError);
   }
 
-  // Convert image to base64 if needed
-  let imageBase64 = args.image;
+  // The Chutes Wan 2.2 I2V API supports both URLs and base64 for the image field.
+  // Pass URLs directly to avoid unnecessary base64 conversion (reduces payload size).
+  // Local files and data URIs still need conversion to base64.
+  let imageValue = args.image;
   if (args.image) {
+    // Pass remote URLs directly — the API supports them natively
     if (args.image.startsWith("http://") || args.image.startsWith("https://")) {
-      console.log("[Wan I2V Job] Converting remote image URL to base64...");
-      try {
-        imageBase64 = await imageUrlToBase64(args.image);
-        console.log(
-          "[Wan I2V Job] Image converted, base64 length:",
-          imageBase64.length,
-        );
-      } catch (fetchError) {
-        console.error(
-          "[Wan I2V Job] Failed to fetch image:",
-          fetchError.message,
-        );
-        throw new Error(`Failed to fetch image: ${fetchError.message}`);
-      }
+      console.log("[Wan I2V Job] Passing remote image URL directly to API");
+      imageValue = args.image;
     } else if (args.image.startsWith("/uploads/")) {
       console.log("[Wan I2V Job] Converting local file to base64...");
       try {
-        imageBase64 = await localFileToBase64(args.image);
+        const b64 = await localFileToBase64(args.image);
         console.log(
           "[Wan I2V Job] Local file converted, base64 length:",
-          imageBase64.length,
+          b64.length,
         );
+        imageValue = b64;
       } catch (fetchError) {
         console.error(
           "[Wan I2V Job] Failed to read local file:",
@@ -808,17 +800,19 @@ async function processWanI2VJob({
         "[Wan I2V Job] Image appears to be base64 already, length:",
         args.image.length,
       );
+      imageValue = args.image;
     } else {
-      console.log("[Wan I2V Job] Unknown image format, attempting to fetch...");
+      console.log("[Wan I2V Job] Unknown image format, attempting to resolve...");
       try {
         if (args.image.startsWith("/") || args.image.startsWith(".")) {
-          imageBase64 = await localFileToBase64(args.image);
+          imageValue = await localFileToBase64(args.image);
         } else {
-          imageBase64 = await imageUrlToBase64(args.image);
+          // Try passing as URL — the API supports URLs natively
+          imageValue = args.image;
         }
         console.log(
-          "[Wan I2V Job] Image converted, base64 length:",
-          imageBase64.length,
+          "[Wan I2V Job] Image resolved, length:",
+          typeof imageValue === "string" ? imageValue.length : "URL",
         );
       } catch (fetchError) {
         console.error(
@@ -836,7 +830,8 @@ async function processWanI2VJob({
 
   await setProgress(20, { stage: "requesting_provider" });
 
-  const requestData = { ...args, image: imageBase64 };
+  // Chutes Wan 2.2 I2V API requires parameters wrapped in an "args" object
+  const requestData = { args: { ...args, image: imageValue } };
 
   // Build headers — skip Authorization for public chutes
   const isPublicChute = providerContext.isPublicChute;
@@ -846,59 +841,116 @@ async function processWanI2VJob({
     requestHeaders.Authorization = `Bearer ${apiKey}`;
   }
 
-  let response;
-  try {
-    console.log("[Wan I2V Job] Sending request to:", WAN_I2V_ENDPOINT);
-    console.log("[Wan I2V Job] Prompt length:", args.prompt?.length || 0);
-    console.log("[Wan I2V Job] Image length:", imageBase64?.length || 0);
-    console.log("[Wan I2V Job] Frames:", args.frames);
+  // Retry logic for transient Chutes infrastructure errors (500 with "No infrastructure available" etc.)
+  const MAX_WAN_RETRIES = 3;
+  const RETRY_DELAYS = [15000, 30000, 60000]; // 15s, 30s, 60s exponential backoff
+  let lastError = null;
 
-    const wanTimeoutMs = getWanI2VTimeoutMs({
-      providerTimeoutMs: providerTimeout,
-      frames: args.frames,
-    });
+  for (let attempt = 0; attempt <= MAX_WAN_RETRIES; attempt++) {
+    if (isCanceled()) throw new Error("Canceled");
 
-    response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
-      headers: requestHeaders,
-      timeout: wanTimeoutMs,
-      responseType: "arraybuffer",
-    });
-  } catch (axiosError) {
-    let errorMessage = "Wan I2V generation failed";
-    const networkErrors = [
-      "ECONNRESET",
-      "ETIMEDOUT",
-      "ENOTFOUND",
-      "ECONNREFUSED",
-      "ENETUNREACH",
-      "EAI_AGAIN",
-    ];
-    if (networkErrors.includes(axiosError.code)) {
-      errorMessage =
-        "Network error: Unable to connect to the video generation service.";
-    } else if (axiosError.code === "ECONNABORTED") {
-      errorMessage =
-        "Request timeout: The video generation service took too long to respond.";
-    } else if (axiosError.response?.data) {
-      try {
-        const errorBuffer = Buffer.from(axiosError.response.data);
-        const errorJson = JSON.parse(errorBuffer.toString("utf8"));
+    try {
+      if (attempt > 0) {
+        console.log(`[Wan I2V Job] Retry attempt ${attempt}/${MAX_WAN_RETRIES} after ${RETRY_DELAYS[attempt - 1] / 1000}s...`);
+        await setProgress(20 + attempt * 5, { stage: "retrying", attempt });
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt - 1]));
+      }
+
+      console.log("[Wan I2V Job] Sending request to:", WAN_I2V_ENDPOINT, attempt > 0 ? `(attempt ${attempt + 1})` : "");
+      console.log("[Wan I2V Job] Args keys:", Object.keys(requestData.args));
+      console.log("[Wan I2V Job] Prompt length:", args.prompt?.length || 0);
+      console.log(
+        "[Wan I2V Job] Image type:",
+        imageValue.startsWith("http") ? "URL" : "base64",
+        "length:",
+        imageValue?.length || 0,
+      );
+      console.log("[Wan I2V Job] Frames:", args.frames);
+
+      const wanTimeoutMs = getWanI2VTimeoutMs({
+        providerTimeoutMs: providerTimeout,
+        frames: args.frames,
+      });
+
+      response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
+        headers: requestHeaders,
+        timeout: wanTimeoutMs,
+        responseType: "arraybuffer",
+      });
+
+      // Success — break out of retry loop
+      break;
+    } catch (axiosError) {
+      lastError = axiosError;
+
+      // Parse error details
+      let errorMessage = "Wan I2V generation failed";
+      const networkErrors = [
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "ENOTFOUND",
+        "ECONNREFUSED",
+        "ENETUNREACH",
+        "EAI_AGAIN",
+      ];
+      if (networkErrors.includes(axiosError.code)) {
         errorMessage =
-          errorJson.detail ||
-          errorJson.error?.message ||
-          errorJson.message ||
-          errorMessage;
-      } catch {
+          "Network error: Unable to connect to the video generation service.";
+      } else if (axiosError.code === "ECONNABORTED") {
+        errorMessage =
+          "Request timeout: The video generation service took too long to respond.";
+      } else if (axiosError.response?.data) {
         try {
           const errorBuffer = Buffer.from(axiosError.response.data);
-          errorMessage = errorBuffer.toString("utf8").slice(0, 500);
+          const errorJson = JSON.parse(errorBuffer.toString("utf8"));
+          errorMessage =
+            errorJson.detail ||
+            errorJson.error?.message ||
+            errorJson.message ||
+            errorMessage;
         } catch {
-          // ignore
+          try {
+            const errorBuffer = Buffer.from(axiosError.response.data);
+            errorMessage = errorBuffer.toString("utf8").slice(0, 500);
+          } catch {
+            // ignore
+          }
         }
       }
+
+      console.error("[Wan I2V Job] API error:", axiosError.message);
+      console.error(
+        "[Wan I2V Job] Status:",
+        axiosError.response?.status,
+        "Data length:",
+        axiosError.response?.data?.length ?? 0,
+      );
+
+      // Only retry on server errors that may be transient
+      const isRetryable =
+        axiosError.response?.status === 500 ||
+        axiosError.response?.status === 502 ||
+        axiosError.response?.status === 503;
+
+      if (isRetryable && attempt < MAX_WAN_RETRIES) {
+        console.warn(
+          `[Wan I2V Job] Retriable error (${axiosError.response?.status}): "${errorMessage}". Will retry...`,
+        );
+        continue;
+      }
+
+      // Provide friendlier messages for common Chutes infrastructure errors
+      if (typeof errorMessage === "string" && errorMessage.toLowerCase().includes("infrastructure")) {
+        errorMessage = "The video generation service is currently busy. Please try again in a few minutes.";
+      }
+
+      throw new Error(errorMessage);
     }
-    console.error("[Wan I2V Job] API error:", axiosError.message);
-    throw new Error(errorMessage);
+  }
+
+  // Should not reach here, but guard against missing response
+  if (!response) {
+    throw new Error(lastError?.message || "Wan I2V generation failed — no response");
   }
 
   await setProgress(80, { stage: "processing_response" });

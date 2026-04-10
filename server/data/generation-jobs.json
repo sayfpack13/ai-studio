@@ -1,6 +1,104 @@
 {
-  "updatedAt": "2026-04-10T13:06:17.480Z",
+  "updatedAt": "2026-04-10T13:52:52.881Z",
   "jobs": [
+    {
+      "id": "video_1775829140798_c3b29c222780",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "crowd jumping in slow motion, flashing neon lights, bass drops synced with light pulses, smoke and lasers, loop seamless, high energy EDM festival vibe",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775828637045_cbc17e754adc",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": false,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775829140794_eb2tq4i7t",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": false,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "crowd jumping in slow motion, flashing neon lights, bass drops synced with light pulses, smoke and lasers, loop seamless, high energy EDM festival vibe",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "No infrastructure available to serve request",
+        "name": "Error",
+        "stack": "Error: No infrastructure available to serve request\n    at processWanI2VJob (file:///C:/Users/sayf/Desktop/ai-studio/server/server.js:901:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async processVideoJob (file:///C:/Users/sayf/Desktop/ai-studio/server/server.js:613:12)\n    at async #processLoop (file:///C:/Users/sayf/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-10T13:52:20.798Z",
+      "updatedAt": "2026-04-10T13:52:52.873Z",
+      "startedAt": "2026-04-10T13:52:20.803Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-04-10T13:52:52.873Z",
+      "history": [
+        {
+          "at": "2026-04-10T13:52:20.798Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-10T13:52:20.803Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-10T13:52:20.808Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-10T13:52:20.814Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-10T13:52:52.873Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1775826138148_fa1313d2774a",
       "type": "video",

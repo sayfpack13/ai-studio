@@ -5,6 +5,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import {
   checkApiStatus,
@@ -14,6 +15,7 @@ import {
   deleteLibraryAsset,
   searchLibraryAssets,
   uploadLibraryFile,
+  getToken,
 } from "../services/api";
 
 const AppContext = createContext();
@@ -121,6 +123,43 @@ const mergeImageHistoryFromLibrary = (history, assets = []) => {
   return trimHistory(next);
 };
 
+const mergeVideoHistoryFromLibrary = (history, assets = []) => {
+  if (!Array.isArray(assets) || assets.length === 0) return history;
+
+  const next = { ...(history || {}) };
+  const existingUrls = new Set(
+    Object.values(history || {})
+      .map((item) => getVideoUrl(item))
+      .filter((url) => !isInvalidMediaUrl(url)),
+  );
+
+  for (const asset of assets) {
+    if (!asset || asset.type !== "video") continue;
+    if (asset.source && asset.source !== "video") continue;
+
+    const url = asset.url;
+    if (isInvalidMediaUrl(url) || existingUrls.has(url)) continue;
+
+    const lastUpdatedMs =
+      Date.parse(asset.updatedAt || asset.createdAt || "") || Date.now();
+
+    next[asset.id] = {
+      prompt: asset.metadata?.prompt || asset.title || "Generated video",
+      result: {
+        url,
+        thumbnail: asset.thumbnail || asset.metadata?.thumbnail || null,
+      },
+      model: asset.metadata?.model,
+      metadata: asset.metadata || {},
+      lastUpdated: lastUpdatedMs,
+    };
+
+    existingUrls.add(url);
+  }
+
+  return trimHistory(filterInvalidVideos(next));
+};
+
 // Helper to load from localStorage with size check
 const loadFromStorage = (key, defaultValue) => {
   try {
@@ -203,6 +242,7 @@ export function AppProvider({ children }) {
   const [libraryFilters, setLibraryFilters] = useState(() =>
     loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "" }),
   );
+  const hasBootstrappedLibraryRef = useRef(false);
 
   useEffect(() => {
     checkStatus();
@@ -271,8 +311,18 @@ export function AppProvider({ children }) {
     const assets = response?.items || response?.assets || [];
     setLibraryAssets(assets);
     setImageHistory((prev) => mergeImageHistoryFromLibrary(prev, assets));
+    setVideoHistory((prev) => mergeVideoHistoryFromLibrary(prev, assets));
     return assets;
   }, []);
+
+  useEffect(() => {
+    if (hasBootstrappedLibraryRef.current) return;
+    if (!getToken()) return;
+    hasBootstrappedLibraryRef.current = true;
+    refreshLibraryAssets(libraryFilters).catch((error) => {
+      console.warn("Library preload skipped:", error?.message || error);
+    });
+  }, [refreshLibraryAssets, libraryFilters]);
 
   const addLibraryAsset = useCallback(async (asset) => {
     const response = await createLibraryAsset(asset);
@@ -280,6 +330,9 @@ export function AppProvider({ children }) {
       setLibraryAssets((prev) => [response.asset, ...prev]);
       setImageHistory((prev) =>
         mergeImageHistoryFromLibrary(prev, [response.asset]),
+      );
+      setVideoHistory((prev) =>
+        mergeVideoHistoryFromLibrary(prev, [response.asset]),
       );
     }
     return response;
@@ -307,6 +360,8 @@ export function AppProvider({ children }) {
     const response = await searchLibraryAssets(queryPayload);
     const assets = response?.items || response?.assets || [];
     setLibraryAssets(assets);
+    setImageHistory((prev) => mergeImageHistoryFromLibrary(prev, assets));
+    setVideoHistory((prev) => mergeVideoHistoryFromLibrary(prev, assets));
     return assets;
   }, []);
 

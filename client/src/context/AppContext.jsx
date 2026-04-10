@@ -39,23 +39,86 @@ const trimHistory = (history, maxItems = MAX_HISTORY_ITEMS) => {
 
   // Sort by lastUpdated and keep only the most recent
   const sorted = entries.sort(
-    (a, b) => (b[1]?.lastUpdated || 0) - (a[1]?.lastUpdated || 0)
+    (a, b) => (b[1]?.lastUpdated || 0) - (a[1]?.lastUpdated || 0),
   );
   const trimmed = Object.fromEntries(sorted.slice(0, maxItems));
   return trimmed;
 };
 
-// Filter out invalid video URLs (videolan.org, data URLs)
+// Filter out invalid video URLs (videolan.org, data URLs, missing/not found)
+const isInvalidMediaUrl = (url) => {
+  if (!url) return true;
+  const normalized = String(url).trim();
+  if (!normalized) return true;
+  const lower = normalized.toLowerCase();
+  if (
+    lower === "not found" ||
+    lower === "missing" ||
+    lower === "undefined" ||
+    lower === "null"
+  ) {
+    return true;
+  }
+  if (normalized.includes("videolan.org")) return true;
+  if (normalized.startsWith("data:")) return true;
+  return false;
+};
+
+const getVideoUrl = (video) => {
+  if (!video) return "";
+  return (
+    video?.result?.url || video?.result?.data?.[0]?.url || video?.url || ""
+  );
+};
+
 const filterInvalidVideos = (history) => {
   const filtered = {};
   for (const [id, video] of Object.entries(history)) {
-    const url = video?.result?.url || video?.url;
-    // Keep only entries with valid URLs
-    if (url && !url.includes('videolan.org') && !url.startsWith('data:')) {
+    const url = getVideoUrl(video);
+    if (!isInvalidMediaUrl(url)) {
       filtered[id] = video;
     }
   }
   return filtered;
+};
+
+const getImageUrl = (image) => {
+  if (!image) return "";
+  return image?.result?.url || image?.url || "";
+};
+
+const mergeImageHistoryFromLibrary = (history, assets = []) => {
+  if (!Array.isArray(assets) || assets.length === 0) return history;
+
+  const next = { ...(history || {}) };
+  const existingUrls = new Set(
+    Object.values(history || {})
+      .map((item) => getImageUrl(item))
+      .filter((url) => !isInvalidMediaUrl(url)),
+  );
+
+  for (const asset of assets) {
+    if (!asset || asset.type !== "image") continue;
+    if (asset.source && asset.source !== "image") continue;
+
+    const url = asset.url;
+    if (isInvalidMediaUrl(url) || existingUrls.has(url)) continue;
+
+    const lastUpdatedMs =
+      Date.parse(asset.updatedAt || asset.createdAt || "") || Date.now();
+
+    next[asset.id] = {
+      prompt: asset.metadata?.prompt || asset.title || "Generated image",
+      result: { url },
+      model: asset.metadata?.model,
+      metadata: asset.metadata || {},
+      lastUpdated: lastUpdatedMs,
+    };
+
+    existingUrls.add(url);
+  }
+
+  return trimHistory(next);
 };
 
 // Helper to load from localStorage with size check
@@ -113,32 +176,32 @@ export function AppProvider({ children }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [streamEnabled, setStreamEnabled] = useState(() =>
-    loadFromStorage(STREAM_ENABLED_KEY, false)
+    loadFromStorage(STREAM_ENABLED_KEY, false),
   );
   const [sidebarOpen, setSidebarOpen] = useState(() =>
-    loadFromStorage(SIDEBAR_OPEN_KEY, true)
+    loadFromStorage(SIDEBAR_OPEN_KEY, true),
   );
   const [chatHistory, setChatHistory] = useState(() =>
-    loadFromStorage(CHAT_HISTORY_KEY, {})
+    loadFromStorage(CHAT_HISTORY_KEY, {}),
   );
   const [imageHistory, setImageHistory] = useState(() =>
-    loadFromStorage(IMAGE_HISTORY_KEY, {})
+    loadFromStorage(IMAGE_HISTORY_KEY, {}),
   );
   const [videoHistory, setVideoHistory] = useState(() =>
-    filterInvalidVideos(loadFromStorage(VIDEO_HISTORY_KEY, {}))
+    filterInvalidVideos(loadFromStorage(VIDEO_HISTORY_KEY, {})),
   );
   const [musicHistory, setMusicHistory] = useState(() =>
-    loadFromStorage(MUSIC_HISTORY_KEY, {})
+    loadFromStorage(MUSIC_HISTORY_KEY, {}),
   );
   const [remixHistory, setRemixHistory] = useState(() =>
-    loadFromStorage(REMIX_HISTORY_KEY, {})
+    loadFromStorage(REMIX_HISTORY_KEY, {}),
   );
   const [editorProjects, setEditorProjects] = useState(() =>
-    loadFromStorage(EDITOR_PROJECTS_KEY, {})
+    loadFromStorage(EDITOR_PROJECTS_KEY, {}),
   );
   const [libraryAssets, setLibraryAssets] = useState([]);
   const [libraryFilters, setLibraryFilters] = useState(() =>
-    loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "" })
+    loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "" }),
   );
 
   useEffect(() => {
@@ -165,9 +228,12 @@ export function AppProvider({ children }) {
     saveToStorage(IMAGE_HISTORY_KEY, trimHistory(imageHistory));
   }, [imageHistory]);
 
-  // Persist video history (trimmed)
+  // Persist video history (trimmed + filtered)
   useEffect(() => {
-    saveToStorage(VIDEO_HISTORY_KEY, trimHistory(videoHistory));
+    saveToStorage(
+      VIDEO_HISTORY_KEY,
+      trimHistory(filterInvalidVideos(videoHistory)),
+    );
   }, [videoHistory]);
 
   // Persist music history (trimmed)
@@ -204,6 +270,7 @@ export function AppProvider({ children }) {
     const response = await listLibraryAssets(filters);
     const assets = response?.items || response?.assets || [];
     setLibraryAssets(assets);
+    setImageHistory((prev) => mergeImageHistoryFromLibrary(prev, assets));
     return assets;
   }, []);
 
@@ -211,6 +278,9 @@ export function AppProvider({ children }) {
     const response = await createLibraryAsset(asset);
     if (response?.asset) {
       setLibraryAssets((prev) => [response.asset, ...prev]);
+      setImageHistory((prev) =>
+        mergeImageHistoryFromLibrary(prev, [response.asset]),
+      );
     }
     return response;
   }, []);
@@ -219,7 +289,7 @@ export function AppProvider({ children }) {
     const response = await updateLibraryAsset(assetId, patch);
     if (response?.asset) {
       setLibraryAssets((prev) =>
-        prev.map((item) => (item.id === assetId ? response.asset : item))
+        prev.map((item) => (item.id === assetId ? response.asset : item)),
       );
     }
     return response;
@@ -270,7 +340,7 @@ export function AppProvider({ children }) {
 
       return response;
     },
-    []
+    [],
   );
 
   // Toggle stream setting
@@ -285,27 +355,24 @@ export function AppProvider({ children }) {
 
   // ==================== CHAT HISTORY ====================
 
-  const saveChatMessages = useCallback(
-    (chatId, messages) => {
-      setChatHistory((prev) => {
-        const updated = {
-          ...prev,
-          [chatId]: {
-            messages,
-            lastUpdated: Date.now(),
-          },
-        };
-        return trimHistory(updated);
-      });
-    },
-    []
-  );
+  const saveChatMessages = useCallback((chatId, messages) => {
+    setChatHistory((prev) => {
+      const updated = {
+        ...prev,
+        [chatId]: {
+          messages,
+          lastUpdated: Date.now(),
+        },
+      };
+      return trimHistory(updated);
+    });
+  }, []);
 
   const getChatMessages = useCallback(
     (chatId) => {
       return chatHistory[chatId]?.messages || [];
     },
-    [chatHistory]
+    [chatHistory],
   );
 
   const deleteChat = useCallback((chatId) => {
@@ -323,33 +390,36 @@ export function AppProvider({ children }) {
   const getChatIds = useCallback(() => {
     return Object.keys(chatHistory).sort(
       (a, b) =>
-        (chatHistory[b]?.lastUpdated || 0) - (chatHistory[a]?.lastUpdated || 0)
+        (chatHistory[b]?.lastUpdated || 0) - (chatHistory[a]?.lastUpdated || 0),
     );
   }, [chatHistory]);
 
   // ==================== IMAGE HISTORY ====================
 
-  const saveImage = useCallback((imageId, prompt, result, model, metadata = null) => {
-    setImageHistory((prev) => {
-      const updated = {
-        ...prev,
-        [imageId]: {
-          prompt,
-          result,
-          model,
-          ...(metadata && typeof metadata === "object" ? { metadata } : {}),
-          lastUpdated: Date.now(),
-        },
-      };
-      return trimHistory(updated);
-    });
-  }, []);
+  const saveImage = useCallback(
+    (imageId, prompt, result, model, metadata = null) => {
+      setImageHistory((prev) => {
+        const updated = {
+          ...prev,
+          [imageId]: {
+            prompt,
+            result,
+            model,
+            ...(metadata && typeof metadata === "object" ? { metadata } : {}),
+            lastUpdated: Date.now(),
+          },
+        };
+        return trimHistory(updated);
+      });
+    },
+    [],
+  );
 
   const getImage = useCallback(
     (imageId) => {
       return imageHistory[imageId];
     },
-    [imageHistory]
+    [imageHistory],
   );
 
   const deleteImage = useCallback((imageId) => {
@@ -367,7 +437,8 @@ export function AppProvider({ children }) {
   const getImageIds = useCallback(() => {
     return Object.keys(imageHistory).sort(
       (a, b) =>
-        (imageHistory[b]?.lastUpdated || 0) - (imageHistory[a]?.lastUpdated || 0)
+        (imageHistory[b]?.lastUpdated || 0) -
+        (imageHistory[a]?.lastUpdated || 0),
     );
   }, [imageHistory]);
 
@@ -375,17 +446,24 @@ export function AppProvider({ children }) {
 
   const saveVideo = useCallback((videoId, prompt, result, model, metadata) => {
     setVideoHistory((prev) => {
+      const nextItem = {
+        prompt,
+        result,
+        model,
+        metadata,
+        lastUpdated: Date.now(),
+      };
+
+      const url = getVideoUrl(nextItem);
+      if (isInvalidMediaUrl(url)) {
+        return filterInvalidVideos(prev);
+      }
+
       const updated = {
         ...prev,
-        [videoId]: {
-          prompt,
-          result,
-          model,
-          metadata,
-          lastUpdated: Date.now(),
-        },
+        [videoId]: nextItem,
       };
-      return trimHistory(updated);
+      return trimHistory(filterInvalidVideos(updated));
     });
   }, []);
 
@@ -393,7 +471,7 @@ export function AppProvider({ children }) {
     (videoId) => {
       return videoHistory[videoId];
     },
-    [videoHistory]
+    [videoHistory],
   );
 
   const deleteVideo = useCallback((videoId) => {
@@ -409,10 +487,13 @@ export function AppProvider({ children }) {
   }, []);
 
   const getVideoIds = useCallback(() => {
-    return Object.keys(videoHistory).sort(
-      (a, b) =>
-        (videoHistory[b]?.lastUpdated || 0) - (videoHistory[a]?.lastUpdated || 0)
-    );
+    return Object.keys(videoHistory)
+      .filter((id) => !isInvalidMediaUrl(getVideoUrl(videoHistory[id])))
+      .sort(
+        (a, b) =>
+          (videoHistory[b]?.lastUpdated || 0) -
+          (videoHistory[a]?.lastUpdated || 0),
+      );
   }, [videoHistory]);
 
   // ==================== MUSIC HISTORY ====================
@@ -436,7 +517,7 @@ export function AppProvider({ children }) {
     (musicId) => {
       return musicHistory[musicId];
     },
-    [musicHistory]
+    [musicHistory],
   );
 
   const deleteMusic = useCallback((musicId) => {
@@ -454,25 +535,29 @@ export function AppProvider({ children }) {
   const getMusicIds = useCallback(() => {
     return Object.keys(musicHistory).sort(
       (a, b) =>
-        (musicHistory[b]?.lastUpdated || 0) - (musicHistory[a]?.lastUpdated || 0)
+        (musicHistory[b]?.lastUpdated || 0) -
+        (musicHistory[a]?.lastUpdated || 0),
     );
   }, [musicHistory]);
 
-  const saveRemix = useCallback((remixId, prompt, result, model, metadata = {}) => {
-    setRemixHistory((prev) => {
-      const updated = {
-        ...prev,
-        [remixId]: {
-          prompt,
-          result,
-          model,
-          metadata,
-          lastUpdated: Date.now(),
-        },
-      };
-      return trimHistory(updated);
-    });
-  }, []);
+  const saveRemix = useCallback(
+    (remixId, prompt, result, model, metadata = {}) => {
+      setRemixHistory((prev) => {
+        const updated = {
+          ...prev,
+          [remixId]: {
+            prompt,
+            result,
+            model,
+            metadata,
+            lastUpdated: Date.now(),
+          },
+        };
+        return trimHistory(updated);
+      });
+    },
+    [],
+  );
 
   const deleteRemix = useCallback((remixId) => {
     setRemixHistory((prev) => {
@@ -489,25 +574,23 @@ export function AppProvider({ children }) {
   const getRemixIds = useCallback(() => {
     return Object.keys(remixHistory).sort(
       (a, b) =>
-        (remixHistory[b]?.lastUpdated || 0) - (remixHistory[a]?.lastUpdated || 0)
+        (remixHistory[b]?.lastUpdated || 0) -
+        (remixHistory[a]?.lastUpdated || 0),
     );
   }, [remixHistory]);
 
-  const saveEditorProject = useCallback(
-    (projectId, project) => {
-      setEditorProjects((prev) => {
-        const updated = {
-          ...prev,
-          [projectId]: {
-            ...project,
-            lastUpdated: Date.now(),
-          },
-        };
-        return trimHistory(updated);
-      });
-    },
-    []
-  );
+  const saveEditorProject = useCallback((projectId, project) => {
+    setEditorProjects((prev) => {
+      const updated = {
+        ...prev,
+        [projectId]: {
+          ...project,
+          lastUpdated: Date.now(),
+        },
+      };
+      return trimHistory(updated);
+    });
+  }, []);
 
   const deleteEditorProject = useCallback((projectId) => {
     setEditorProjects((prev) => {
@@ -521,7 +604,7 @@ export function AppProvider({ children }) {
     return Object.keys(editorProjects).sort(
       (a, b) =>
         (editorProjects[b]?.lastUpdated || 0) -
-        (editorProjects[a]?.lastUpdated || 0)
+        (editorProjects[a]?.lastUpdated || 0),
     );
   }, [editorProjects]);
 

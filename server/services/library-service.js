@@ -1,5 +1,7 @@
 import crypto from "crypto";
-import { stmts, insertMany, db } from "./db.js";
+import { existsSync } from "fs";
+import { join } from "path";
+import { stmts, insertMany, db, DATA_DIR } from "./db.js";
 import {
   saveBase64,
   downloadAndSave,
@@ -24,6 +26,22 @@ function parseJson(str, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function resolveLocalAssetPath(row) {
+  if (!row) return null;
+  if (row.file_path) return row.file_path;
+  if (isLocalUrl(row.url)) {
+    const relative = String(row.url).replace(/^\/+/, "");
+    return join(DATA_DIR, relative);
+  }
+  return null;
+}
+
+function isMissingLocalAssetRow(row) {
+  const localPath = resolveLocalAssetPath(row);
+  if (!localPath) return false;
+  return !existsSync(localPath);
 }
 
 // Convert database row to asset object
@@ -95,7 +113,9 @@ class LibraryService {
       const assets = Array.isArray(parsed?.assets) ? parsed.assets : [];
 
       if (assets.length > 0) {
-        console.log(`[Library] Migrating ${assets.length} assets from JSON to SQLite...`);
+        console.log(
+          `[Library] Migrating ${assets.length} assets from JSON to SQLite...`,
+        );
 
         const params = assets.map((asset) => assetToParams(asset));
         insertMany(params);
@@ -122,7 +142,11 @@ class LibraryService {
     // If URL is a data URL, save to file
     if (isDataUrl(input.url)) {
       try {
-        const result = await saveBase64(input.url, input.metadata?.mimeType, "asset");
+        const result = await saveBase64(
+          input.url,
+          input.metadata?.mimeType,
+          "asset",
+        );
         asset.url = result.url;
         asset.file_path = result.filepath;
         asset.metadata = JSON.stringify({
@@ -141,14 +165,7 @@ class LibraryService {
   }
 
   // List assets with pagination and filtering
-  listAssets({
-    type,
-    folderId,
-    tag,
-    query,
-    limit = 100,
-    offset = 0,
-  } = {}) {
+  listAssets({ type, folderId, tag, query, limit = 100, offset = 0 } = {}) {
     let rows;
     let countResult;
 
@@ -167,15 +184,35 @@ class LibraryService {
       countResult = stmts.countAll.get();
     }
 
-    // Filter by tag if specified (SQLite doesn't have array contains)
-    let assets = rows.map(rowToAsset);
+    const assets = [];
+    let missingCount = 0;
+
+    for (const row of rows) {
+      if (isMissingLocalAssetRow(row)) {
+        stmts.delete.run(row.id);
+        missingCount++;
+        continue;
+      }
+      assets.push(rowToAsset(row));
+    }
+
+    let filteredAssets = assets;
     if (tag) {
-      assets = assets.filter((a) => a.tags && a.tags.includes(tag));
+      filteredAssets = assets.filter((a) => a.tags && a.tags.includes(tag));
+    }
+
+    const baseTotal =
+      typeof countResult?.count === "number"
+        ? countResult.count
+        : assets.length;
+    let total = Math.max(0, baseTotal - missingCount);
+    if (tag || query) {
+      total = filteredAssets.length;
     }
 
     return {
-      items: assets,
-      total: countResult?.count || assets.length,
+      items: filteredAssets,
+      total,
       limit,
       offset,
     };
@@ -217,7 +254,9 @@ class LibraryService {
 
     // Delete associated file if local
     if (asset.filePath || (asset.url && isLocalUrl(asset.url))) {
-      const filename = asset.filePath ? asset.filePath.split("/").pop() : getFilenameFromUrl(asset.url);
+      const filename = asset.filePath
+        ? asset.filePath.split("/").pop()
+        : getFilenameFromUrl(asset.url);
       if (filename) {
         await deleteFile(filename);
       }
@@ -247,16 +286,18 @@ class LibraryService {
 
     const toDelete = db
       .prepare(
-        `SELECT id, url, file_path FROM assets 
-         WHERE type IN ('image', 'video', 'audio') 
-         AND source IN ('image', 'video', 'music', 'pipeline')`
+        `SELECT id, url, file_path FROM assets
+         WHERE type IN ('image', 'video', 'audio')
+         AND source IN ('image', 'video', 'music', 'pipeline')`,
       )
       .all();
 
     let deleted = 0;
     for (const row of toDelete) {
       if (row.file_path || (row.url && isLocalUrl(row.url))) {
-        const filename = row.file_path ? row.file_path.split("/").pop() : getFilenameFromUrl(row.url);
+        const filename = row.file_path
+          ? row.file_path.split("/").pop()
+          : getFilenameFromUrl(row.url);
         if (filename) {
           await deleteFile(filename);
         }
@@ -276,7 +317,9 @@ class LibraryService {
 
     for (const row of toDelete) {
       if (row.file_path || (row.url && isLocalUrl(row.url))) {
-        const filename = row.file_path ? row.file_path.split("/").pop() : getFilenameFromUrl(row.url);
+        const filename = row.file_path
+          ? row.file_path.split("/").pop()
+          : getFilenameFromUrl(row.url);
         if (filename) {
           await deleteFile(filename);
         }
@@ -301,15 +344,23 @@ class LibraryService {
     }
 
     // Delete assets with videolan.org URLs
-    const videolanResult = db.prepare(`DELETE FROM assets WHERE url LIKE ?`).run('%videolan.org%');
+    const videolanResult = db
+      .prepare(`DELETE FROM assets WHERE url LIKE ?`)
+      .run("%videolan.org%");
     if (videolanResult.changes > 0) {
-      console.log(`[Library] Deleted ${videolanResult.changes} assets with videolan.org URLs`);
+      console.log(
+        `[Library] Deleted ${videolanResult.changes} assets with videolan.org URLs`,
+      );
     }
 
     // Delete assets with data URLs (base64)
-    const dataUrlResult = db.prepare(`DELETE FROM assets WHERE url LIKE ?`).run('data:%');
+    const dataUrlResult = db
+      .prepare(`DELETE FROM assets WHERE url LIKE ?`)
+      .run("data:%");
     if (dataUrlResult.changes > 0) {
-      console.log(`[Library] Deleted ${dataUrlResult.changes} assets with data URLs`);
+      console.log(
+        `[Library] Deleted ${dataUrlResult.changes} assets with data URLs`,
+      );
     }
 
     await fs.writeFile(FLAG, new Date().toISOString());
@@ -330,8 +381,12 @@ class LibraryService {
     }
 
     try {
-      const result = await downloadAndSave(asset.url, asset.metadata?.mimeType, "cached");
-      
+      const result = await downloadAndSave(
+        asset.url,
+        asset.metadata?.mimeType,
+        "cached",
+      );
+
       await this.updateAsset(id, {
         url: result.url,
         filePath: result.filepath,

@@ -19,7 +19,9 @@ router.post("/stitch", async (req, res) => {
 
   const cleanup = async () => {
     for (const f of tempFiles) {
-      try { await fsp.unlink(f); } catch {}
+      try {
+        await fsp.unlink(f);
+      } catch {}
     }
   };
 
@@ -27,10 +29,14 @@ router.post("/stitch", async (req, res) => {
     const { videoUrls } = req.body || {};
 
     if (!Array.isArray(videoUrls) || videoUrls.length < 2) {
-      return res.status(400).json({ error: "At least 2 video URLs are required" });
+      return res
+        .status(400)
+        .json({ error: "At least 2 video URLs are required" });
     }
     if (videoUrls.length > 20) {
-      return res.status(400).json({ error: "Maximum 20 videos can be stitched at once" });
+      return res
+        .status(400)
+        .json({ error: "Maximum 20 videos can be stitched at once" });
     }
 
     const videosDir = path.join(process.cwd(), "data", "uploads", "videos");
@@ -44,7 +50,9 @@ router.post("/stitch", async (req, res) => {
         const localPath = path.join(process.cwd(), "data", url);
         if (!fs.existsSync(localPath)) {
           await cleanup();
-          return res.status(400).json({ error: `Local file not found: ${url}` });
+          return res
+            .status(400)
+            .json({ error: `Local file not found: ${url}` });
         }
         localPaths.push(localPath);
       } else if (url.startsWith("http://") || url.startsWith("https://")) {
@@ -52,7 +60,9 @@ router.post("/stitch", async (req, res) => {
         const tmpPath = path.join(videosDir, tmpName);
         tempFiles.push(tmpPath);
         try {
-          const response = await (await import("axios")).default.get(url, {
+          const response = await (
+            await import("axios")
+          ).default.get(url, {
             responseType: "arraybuffer",
             timeout: 60000,
           });
@@ -60,7 +70,9 @@ router.post("/stitch", async (req, res) => {
           localPaths.push(tmpPath);
         } catch (err) {
           await cleanup();
-          return res.status(400).json({ error: `Failed to download video: ${url}` });
+          return res
+            .status(400)
+            .json({ error: `Failed to download video: ${url}` });
         }
       } else {
         await cleanup();
@@ -71,7 +83,9 @@ router.post("/stitch", async (req, res) => {
     const listName = `stitch_list_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.txt`;
     const listPath = path.join(videosDir, listName);
     tempFiles.push(listPath);
-    const listContent = localPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n");
+    const listContent = localPaths
+      .map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
+      .join("\n");
     fs.writeFileSync(listPath, listContent);
 
     const outputName = `stitched_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.mp4`;
@@ -99,7 +113,9 @@ router.post("/stitch", async (req, res) => {
         await tryStitch(true);
       } catch (err) {
         await cleanup();
-        return res.status(500).json({ error: "FFmpeg stitching failed: " + err.message });
+        return res
+          .status(500)
+          .json({ error: "FFmpeg stitching failed: " + err.message });
       }
     }
 
@@ -144,7 +160,9 @@ router.post("/stitch", async (req, res) => {
   } catch (error) {
     await cleanup();
     console.error("Video stitch error:", error.message);
-    return res.status(500).json({ error: "Video stitch failed: " + error.message });
+    return res
+      .status(500)
+      .json({ error: "Video stitch failed: " + error.message });
   }
 });
 
@@ -155,6 +173,17 @@ export const WAN_I2V_ENDPOINT =
   "https://chutes-wan-2-2-i2v-14b-fast.chutes.ai/generate";
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
   "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走";
+
+export function getWanI2VTimeoutMs({ providerTimeoutMs, frames }) {
+  const baseTimeout =
+    typeof providerTimeoutMs === "number" && Number.isFinite(providerTimeoutMs)
+      ? providerTimeoutMs
+      : 300000;
+  const frameCount =
+    typeof frames === "number" && Number.isFinite(frames) ? frames : 0;
+  const estimated = 120000 + Math.max(0, frameCount) * 3000;
+  return Math.max(baseTimeout, estimated, 600000);
+}
 
 function toNumberOrNull(value) {
   if (value == null || value === "") return null;
@@ -582,11 +611,9 @@ async function handleWanI2VGeneration({
         );
       } catch (fetchError) {
         console.error("[Wan I2V] Failed to process image:", fetchError.message);
-        return res
-          .status(400)
-          .json({
-            error: `Invalid image format: expected base64, URL, or local file path`,
-          });
+        return res.status(400).json({
+          error: `Invalid image format: expected base64, URL, or local file path`,
+        });
       }
     }
   }
@@ -614,9 +641,14 @@ async function handleWanI2VGeneration({
     console.log("[Wan I2V] Image length:", args.image?.length || 0);
     console.log("[Wan I2V] Frames:", args.frames);
 
+    const wanTimeoutMs = getWanI2VTimeoutMs({
+      providerTimeoutMs: timeout,
+      frames: args.frames,
+    });
+
     response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
       headers: requestHeaders,
-      timeout,
+      timeout: wanTimeoutMs,
       responseType: "arraybuffer", // Important: preserve binary data
     });
   } catch (axiosError) {

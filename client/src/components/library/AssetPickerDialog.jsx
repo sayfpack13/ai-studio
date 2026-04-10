@@ -3,6 +3,24 @@ import { useApp } from "../../context/AppContext";
 
 const fallbackTime = 0;
 
+function isInvalidMediaUrl(url) {
+  if (!url) return true;
+  const normalized = String(url).trim();
+  if (!normalized) return true;
+  const lower = normalized.toLowerCase();
+  if (
+    lower === "not found" ||
+    lower === "missing" ||
+    lower === "undefined" ||
+    lower === "null"
+  ) {
+    return true;
+  }
+  if (normalized.includes("videolan.org")) return true;
+  if (normalized.startsWith("data:")) return true;
+  return false;
+}
+
 function normalizeHistoryItem(item, id, type, source) {
   if (!item) return null;
 
@@ -19,6 +37,8 @@ function normalizeHistoryItem(item, id, type, source) {
     item?.result?.audio ||
     item?.result?.image ||
     "";
+
+  if (isInvalidMediaUrl(url)) return null;
 
   return {
     id: `hist_${type}_${id}`,
@@ -92,7 +112,7 @@ export default function AssetPickerDialog({
     const normalizeUrl = (url) => {
       if (!url) return null;
       // Remove trailing slashes and convert to lowercase for comparison
-      return url.replace(/\/+$/, '').toLowerCase();
+      return url.replace(/\/+$/, "").toLowerCase();
     };
 
     const byUrlOrId = new Map();
@@ -100,7 +120,9 @@ export default function AssetPickerDialog({
     // Add API assets first (they have preference)
     for (const asset of apiAssets) {
       const normalizedUrl = normalizeUrl(asset.url);
-      const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
+      const dedupeKey = normalizedUrl
+        ? `url:${normalizedUrl}`
+        : `id:${asset.id}`;
       if (!byUrlOrId.has(dedupeKey)) {
         byUrlOrId.set(dedupeKey, asset);
       }
@@ -109,7 +131,9 @@ export default function AssetPickerDialog({
     // Add history assets, skipping if URL already exists
     for (const asset of historyAssets) {
       const normalizedUrl = normalizeUrl(asset.url);
-      const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
+      const dedupeKey = normalizedUrl
+        ? `url:${normalizedUrl}`
+        : `id:${asset.id}`;
       if (!byUrlOrId.has(dedupeKey)) {
         byUrlOrId.set(dedupeKey, asset);
       }

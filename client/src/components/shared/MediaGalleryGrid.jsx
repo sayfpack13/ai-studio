@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Download, 
-  Trash2, 
-  RotateCcw, 
-  GitCompare, 
-  Maximize2, 
-  Copy, 
-  Check, 
+import {
+  Download,
+  Trash2,
+  RotateCcw,
+  GitCompare,
+  Maximize2,
+  Copy,
+  Check,
   Play,
   Volume2,
   Video,
   Image,
-  Music
+  Music,
 } from "lucide-react";
 import { Button } from "../ui";
 
@@ -46,7 +46,8 @@ export default function MediaGalleryGrid({
     e.stopPropagation();
     const link = document.createElement("a");
     link.href = item.url;
-    const ext = mediaType === "image" ? "png" : mediaType === "video" ? "mp4" : "mp3";
+    const ext =
+      mediaType === "image" ? "png" : mediaType === "video" ? "mp4" : "mp3";
     link.download = `generated-${item.id}.${ext}`;
     link.click();
   };
@@ -83,9 +84,19 @@ export default function MediaGalleryGrid({
       return (
         <div className="w-full h-full bg-gray-800 flex items-center justify-center relative">
           {item.thumbnail ? (
-            <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
+            <img
+              src={item.thumbnail}
+              alt=""
+              className="w-full h-full object-cover"
+            />
           ) : (
-            <Video className="w-12 h-12 text-gray-600" />
+            <video
+              src={item.url}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              preload="metadata"
+            />
           )}
           <div className="absolute inset-0 flex items-center justify-center bg-black/30">
             <Play className="w-10 h-10 text-white" />
@@ -104,7 +115,9 @@ export default function MediaGalleryGrid({
   };
 
   return (
-    <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 ${className}`}>
+    <div
+      className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 ${className}`}
+    >
       {items.map((item) => {
         const isHovered = hoveredId === item.id;
         const isComparing = isInCompare(item.id);
@@ -208,7 +221,9 @@ export default function MediaGalleryGrid({
             {/* Date Badge */}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 pointer-events-none">
               <p className="text-[10px] text-gray-300">
-                {item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString() : ""}
+                {item.lastUpdated
+                  ? new Date(item.lastUpdated).toLocaleDateString()
+                  : ""}
               </p>
             </div>
           </motion.div>
@@ -219,7 +234,9 @@ export default function MediaGalleryGrid({
         <div className="col-span-full flex flex-col items-center justify-center py-12 text-gray-400">
           <Maximize2 className="w-12 h-12 mb-3 opacity-50" />
           <p className="text-sm">No {mediaType}s generated yet</p>
-          <p className="text-xs text-gray-500 mt-1">Your generated {mediaType}s will appear here</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Your generated {mediaType}s will appear here
+          </p>
         </div>
       )}
     </div>

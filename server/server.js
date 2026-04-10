@@ -27,6 +27,7 @@ import {
   WAN_I2V_ENDPOINT,
   buildWanI2VArgs,
   validateWanI2VInput,
+  getWanI2VTimeoutMs,
   imageUrlToBase64,
   localFileToBase64,
 } from "./routes/video.js";
@@ -748,7 +749,7 @@ async function processWanI2VJob({
   setProgress,
   isCanceled,
 }) {
-  const timeout = providerContext.provider?.timeout?.video || 300000;
+  const providerTimeout = providerContext.provider?.timeout?.video || 300000;
 
   // Build & validate Wan I2V args from the job payload
   const args = buildWanI2VArgs(payload);
@@ -852,9 +853,14 @@ async function processWanI2VJob({
     console.log("[Wan I2V Job] Image length:", imageBase64?.length || 0);
     console.log("[Wan I2V Job] Frames:", args.frames);
 
+    const wanTimeoutMs = getWanI2VTimeoutMs({
+      providerTimeoutMs: providerTimeout,
+      frames: args.frames,
+    });
+
     response = await axios.post(WAN_I2V_ENDPOINT, requestData, {
       headers: requestHeaders,
-      timeout,
+      timeout: wanTimeoutMs,
       responseType: "arraybuffer",
     });
   } catch (axiosError) {

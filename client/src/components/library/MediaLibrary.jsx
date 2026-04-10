@@ -246,7 +246,6 @@ export default function MediaLibrary() {
   // Upload state
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadType, setUploadType] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadSuccess, setUploadSuccess] = useState("");
@@ -294,10 +293,6 @@ export default function MediaLibrary() {
       const baseName = dot > 0 ? selected.name.slice(0, dot) : selected.name;
       setUploadTitle(baseName);
     }
-
-    if (selected && !uploadType) {
-      setUploadType(inferTypeFromFile(selected));
-    }
   };
 
   const handleUpload = async () => {
@@ -315,7 +310,7 @@ export default function MediaLibrary() {
         fileBase64: dataUrl,
         mimeType: uploadFile.type || undefined,
         title: uploadTitle.trim() || uploadFile.name,
-        type: uploadType || inferTypeFromFile(uploadFile),
+        type: inferTypeFromFile(uploadFile),
         source: "upload",
         metadata: {
           uploadedFrom: "media-library-ui",
@@ -330,7 +325,6 @@ export default function MediaLibrary() {
       setUploadSuccess("File uploaded successfully.");
       setUploadFile(null);
       setUploadTitle("");
-      setUploadType("");
 
       await loadLibraryAssets();
     } catch (error) {
@@ -631,7 +625,7 @@ export default function MediaLibrary() {
                   </h3>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gray-800 border border-dashed border-gray-600 hover:border-indigo-500/50 cursor-pointer text-sm text-gray-400 hover:text-gray-200 transition-all">
                     <Upload className="w-4 h-4" />
                     {uploadFile ? uploadFile.name : "Choose file…"}
@@ -647,20 +641,6 @@ export default function MediaLibrary() {
                     placeholder="Asset title"
                     className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
                   />
-                  <div className="relative">
-                    <select
-                      value={uploadType}
-                      onChange={(e) => setUploadType(e.target.value)}
-                      className="w-full appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 pr-8 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all cursor-pointer"
-                    >
-                      <option value="">Auto type</option>
-                      <option value="image">Image</option>
-                      <option value="video">Video</option>
-                      <option value="audio">Audio</option>
-                      <option value="project">Project</option>
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
-                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">

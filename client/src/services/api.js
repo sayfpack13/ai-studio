@@ -1,4 +1,18 @@
-const API_BASE_URL = "http://localhost:3001/api";
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
+
+export const resolveAssetUrl = (url) => {
+  if (!url) return "";
+  const normalized = String(url);
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return normalized;
+  }
+  if (normalized.startsWith("/uploads/")) {
+    return `${API_ORIGIN}${normalized}`;
+  }
+  return normalized;
+};
 
 // Token management
 const TOKEN_KEY = "blackbox_ai_admin_token";
@@ -464,7 +478,9 @@ export const stitchVideos = async (videoUrls) => {
 
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || `Stitch failed with status ${response.status}`);
+    throw new Error(
+      data.error || `Stitch failed with status ${response.status}`,
+    );
   }
   return data;
 };

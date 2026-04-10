@@ -21,6 +21,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "../ui";
+import { resolveAssetUrl } from "../../services/api";
 import MediaGalleryGrid from "./MediaGalleryGrid";
 import MediaCompareView from "./MediaCompareView";
 
@@ -87,23 +88,25 @@ export default function MediaOutputPanel({
   // Get history items as array
   const historyItems = useMemo(() => {
     const ids = getMediaIds?.() || [];
-    return ids.map((id) => {
-      const item = mediaHistory[id];
-      if (!item) return null;
-      // Handle result object structure (image/video/music history stores url in result)
-      const result = item.result || {};
-      return {
-        id: id,
-        prompt: item.prompt,
-        model: item.model,
-        lastUpdated: item.lastUpdated,
-        url: result.url,
-        thumbnail: result.thumbnail || null,
-        revisedPrompt: result.revisedPrompt,
-        metadata: item.metadata,
-        duration: result.duration,
-      };
-    }).filter((item) => item?.url);
+    return ids
+      .map((id) => {
+        const item = mediaHistory[id];
+        if (!item) return null;
+        // Handle result object structure (image/video/music history stores url in result)
+        const result = item.result || {};
+        return {
+          id: id,
+          prompt: item.prompt,
+          model: item.model,
+          lastUpdated: item.lastUpdated,
+          url: result.url,
+          thumbnail: result.thumbnail || null,
+          revisedPrompt: result.revisedPrompt,
+          metadata: item.metadata,
+          duration: result.duration,
+        };
+      })
+      .filter((item) => item?.url);
   }, [mediaHistory, getMediaIds]);
 
   // Handle add to compare
@@ -140,18 +143,19 @@ export default function MediaOutputPanel({
 
   // Handle share
   const handleShare = async () => {
-    if (navigator.share && generatedMedia?.url) {
+    const shareUrl = resolveAssetUrl(generatedMedia?.url);
+    if (navigator.share && shareUrl) {
       try {
         await navigator.share({
           title: `Generated ${config.label}`,
           text: generatedMedia.prompt,
-          url: generatedMedia.url,
+          url: shareUrl,
         });
       } catch (err) {
-        navigator.clipboard?.writeText(generatedMedia.url);
+        navigator.clipboard?.writeText(shareUrl);
       }
-    } else if (generatedMedia?.url) {
-      navigator.clipboard?.writeText(generatedMedia.url);
+    } else if (shareUrl) {
+      navigator.clipboard?.writeText(shareUrl);
     }
   };
 
@@ -169,7 +173,7 @@ export default function MediaOutputPanel({
 
   // Render media player based on type
   const renderMediaPlayer = (item, showControls = true) => {
-    const url = item.url;
+    const url = resolveAssetUrl(item.url);
 
     if (mediaType === "image") {
       return (
@@ -198,9 +202,11 @@ export default function MediaOutputPanel({
           <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4">
             <Volume2 className="w-12 h-12 text-white" />
           </div>
-          <audio key={item.url} src={item.url} controls className="w-full max-w-md" />
+          <audio key={url} src={url} controls className="w-full max-w-md" />
           {item.prompt && (
-            <p className="text-sm text-gray-400 mt-4 text-center">{item.prompt}</p>
+            <p className="text-sm text-gray-400 mt-4 text-center">
+              {item.prompt}
+            </p>
           )}
         </div>
       );
@@ -215,8 +221,14 @@ export default function MediaOutputPanel({
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
-          const badge = tab.id === "history" && historyItems.length > 0 ? historyItems.length : null;
-          const compareBadge = tab.id === "compare" && compareItems.length > 0 ? compareItems.length : null;
+          const badge =
+            tab.id === "history" && historyItems.length > 0
+              ? historyItems.length
+              : null;
+          const compareBadge =
+            tab.id === "compare" && compareItems.length > 0
+              ? compareItems.length
+              : null;
 
           return (
             <button
@@ -231,9 +243,11 @@ export default function MediaOutputPanel({
               <Icon className="w-4 h-4" />
               {tab.label}
               {(badge || compareBadge) && (
-                <span className={`px-1.5 py-0.5 rounded-full text-xs ${
-                  isActive ? "bg-purple-600/30" : "bg-gray-700"
-                }`}>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-xs ${
+                    isActive ? "bg-purple-600/30" : "bg-gray-700"
+                  }`}
+                >
                   {badge || compareBadge}
                 </span>
               )}
@@ -260,10 +274,12 @@ export default function MediaOutputPanel({
                 <div className="mb-3 p-3 bg-purple-600/10 border border-purple-500/30 rounded-lg flex items-center gap-3">
                   <RefreshCw className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-purple-300 font-medium">{config.loadingMessage}</p>
+                    <p className="text-sm text-purple-300 font-medium">
+                      {config.loadingMessage}
+                    </p>
                     {progress !== null && progress !== undefined && (
                       <div className="mt-1.5 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-purple-500 transition-all duration-300"
                           style={{ width: `${progress}%` }}
                         />
@@ -272,13 +288,15 @@ export default function MediaOutputPanel({
                   </div>
                 </div>
               )}
-              
+
               {error ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
                   <div className="w-20 h-20 rounded-2xl bg-red-600/20 flex items-center justify-center mb-4">
                     <AlertCircle className="w-10 h-10 text-red-400" />
                   </div>
-                  <p className="text-red-400 font-medium text-center px-4">Generation Failed</p>
+                  <p className="text-red-400 font-medium text-center px-4">
+                    Generation Failed
+                  </p>
                   <div className="mt-3 p-3 bg-red-900/20 border border-red-700/50 rounded-lg max-w-md mx-4">
                     <p className="text-sm text-red-300 break-words">{error}</p>
                   </div>
@@ -294,11 +312,13 @@ export default function MediaOutputPanel({
               ) : generatedMedia ? (
                 <div className="space-y-4">
                   {/* Media Display */}
-                  <div 
+                  <div
                     className={`relative rounded-xl overflow-hidden bg-gray-800 border border-gray-700 ${
                       mediaType === "image" ? "cursor-pointer group" : ""
                     }`}
-                    onClick={() => mediaType === "image" && setZoomedMedia(generatedMedia)}
+                    onClick={() =>
+                      mediaType === "image" && setZoomedMedia(generatedMedia)
+                    }
                   >
                     {renderMediaPlayer(generatedMedia)}
                     {mediaType === "image" && (
@@ -311,8 +331,12 @@ export default function MediaOutputPanel({
                   {/* Revised Prompt */}
                   {generatedMedia.revisedPrompt && (
                     <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-                      <p className="text-xs text-gray-500 mb-1">Revised prompt:</p>
-                      <p className="text-sm text-gray-300">{generatedMedia.revisedPrompt}</p>
+                      <p className="text-xs text-gray-500 mb-1">
+                        Revised prompt:
+                      </p>
+                      <p className="text-sm text-gray-300">
+                        {generatedMedia.revisedPrompt}
+                      </p>
                     </div>
                   )}
 
@@ -359,7 +383,13 @@ export default function MediaOutputPanel({
                       variant="ghost"
                       size="sm"
                       onClick={handleCopyPrompt}
-                      leftIcon={copiedPrompt ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      leftIcon={
+                        copiedPrompt ? (
+                          <Check className="w-4 h-4" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )
+                      }
                     >
                       {copiedPrompt ? "Copied" : "Copy Prompt"}
                     </Button>
@@ -389,7 +419,9 @@ export default function MediaOutputPanel({
                     <Sparkles className="w-10 h-10 text-gray-600" />
                   </div>
                   <p className="text-sm font-medium">{config.emptyMessage}</p>
-                  <p className="text-xs text-gray-500 mt-1">Enter a prompt and click Generate</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter a prompt and click Generate
+                  </p>
                 </div>
               )}
             </motion.div>
@@ -407,7 +439,8 @@ export default function MediaOutputPanel({
             >
               <div className="flex items-center justify-between p-2 border-b border-gray-700">
                 <span className="text-sm text-gray-400">
-                  {historyItems.length} {historyItems.length === 1 ? 'item' : 'items'}
+                  {historyItems.length}{" "}
+                  {historyItems.length === 1 ? "item" : "items"}
                 </span>
                 {onClearHistory && (
                   <button
@@ -423,7 +456,9 @@ export default function MediaOutputPanel({
                   mediaType={mediaType}
                   items={historyItems}
                   onSelect={handleSelectFromHistory}
-                  onCompare={config.supportsComparison ? handleAddToCompare : undefined}
+                  onCompare={
+                    config.supportsComparison ? handleAddToCompare : undefined
+                  }
                   onDelete={onDeleteMedia}
                   onReload={handleReloadPrompt}
                   selectedForCompare={compareItems.map((item) => item.id)}
@@ -467,7 +502,7 @@ export default function MediaOutputPanel({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ duration: 0.15 }}
-              src={zoomedMedia.url}
+              src={resolveAssetUrl(zoomedMedia.url)}
               alt={zoomedMedia.prompt || "Generated image"}
               className="max-w-full max-h-full object-contain"
               onClick={(e) => e.stopPropagation()}

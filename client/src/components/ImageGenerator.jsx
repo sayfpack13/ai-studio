@@ -2,12 +2,26 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
-import { enqueuePipeline, getModels } from "../services/api";
+import { enqueuePipeline, getModels, resolveAssetUrl } from "../services/api";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
-import { LoadingSpinner, GenerationProgress, ImagePresetPanel, MediaOutputPanel, getModelConfig } from "./shared";
-import { Image, Sparkles, Download, RefreshCw, Film, Settings, X } from "lucide-react";
+import {
+  LoadingSpinner,
+  GenerationProgress,
+  ImagePresetPanel,
+  MediaOutputPanel,
+  getModelConfig,
+} from "./shared";
+import {
+  Image,
+  Sparkles,
+  Download,
+  RefreshCw,
+  Film,
+  Settings,
+  X,
+} from "lucide-react";
 
 // Generate unique image ID
 const generateImageId = () =>
@@ -19,18 +33,30 @@ const IMAGE_SELECTED_PROVIDER_KEY = "blackbox_ai_image_selected_provider";
 
 export default function ImageGenerator() {
   const navigate = useNavigate();
-  const { 
-    isConfigured, 
-    saveImage, 
-    providers, 
-    getImage, 
+  const {
+    isConfigured,
+    saveImage,
+    providers,
+    getImage,
     addLibraryAsset,
     imageHistory,
     getImageIds,
     deleteImage,
     clearAllImages,
   } = useApp();
-  const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, registerSaveFns, maxConcurrentJobs } = useJobs();
+  const {
+    enqueueJob,
+    getJobsByType,
+    processQueue,
+    updateJob,
+    selectedJob,
+    setSelectedJob,
+    cancelAllJobsByType,
+    cancelJob,
+    removeJob,
+    registerSaveFns,
+    maxConcurrentJobs,
+  } = useJobs();
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
@@ -38,9 +64,9 @@ export default function ImageGenerator() {
   );
   const [availableModels, setAvailableModels] = useState([]);
   const imageJobs = getJobsByType("image");
-  const runningJobs = imageJobs.filter(job => job.status === "running");
-  const pendingJobs = imageJobs.filter(job => job.status === "pending");
-  const failedJobs = imageJobs.filter(job => job.status === "failed");
+  const runningJobs = imageJobs.filter((job) => job.status === "running");
+  const pendingJobs = imageJobs.filter((job) => job.status === "pending");
+  const failedJobs = imageJobs.filter((job) => job.status === "failed");
   const runningCount = runningJobs.length;
   const pendingCount = pendingJobs.length;
   const hasActiveJobs = runningCount > 0 || pendingCount > 0;
@@ -74,7 +100,9 @@ export default function ImageGenerator() {
   }, [runningJobs, pendingJobs, selectedRunningJobId]);
 
   // Get the selected running job for progress display
-  const selectedRunningJob = imageJobs.find(job => job.id === selectedRunningJobId);
+  const selectedRunningJob = imageJobs.find(
+    (job) => job.id === selectedRunningJobId,
+  );
   const selectedJobProgress = selectedRunningJob?.progress || 0;
 
   const [width, setWidth] = useState(1024);
@@ -333,7 +361,10 @@ export default function ImageGenerator() {
       if (selectedJob.status === "failed") {
         setLocalError(selectedJob.error || "Generation failed");
         setSelectedRunningJobId(null);
-      } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
+      } else if (
+        selectedJob.status === "running" ||
+        selectedJob.status === "pending"
+      ) {
         // Track running/pending job to show progress
         // Don't clear generatedImage - let user continue viewing previous/historical generations
         setSelectedRunningJobId(selectedJob.id);
@@ -346,7 +377,9 @@ export default function ImageGenerator() {
 
         // If no modelKey, try to find modelKey from availableModels using model ID
         if (!resolvedModelKey && selectedJob.model) {
-          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          const matchingModel = availableModels.find(
+            (m) => m.id === selectedJob.model,
+          );
           if (matchingModel) {
             resolvedModelKey = matchingModel.modelKey;
           } else {
@@ -380,15 +413,30 @@ export default function ImageGenerator() {
             setHeight(Number(metadata.height));
           }
 
-          if (metadata.hunyuanParams && typeof metadata.hunyuanParams === "object") {
-            setHunyuanParams((prev) => ({ ...prev, ...metadata.hunyuanParams }));
+          if (
+            metadata.hunyuanParams &&
+            typeof metadata.hunyuanParams === "object"
+          ) {
+            setHunyuanParams((prev) => ({
+              ...prev,
+              ...metadata.hunyuanParams,
+            }));
           }
 
-          if (metadata.qwenImageParams && typeof metadata.qwenImageParams === "object") {
-            setQwenImageParams((prev) => ({ ...prev, ...metadata.qwenImageParams }));
+          if (
+            metadata.qwenImageParams &&
+            typeof metadata.qwenImageParams === "object"
+          ) {
+            setQwenImageParams((prev) => ({
+              ...prev,
+              ...metadata.qwenImageParams,
+            }));
           }
 
-          if (metadata.zImageParams && typeof metadata.zImageParams === "object") {
+          if (
+            metadata.zImageParams &&
+            typeof metadata.zImageParams === "object"
+          ) {
             setZImageParams((prev) => ({ ...prev, ...metadata.zImageParams }));
           }
 
@@ -407,7 +455,9 @@ export default function ImageGenerator() {
 
         // If no modelKey, try to find modelKey from availableModels using model ID
         if (!resolvedModelKey && selectedJob.model) {
-          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          const matchingModel = availableModels.find(
+            (m) => m.id === selectedJob.model,
+          );
           if (matchingModel) {
             resolvedModelKey = matchingModel.modelKey;
           } else {
@@ -441,15 +491,30 @@ export default function ImageGenerator() {
             setHeight(Number(metadata.height));
           }
 
-          if (metadata.hunyuanParams && typeof metadata.hunyuanParams === "object") {
-            setHunyuanParams((prev) => ({ ...prev, ...metadata.hunyuanParams }));
+          if (
+            metadata.hunyuanParams &&
+            typeof metadata.hunyuanParams === "object"
+          ) {
+            setHunyuanParams((prev) => ({
+              ...prev,
+              ...metadata.hunyuanParams,
+            }));
           }
 
-          if (metadata.qwenImageParams && typeof metadata.qwenImageParams === "object") {
-            setQwenImageParams((prev) => ({ ...prev, ...metadata.qwenImageParams }));
+          if (
+            metadata.qwenImageParams &&
+            typeof metadata.qwenImageParams === "object"
+          ) {
+            setQwenImageParams((prev) => ({
+              ...prev,
+              ...metadata.qwenImageParams,
+            }));
           }
 
-          if (metadata.zImageParams && typeof metadata.zImageParams === "object") {
+          if (
+            metadata.zImageParams &&
+            typeof metadata.zImageParams === "object"
+          ) {
             setZImageParams((prev) => ({ ...prev, ...metadata.zImageParams }));
           }
 
@@ -464,7 +529,8 @@ export default function ImageGenerator() {
           if (selectedJob.result?.url) {
             setGeneratedImage({
               url: selectedJob.result.url,
-              revisedPrompt: selectedJob.result.revisedPrompt || selectedJob.params?.prompt,
+              revisedPrompt:
+                selectedJob.result.revisedPrompt || selectedJob.params?.prompt,
             });
           } else if (selectedJob.params?.imageId) {
             // Fallback to history lookup
@@ -485,7 +551,7 @@ export default function ImageGenerator() {
   // Auto-load result when selected running job completes
   useEffect(() => {
     if (selectedRunningJobId) {
-      const job = imageJobs.find(j => j.id === selectedRunningJobId);
+      const job = imageJobs.find((j) => j.id === selectedRunningJobId);
       if (!job) {
         // Job was removed
         setSelectedRunningJobId(null);
@@ -715,8 +781,12 @@ export default function ImageGenerator() {
     const supportsWidthHeight =
       !isHunyuanImage3 && !isQwenImage2512 && !isZImageTurbo;
 
-    const modelIdToSend = isLocalModelSelected ? selectedModel : selectedModelInfo?.id;
-    const localOpts = isLocalModelSelected ? { localOllamaUrl: ollamaLocal.localUrl } : {};
+    const modelIdToSend = isLocalModelSelected
+      ? selectedModel
+      : selectedModelInfo?.id;
+    const localOpts = isLocalModelSelected
+      ? { localOllamaUrl: ollamaLocal.localUrl }
+      : {};
 
     // Prepare job parameters
     const imageId = generateImageId();
@@ -726,7 +796,9 @@ export default function ImageGenerator() {
       imageId,
       options: {
         provider: effectiveProvider,
-        modelKey: isLocalModelSelected ? undefined : selectedModelInfo?.modelKey,
+        modelKey: isLocalModelSelected
+          ? undefined
+          : selectedModelInfo?.modelKey,
         ...localOpts,
         negativePrompt:
           isHunyuanImage3 || isQwenImage2512 || isZImageTurbo
@@ -809,7 +881,7 @@ export default function ImageGenerator() {
         },
       });
     });
-    
+
     // Track this job to show result when complete
     setSelectedRunningJobId(jobId);
   };
@@ -855,7 +927,9 @@ export default function ImageGenerator() {
         resolvedModelKey = rawModelKey;
       } else if (rawModelKey) {
         // Just a model ID - look up the modelKey from availableModels
-        const matchingModel = availableModels.find(m => m.id === rawModelKey || m.modelKey === rawModelKey);
+        const matchingModel = availableModels.find(
+          (m) => m.id === rawModelKey || m.modelKey === rawModelKey,
+        );
         if (matchingModel) {
           resolvedModelKey = matchingModel.modelKey;
         } else {
@@ -1003,7 +1077,7 @@ export default function ImageGenerator() {
   const handleDownload = () => {
     if (generatedImage?.url) {
       const link = document.createElement("a");
-      link.href = generatedImage.url;
+      link.href = resolveAssetUrl(generatedImage.url);
       link.download = `ai-image-${Date.now()}.png`;
       link.click();
     }
@@ -1071,26 +1145,42 @@ export default function ImageGenerator() {
     if (modelId === "chutes/hunyuan-image-3") return hunyuanParams;
     if (modelId === "chutes/Qwen-Image-2512") return qwenImageParams;
     return { width, height, steps, guidanceScale, negativePrompt };
-  }, [selectedModelInfo?.id, zImageParams, hunyuanParams, qwenImageParams, width, height, steps, guidanceScale, negativePrompt]);
+  }, [
+    selectedModelInfo?.id,
+    zImageParams,
+    hunyuanParams,
+    qwenImageParams,
+    width,
+    height,
+    steps,
+    guidanceScale,
+    negativePrompt,
+  ]);
 
-  const handleImageParamsChange = useCallback((updater) => {
-    const modelId = selectedModelInfo?.id;
-    const newParams = typeof updater === "function" ? updater(imageParams) : updater;
+  const handleImageParamsChange = useCallback(
+    (updater) => {
+      const modelId = selectedModelInfo?.id;
+      const newParams =
+        typeof updater === "function" ? updater(imageParams) : updater;
 
-    if (modelId === "chutes/z-image-turbo") {
-      setZImageParams(newParams);
-    } else if (modelId === "chutes/hunyuan-image-3") {
-      setHunyuanParams(newParams);
-    } else if (modelId === "chutes/Qwen-Image-2512") {
-      setQwenImageParams(newParams);
-    } else {
-      if (newParams.width !== undefined) setWidth(newParams.width);
-      if (newParams.height !== undefined) setHeight(newParams.height);
-      if (newParams.steps !== undefined) setSteps(newParams.steps);
-      if (newParams.guidanceScale !== undefined) setGuidanceScale(newParams.guidanceScale);
-      if (newParams.negativePrompt !== undefined) setNegativePrompt(newParams.negativePrompt);
-    }
-  }, [selectedModelInfo?.id, imageParams]);
+      if (modelId === "chutes/z-image-turbo") {
+        setZImageParams(newParams);
+      } else if (modelId === "chutes/hunyuan-image-3") {
+        setHunyuanParams(newParams);
+      } else if (modelId === "chutes/Qwen-Image-2512") {
+        setQwenImageParams(newParams);
+      } else {
+        if (newParams.width !== undefined) setWidth(newParams.width);
+        if (newParams.height !== undefined) setHeight(newParams.height);
+        if (newParams.steps !== undefined) setSteps(newParams.steps);
+        if (newParams.guidanceScale !== undefined)
+          setGuidanceScale(newParams.guidanceScale);
+        if (newParams.negativePrompt !== undefined)
+          setNegativePrompt(newParams.negativePrompt);
+      }
+    },
+    [selectedModelInfo?.id, imageParams],
+  );
 
   return (
     <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden relative">
@@ -1101,9 +1191,13 @@ export default function ImageGenerator() {
             <Image className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Image Generation</h2>
+            <h2 className="text-lg font-semibold text-white">
+              Image Generation
+            </h2>
             <p className="text-xs text-gray-400">
-              {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
+              {isLocalModelSelected
+                ? `${selectedModel} (Local)`
+                : selectedModelInfo?.name || "Select a model"}
             </p>
           </div>
         </div>
@@ -1189,7 +1283,11 @@ export default function ImageGenerator() {
                         : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                     }`}
                   >
-                    {filter === "all" ? "All" : filter === "cloud" ? "☁ Cloud" : "💻 Local"}
+                    {filter === "all"
+                      ? "All"
+                      : filter === "cloud"
+                        ? "☁ Cloud"
+                        : "💻 Local"}
                   </button>
                 ))}
               </div>
@@ -1237,62 +1335,62 @@ export default function ImageGenerator() {
             )}
 
             {!isOllamaLocalActive && (
-            <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
-              {filteredModels.length > 0 ? (
-                filteredModels.map((model) => (
-                  <button
-                    key={model.uniqueKey || model.id}
-                    onClick={() => handleModelSelect(model)}
-                    className={`p-3 rounded-lg text-left transition-colors ${
-                      selectedModel === model.modelKey
-                        ? "bg-purple-600 text-white"
-                        : "bg-gray-700 hover:bg-gray-600 text-gray-200"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">{model.name}</span>
-                      <div className="flex items-center gap-2">
-                        {model.isCloud ? (
-                          <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
-                            Cloud
+              <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
+                {filteredModels.length > 0 ? (
+                  filteredModels.map((model) => (
+                    <button
+                      key={model.uniqueKey || model.id}
+                      onClick={() => handleModelSelect(model)}
+                      className={`p-3 rounded-lg text-left transition-colors ${
+                        selectedModel === model.modelKey
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-700 hover:bg-gray-600 text-gray-200"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">{model.name}</span>
+                        <div className="flex items-center gap-2">
+                          {model.isCloud ? (
+                            <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
+                              Cloud
+                            </span>
+                          ) : configuredProviderFilter === "ollama" ? (
+                            <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
+                              Local
+                            </span>
+                          ) : null}
+                          {model.free && (
+                            <span className="text-xs px-2 py-0.5 bg-green-600 rounded">
+                              Free
+                            </span>
+                          )}
+                          <span className="text-xs px-2 py-0.5 bg-gray-600 rounded">
+                            {model.configuredProvider || model.provider}
                           </span>
-                        ) : configuredProviderFilter === "ollama" ? (
-                          <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
-                            Local
+                          <span className="text-xs px-2 py-0.5 bg-cyan-700 rounded">
+                            {model.modelProvider || "unknown"}
                           </span>
-                        ) : null}
-                        {model.free && (
-                          <span className="text-xs px-2 py-0.5 bg-green-600 rounded">
-                            Free
-                          </span>
-                        )}
-                        <span className="text-xs px-2 py-0.5 bg-gray-600 rounded">
-                          {model.configuredProvider || model.provider}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 bg-cyan-700 rounded">
-                          {model.modelProvider || "unknown"}
-                        </span>
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-xs text-gray-400 truncate block mt-1">
-                      {model.id}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <p>No models found matching "{modelSearch}"</p>
-                  <button
-                    onClick={() => {
-                      setModelSearch("");
-                    }}
-                    className="mt-2 text-purple-400 hover:text-purple-300"
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              )}
-            </div>
+                      <span className="text-xs text-gray-400 truncate block mt-1">
+                        {model.id}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <p>No models found matching "{modelSearch}"</p>
+                    <button
+                      onClick={() => {
+                        setModelSearch("");
+                      }}
+                      className="mt-2 text-purple-400 hover:text-purple-300"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1367,7 +1465,9 @@ export default function ImageGenerator() {
               {/* Debug Details */}
               {debugDetails && (
                 <div className="p-3 bg-gray-800 border border-gray-700 rounded-lg">
-                  <p className="text-sm text-purple-300 font-medium mb-2">Debug Details</p>
+                  <p className="text-sm text-purple-300 font-medium mb-2">
+                    Debug Details
+                  </p>
                   <pre className="text-xs text-gray-300 whitespace-pre-wrap break-all max-h-40 overflow-auto">
                     {JSON.stringify(debugDetails, null, 2)}
                   </pre>
@@ -1379,7 +1479,9 @@ export default function ImageGenerator() {
                 <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
                   <div className="flex items-center gap-2 text-yellow-400">
                     <Settings className="w-4 h-4" />
-                    <span className="text-sm font-medium">API Not Configured</span>
+                    <span className="text-sm font-medium">
+                      API Not Configured
+                    </span>
                   </div>
                   <p className="text-xs text-yellow-300/70 mt-1">
                     Configure API keys in Admin panel to generate images.
@@ -1402,9 +1504,13 @@ export default function ImageGenerator() {
                         {runningCount} running
                       </span>
                     )}
-                    {runningCount > 0 && pendingCount > 0 && <span className="mx-1">,</span>}
+                    {runningCount > 0 && pendingCount > 0 && (
+                      <span className="mx-1">,</span>
+                    )}
                     {pendingCount > 0 && (
-                      <span className="text-gray-500">{pendingCount} queued</span>
+                      <span className="text-gray-500">
+                        {pendingCount} queued
+                      </span>
                     )}
                   </span>
                   <button
@@ -1416,9 +1522,14 @@ export default function ImageGenerator() {
                 </div>
                 {runningJobs.length > 0 && (
                   <div className="mt-2 space-y-1">
-                    {runningJobs.slice(0, 3).map(job => (
-                      <div key={job.id} className="flex items-center justify-between text-xs text-gray-500">
-                        <span className="truncate max-w-[180px]">{job.prompt?.slice(0, 40) || "Generating..."}</span>
+                    {runningJobs.slice(0, 3).map((job) => (
+                      <div
+                        key={job.id}
+                        className="flex items-center justify-between text-xs text-gray-500"
+                      >
+                        <span className="truncate max-w-[180px]">
+                          {job.prompt?.slice(0, 40) || "Generating..."}
+                        </span>
                         <div className="flex items-center gap-2">
                           <span>{job.progress || 10}%</span>
                           <button
@@ -1435,7 +1546,11 @@ export default function ImageGenerator() {
                 )}
                 {pendingJobs.length > 0 && runningJobs.length < 3 && (
                   <div className="mt-1 text-xs text-gray-600">
-                    Next: {pendingJobs.slice(0, 2).map(j => j.prompt?.slice(0, 30) || "Queued").join(", ")}
+                    Next:{" "}
+                    {pendingJobs
+                      .slice(0, 2)
+                      .map((j) => j.prompt?.slice(0, 30) || "Queued")
+                      .join(", ")}
                   </div>
                 )}
               </div>
@@ -1450,9 +1565,10 @@ export default function ImageGenerator() {
               className="w-full bg-purple-600 hover:bg-purple-500"
             >
               Generate Image
-              {hasActiveJobs && pendingCount >= maxConcurrentJobs - runningCount && (
-                <span className="ml-2 text-xs opacity-75">(Queued)</span>
-              )}
+              {hasActiveJobs &&
+                pendingCount >= maxConcurrentJobs - runningCount && (
+                  <span className="ml-2 text-xs opacity-75">(Queued)</span>
+                )}
             </Button>
           </div>
         </div>
@@ -1490,7 +1606,10 @@ export default function ImageGenerator() {
                 const model = availableModels.find((m) => m.id === image.model);
                 if (model) {
                   setSelectedModel(model.modelKey);
-                  localStorage.setItem(IMAGE_SELECTED_MODEL_KEY, model.modelKey);
+                  localStorage.setItem(
+                    IMAGE_SELECTED_MODEL_KEY,
+                    model.modelKey,
+                  );
                 }
               }
             }}
@@ -1498,7 +1617,9 @@ export default function ImageGenerator() {
             onClearHistory={clearAllImages}
             loading={hasActiveJobs || selectedRunningJobId !== null}
             error={error}
-            progress={selectedRunningJobId !== null ? selectedJobProgress : null}
+            progress={
+              selectedRunningJobId !== null ? selectedJobProgress : null
+            }
             onClearError={() => {
               setLocalError("");
             }}

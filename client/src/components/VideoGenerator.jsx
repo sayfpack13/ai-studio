@@ -7,6 +7,7 @@ import {
   uploadLibraryFile,
   enqueueJob as enqueueServerJob,
   getJobs,
+  resolveAssetUrl,
 } from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import StitchDialog from "./StitchDialog";
@@ -46,9 +47,27 @@ const WAN_DURATION_PRESETS = [
 
 // Quality presets (resolution + fast mode)
 const WAN_QUALITY_PRESETS = [
-  { id: "draft", label: "Draft", resolution: "480p", fast: true, desc: "480p / Fastest" },
-  { id: "standard", label: "Standard", resolution: "720p", fast: true, desc: "720p / Fast" },
-  { id: "quality", label: "Quality", resolution: "720p", fast: false, desc: "720p / Best" },
+  {
+    id: "draft",
+    label: "Draft",
+    resolution: "480p",
+    fast: true,
+    desc: "480p / Fastest",
+  },
+  {
+    id: "standard",
+    label: "Standard",
+    resolution: "720p",
+    fast: true,
+    desc: "720p / Fast",
+  },
+  {
+    id: "quality",
+    label: "Quality",
+    resolution: "720p",
+    fast: false,
+    desc: "720p / Best",
+  },
 ];
 
 function fileToDataUrl(file) {
@@ -221,10 +240,16 @@ export default function VideoGenerator() {
           }));
           setServerJobs((prev) => {
             const prevSignature = prev
-              .map((job) => `${job.id}:${job.status}:${job.progress}:${job.updatedAt}`)
+              .map(
+                (job) =>
+                  `${job.id}:${job.status}:${job.progress}:${job.updatedAt}`,
+              )
               .join("|");
             const nextSignature = normalizedJobs
-              .map((job) => `${job.id}:${job.status}:${job.progress}:${job.updatedAt}`)
+              .map(
+                (job) =>
+                  `${job.id}:${job.status}:${job.progress}:${job.updatedAt}`,
+              )
               .join("|");
             return prevSignature === nextSignature ? prev : normalizedJobs;
           });
@@ -241,7 +266,9 @@ export default function VideoGenerator() {
               "Generation interrupted: Job no longer exists on server.",
             );
           } else if (selectedServerJob) {
-            const selectedServerJobStatus = mapServerStatus(selectedServerJob.status);
+            const selectedServerJobStatus = mapServerStatus(
+              selectedServerJob.status,
+            );
 
             // Handle completion
             if (selectedServerJobStatus === "completed") {
@@ -254,7 +281,8 @@ export default function VideoGenerator() {
                   thumbnail:
                     selectedServerJob.result?.data?.[0]?.thumbnail || null,
                   id: selectedServerJob.result?.id,
-                  prompt: selectedServerJob.payload?.prompt || promptRef.current,
+                  prompt:
+                    selectedServerJob.payload?.prompt || promptRef.current,
                 };
                 setGeneratedVideo(videoData);
                 // Save to history
@@ -273,10 +301,9 @@ export default function VideoGenerator() {
                   type: "video",
                   source: "video",
                   title:
-                    (selectedServerJob.payload?.prompt || promptRef.current).slice(
-                      0,
-                      80,
-                    ) || "Generated video",
+                    (
+                      selectedServerJob.payload?.prompt || promptRef.current
+                    ).slice(0, 80) || "Generated video",
                   url: videoData.url,
                   metadata: selectedServerJob.metadata,
                 });
@@ -673,8 +700,7 @@ export default function VideoGenerator() {
         // If job is completed, try to load result
         if (selectedJob.status === "completed") {
           const completedVideoUrl =
-            selectedJob.result?.data?.[0]?.url ||
-            selectedJob.result?.url;
+            selectedJob.result?.data?.[0]?.url || selectedJob.result?.url;
           if (completedVideoUrl) {
             setGeneratedVideo({
               url: completedVideoUrl,
@@ -689,7 +715,9 @@ export default function VideoGenerator() {
             // Fallback to history lookup
             const historyItem = getVideo(selectedJob.params.videoId);
             if (historyItem) {
-              setGeneratedVideo({ ...historyItem.result, prompt: historyItem.prompt } || null);
+              setGeneratedVideo(
+                { ...historyItem.result, prompt: historyItem.prompt } || null,
+              );
             }
           }
         }
@@ -713,13 +741,13 @@ export default function VideoGenerator() {
     }
 
     if (job.status === "completed") {
-      const videoUrl =
-        job.result?.data?.[0]?.url || job.result?.url;
+      const videoUrl = job.result?.data?.[0]?.url || job.result?.url;
       if (videoUrl) {
         const jobPrompt = job.prompt || job.params?.prompt || promptRef.current;
         const videoData = {
           url: videoUrl,
-          thumbnail: job.result?.data?.[0]?.thumbnail || job.result?.thumbnail || null,
+          thumbnail:
+            job.result?.data?.[0]?.thumbnail || job.result?.thumbnail || null,
           id: job.result?.id || job.params?.videoId,
           prompt: jobPrompt,
         };
@@ -738,7 +766,9 @@ export default function VideoGenerator() {
       } else if (job.params?.videoId) {
         const historyItem = getVideo(job.params.videoId);
         if (historyItem) {
-          setGeneratedVideo({ ...historyItem.result, prompt: historyItem.prompt } || null);
+          setGeneratedVideo(
+            { ...historyItem.result, prompt: historyItem.prompt } || null,
+          );
         }
       }
       setSelectedRunningJobId(null);
@@ -1032,8 +1062,9 @@ export default function VideoGenerator() {
 
   const handleDownload = () => {
     if (!generatedVideo?.url) return;
+    const resolvedUrl = resolveAssetUrl(generatedVideo.url);
     const link = document.createElement("a");
-    link.href = generatedVideo.url;
+    link.href = resolvedUrl;
     link.download = `ai-video-${Date.now()}.mp4`;
     link.click();
   };
@@ -1078,7 +1109,11 @@ export default function VideoGenerator() {
       const videoItem = getVideo(videoId);
       if (!videoItem) return;
 
-      setGeneratedVideo(videoItem.result ? { ...videoItem.result, prompt: videoItem.prompt } : null);
+      setGeneratedVideo(
+        videoItem.result
+          ? { ...videoItem.result, prompt: videoItem.prompt }
+          : null,
+      );
       setPrompt(videoItem.prompt || "");
       setLocalError("");
       setSelectedRunningJobId(null); // Clear running job to prevent showing loading state
@@ -1632,9 +1667,7 @@ export default function VideoGenerator() {
                           min="21"
                           max="140"
                           value={wanFrames}
-                          onChange={(e) =>
-                            setWanFrames(Number(e.target.value))
-                          }
+                          onChange={(e) => setWanFrames(Number(e.target.value))}
                           className="w-full accent-indigo-500"
                         />
                         <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
@@ -1646,9 +1679,7 @@ export default function VideoGenerator() {
                       {/* FPS */}
                       <div>
                         <div className="flex items-baseline justify-between mb-1">
-                          <label className="text-xs text-gray-400">
-                            FPS
-                          </label>
+                          <label className="text-xs text-gray-400">FPS</label>
                           <span className="text-xs text-gray-500">
                             {wanFps}
                           </span>
@@ -1658,9 +1689,7 @@ export default function VideoGenerator() {
                           min="16"
                           max="24"
                           value={wanFps}
-                          onChange={(e) =>
-                            setWanFps(Number(e.target.value))
-                          }
+                          onChange={(e) => setWanFps(Number(e.target.value))}
                           className="w-full accent-indigo-500"
                         />
                         <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">

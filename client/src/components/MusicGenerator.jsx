@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
-import { getModels } from "../services/api";
+import { getModels, resolveAssetUrl } from "../services/api";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
@@ -14,11 +14,11 @@ const MUSIC_SELECTED_MODEL_KEY = "blackbox_ai_music_selected_model";
 const MUSIC_SELECTED_PROVIDER_KEY = "blackbox_ai_music_selected_provider";
 
 export default function MusicGenerator() {
-  const { 
-    isConfigured, 
-    saveMusic, 
-    providers, 
-    getMusic, 
+  const {
+    isConfigured,
+    saveMusic,
+    providers,
+    getMusic,
     addLibraryAsset,
     musicHistory,
     getMusicIds,
@@ -26,7 +26,18 @@ export default function MusicGenerator() {
     clearAllMusic,
   } = useApp();
 
-  const { enqueueJob, getJobsByType, processQueue, updateJob, selectedJob, setSelectedJob, cancelAllJobsByType, cancelJob, removeJob, maxConcurrentJobs } = useJobs();
+  const {
+    enqueueJob,
+    getJobsByType,
+    processQueue,
+    updateJob,
+    selectedJob,
+    setSelectedJob,
+    cancelAllJobsByType,
+    cancelJob,
+    removeJob,
+    maxConcurrentJobs,
+  } = useJobs();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem(MUSIC_SELECTED_MODEL_KEY) || "",
@@ -34,9 +45,9 @@ export default function MusicGenerator() {
   const [availableModels, setAvailableModels] = useState([]);
   const [selectedMusicId, setSelectedMusicId] = useState(null);
   const musicJobs = getJobsByType("music");
-  const runningJobs = musicJobs.filter(job => job.status === "running");
-  const pendingJobs = musicJobs.filter(job => job.status === "pending");
-  const failedJobs = musicJobs.filter(job => job.status === "failed");
+  const runningJobs = musicJobs.filter((job) => job.status === "running");
+  const pendingJobs = musicJobs.filter((job) => job.status === "pending");
+  const failedJobs = musicJobs.filter((job) => job.status === "failed");
   const runningCount = runningJobs.length;
   const pendingCount = pendingJobs.length;
   const hasActiveJobs = runningCount > 0 || pendingCount > 0;
@@ -45,21 +56,28 @@ export default function MusicGenerator() {
   const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
 
   // Get the most recent failed job error, only if recent
-  const latestFailedJob = failedJobs.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
+  const latestFailedJob = failedJobs.sort(
+    (a, b) => (b.completedAt || 0) - (a.completedAt || 0),
+  )[0];
   const latestCompletedJob = musicJobs
-    .filter(job => job.status === "completed")
+    .filter((job) => job.status === "completed")
     .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0];
   const FIVE_MINUTES = 5 * 60 * 1000;
-  const isRecentFailure = latestFailedJob && (Date.now() - (latestFailedJob.completedAt || 0)) < FIVE_MINUTES;
-  const shouldShowFailedError = isRecentFailure && (
-    !latestCompletedJob ||
-    (latestFailedJob.completedAt || 0) > (latestCompletedJob.completedAt || 0)
-  );
-  const jobError = shouldShowFailedError ? (latestFailedJob?.error || "") : "";
+  const isRecentFailure =
+    latestFailedJob &&
+    Date.now() - (latestFailedJob.completedAt || 0) < FIVE_MINUTES;
+  const shouldShowFailedError =
+    isRecentFailure &&
+    (!latestCompletedJob ||
+      (latestFailedJob.completedAt || 0) >
+        (latestCompletedJob.completedAt || 0));
+  const jobError = shouldShowFailedError ? latestFailedJob?.error || "" : "";
   const error = localError || jobError;
 
   // Get the selected running job for progress display
-  const selectedRunningJob = musicJobs.find(job => job.id === selectedRunningJobId);
+  const selectedRunningJob = musicJobs.find(
+    (job) => job.id === selectedRunningJobId,
+  );
   const selectedJobProgress = selectedRunningJob?.progress || 0;
   const [voice, setVoice] = useState("");
   const [format, setFormat] = useState("mp3");
@@ -104,8 +122,9 @@ export default function MusicGenerator() {
           MUSIC_SELECTED_MODEL_KEY,
         );
 
-        const isProviderMatch = (model, providerId) => 
-          model.provider === providerId || model.configuredProvider === providerId;
+        const isProviderMatch = (model, providerId) =>
+          model.provider === providerId ||
+          model.configuredProvider === providerId;
 
         const persistedProviderValid =
           persistedProvider &&
@@ -118,7 +137,8 @@ export default function MusicGenerator() {
             : configuredGateways.find((gatewayId) =>
                 nextModels.some((model) => isProviderMatch(model, gatewayId)),
               )) ||
-          nextModels[0]?.configuredProvider || nextModels[0]?.provider ||
+          nextModels[0]?.configuredProvider ||
+          nextModels[0]?.provider ||
           "";
 
         setConfiguredProviderFilter(firstGateway);
@@ -133,8 +153,8 @@ export default function MusicGenerator() {
             ? persistedModelKey
             : "";
 
-        const firstGatewayModel = nextModels.find(
-          (model) => isProviderMatch(model, firstGateway),
+        const firstGatewayModel = nextModels.find((model) =>
+          isProviderMatch(model, firstGateway),
         );
         setSelectedModel(
           persistedModelForGateway || firstGatewayModel?.modelKey || "",
@@ -241,7 +261,10 @@ export default function MusicGenerator() {
         setLocalError(selectedJob.error || "Generation failed");
         setSelectedMusicId(null);
         setSelectedRunningJobId(null);
-      } else if (selectedJob.status === "running" || selectedJob.status === "pending") {
+      } else if (
+        selectedJob.status === "running" ||
+        selectedJob.status === "pending"
+      ) {
         // Track running/pending job to show progress
         // Don't clear generatedMusic - let user continue viewing previous/historical generations
         setSelectedRunningJobId(selectedJob.id);
@@ -257,7 +280,9 @@ export default function MusicGenerator() {
 
         // If no modelKey, try to find modelKey from availableModels using model ID
         if (!resolvedModelKey && selectedJob.model) {
-          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          const matchingModel = availableModels.find(
+            (m) => m.id === selectedJob.model,
+          );
           if (matchingModel) {
             resolvedModelKey = matchingModel.modelKey;
           } else {
@@ -295,7 +320,9 @@ export default function MusicGenerator() {
 
         // If no modelKey, try to find modelKey from availableModels using model ID
         if (!resolvedModelKey && selectedJob.model) {
-          const matchingModel = availableModels.find(m => m.id === selectedJob.model);
+          const matchingModel = availableModels.find(
+            (m) => m.id === selectedJob.model,
+          );
           if (matchingModel) {
             resolvedModelKey = matchingModel.modelKey;
           } else {
@@ -349,7 +376,7 @@ export default function MusicGenerator() {
   // Auto-load result when selected running job completes
   useEffect(() => {
     if (selectedRunningJobId) {
-      const job = musicJobs.find(j => j.id === selectedRunningJobId);
+      const job = musicJobs.find((j) => j.id === selectedRunningJobId);
       if (!job) {
         // Job was removed
         setSelectedRunningJobId(null);
@@ -385,7 +412,6 @@ export default function MusicGenerator() {
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    
     setLocalError("");
     // Don't clear generatedMusic - let user continue viewing previous/historical generations
 
@@ -398,12 +424,16 @@ export default function MusicGenerator() {
 
     if ((!selectedModelInfo && !isLocalModelSelected) || !effectiveProvider) {
       setLocalError("Please select a gateway and model first");
-      
+
       return;
     }
 
-    const modelIdToSend = isLocalModelSelected ? selectedModel : selectedModelInfo?.id;
-    const localOpts = isLocalModelSelected ? { localOllamaUrl: ollamaLocal.localUrl } : {};
+    const modelIdToSend = isLocalModelSelected
+      ? selectedModel
+      : selectedModelInfo?.id;
+    const localOpts = isLocalModelSelected
+      ? { localOllamaUrl: ollamaLocal.localUrl }
+      : {};
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -411,7 +441,9 @@ export default function MusicGenerator() {
     try {
       const response = await generateMusic(prompt, modelIdToSend, {
         provider: effectiveProvider,
-        modelKey: isLocalModelSelected ? undefined : selectedModelInfo?.modelKey,
+        modelKey: isLocalModelSelected
+          ? undefined
+          : selectedModelInfo?.modelKey,
         voice,
         format,
         signal: controller.signal,
@@ -458,14 +490,13 @@ export default function MusicGenerator() {
       }
     } finally {
       abortControllerRef.current = null;
-      
     }
   };
 
   const handleDownload = () => {
     if (generatedMusic?.url) {
       const link = document.createElement("a");
-      link.href = generatedMusic.url;
+      link.href = resolveAssetUrl(generatedMusic.url);
       link.download = `ai-music-${Date.now()}.${format || "mp3"}`;
       link.click();
     }
@@ -521,9 +552,10 @@ export default function MusicGenerator() {
       setGeneratedMusic(item.result || null);
       setLocalError("");
 
-      const metadata = item?.metadata && typeof item.metadata === "object"
-        ? item.metadata
-        : null;
+      const metadata =
+        item?.metadata && typeof item.metadata === "object"
+          ? item.metadata
+          : null;
       const legacyModel = item?.model || "";
       const legacyProvider =
         typeof legacyModel === "string" && legacyModel.includes(":")
@@ -539,7 +571,9 @@ export default function MusicGenerator() {
         resolvedModelKey = rawModelKey;
       } else if (rawModelKey) {
         // Just a model ID - look up the modelKey from availableModels
-        const matchingModel = availableModels.find(m => m.id === rawModelKey || m.modelKey === rawModelKey);
+        const matchingModel = availableModels.find(
+          (m) => m.id === rawModelKey || m.modelKey === rawModelKey,
+        );
         if (matchingModel) {
           resolvedModelKey = matchingModel.modelKey;
         } else {
@@ -581,7 +615,6 @@ export default function MusicGenerator() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
-      
     }
   };
 
@@ -598,9 +631,13 @@ export default function MusicGenerator() {
             <Music className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Music Generation</h2>
+            <h2 className="text-lg font-semibold text-white">
+              Music Generation
+            </h2>
             <p className="text-xs text-gray-400">
-              {isLocalModelSelected ? `${selectedModel} (Local)` : selectedModelInfo?.name || "Select a model"}
+              {isLocalModelSelected
+                ? `${selectedModel} (Local)`
+                : selectedModelInfo?.name || "Select a model"}
             </p>
           </div>
         </div>
@@ -677,7 +714,11 @@ export default function MusicGenerator() {
                         : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                     }`}
                   >
-                    {filter === "all" ? "All" : filter === "cloud" ? "☁ Cloud" : "💻 Local"}
+                    {filter === "all"
+                      ? "All"
+                      : filter === "cloud"
+                        ? "☁ Cloud"
+                        : "💻 Local"}
                   </button>
                 ))}
               </div>
@@ -724,49 +765,49 @@ export default function MusicGenerator() {
             )}
 
             {!isOllamaLocalActive && (
-            <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
-              {filteredModels.length > 0 ? (
-                filteredModels.map((model) => (
-                  <button
-                    key={model.uniqueKey || model.id}
-                    onClick={() => handleModelSelect(model)}
-                    className={`p-3 rounded-lg text-left transition-colors ${
-                      selectedModel === model.modelKey
-                        ? "bg-emerald-600 text-white"
-                        : "bg-gray-700 hover:bg-gray-600 text-gray-200"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">{model.name}</span>
-                      <div className="flex items-center gap-2">
-                        {model.isCloud ? (
-                          <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
-                            Cloud
+              <div className="flex-1 overflow-y-auto grid gap-2 min-h-0">
+                {filteredModels.length > 0 ? (
+                  filteredModels.map((model) => (
+                    <button
+                      key={model.uniqueKey || model.id}
+                      onClick={() => handleModelSelect(model)}
+                      className={`p-3 rounded-lg text-left transition-colors ${
+                        selectedModel === model.modelKey
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-700 hover:bg-gray-600 text-gray-200"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">{model.name}</span>
+                        <div className="flex items-center gap-2">
+                          {model.isCloud ? (
+                            <span className="text-xs px-2 py-0.5 bg-purple-600 rounded">
+                              Cloud
+                            </span>
+                          ) : configuredProviderFilter === "ollama" ? (
+                            <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
+                              Local
+                            </span>
+                          ) : null}
+                          <span className="text-xs px-2 py-0.5 bg-gray-600 rounded">
+                            {model.configuredProvider || model.provider}
                           </span>
-                        ) : configuredProviderFilter === "ollama" ? (
-                          <span className="text-xs px-2 py-0.5 bg-emerald-700 rounded">
-                            Local
+                          <span className="text-xs px-2 py-0.5 bg-cyan-700 rounded">
+                            {model.modelProvider || "unknown"}
                           </span>
-                        ) : null}
-                        <span className="text-xs px-2 py-0.5 bg-gray-600 rounded">
-                          {model.configuredProvider || model.provider}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 bg-cyan-700 rounded">
-                          {model.modelProvider || "unknown"}
-                        </span>
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-xs text-gray-400 truncate block mt-1">
-                      {model.id}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <p>No models found matching "{modelSearch}"</p>
-                </div>
-              )}
-            </div>
+                      <span className="text-xs text-gray-400 truncate block mt-1">
+                        {model.id}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <p>No models found matching "{modelSearch}"</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -829,7 +870,9 @@ export default function MusicGenerator() {
                 <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
                   <div className="flex items-center gap-2 text-yellow-400">
                     <Settings className="w-4 h-4" />
-                    <span className="text-sm font-medium">API Not Configured</span>
+                    <span className="text-sm font-medium">
+                      API Not Configured
+                    </span>
                   </div>
                   <p className="text-xs text-yellow-300/70 mt-1">
                     Configure API keys in Admin panel to generate music.
@@ -852,9 +895,13 @@ export default function MusicGenerator() {
                         {runningCount} running
                       </span>
                     )}
-                    {runningCount > 0 && pendingCount > 0 && <span className="mx-1">,</span>}
+                    {runningCount > 0 && pendingCount > 0 && (
+                      <span className="mx-1">,</span>
+                    )}
                     {pendingCount > 0 && (
-                      <span className="text-gray-500">{pendingCount} queued</span>
+                      <span className="text-gray-500">
+                        {pendingCount} queued
+                      </span>
                     )}
                   </span>
                   <button
@@ -866,9 +913,14 @@ export default function MusicGenerator() {
                 </div>
                 {runningJobs.length > 0 && (
                   <div className="mt-2 space-y-1">
-                    {runningJobs.slice(0, 3).map(job => (
-                      <div key={job.id} className="flex items-center justify-between text-xs text-gray-500">
-                        <span className="truncate max-w-[180px]">{job.prompt?.slice(0, 40) || "Generating..."}</span>
+                    {runningJobs.slice(0, 3).map((job) => (
+                      <div
+                        key={job.id}
+                        className="flex items-center justify-between text-xs text-gray-500"
+                      >
+                        <span className="truncate max-w-[180px]">
+                          {job.prompt?.slice(0, 40) || "Generating..."}
+                        </span>
                         <div className="flex items-center gap-2">
                           <span>{job.progress || 10}%</span>
                           <button
@@ -885,7 +937,11 @@ export default function MusicGenerator() {
                 )}
                 {pendingJobs.length > 0 && runningJobs.length < 3 && (
                   <div className="mt-1 text-xs text-gray-600">
-                    Next: {pendingJobs.slice(0, 2).map(j => j.prompt?.slice(0, 30) || "Queued").join(", ")}
+                    Next:{" "}
+                    {pendingJobs
+                      .slice(0, 2)
+                      .map((j) => j.prompt?.slice(0, 30) || "Queued")
+                      .join(", ")}
                   </div>
                 )}
               </div>
@@ -900,9 +956,10 @@ export default function MusicGenerator() {
               className="w-full bg-emerald-600 hover:bg-emerald-500"
             >
               Generate Music
-              {hasActiveJobs && pendingCount >= maxConcurrentJobs - runningCount && (
-                <span className="ml-2 text-xs opacity-75">(Queued)</span>
-              )}
+              {hasActiveJobs &&
+                pendingCount >= maxConcurrentJobs - runningCount && (
+                  <span className="ml-2 text-xs opacity-75">(Queued)</span>
+                )}
             </Button>
           </div>
         </div>
@@ -939,7 +996,10 @@ export default function MusicGenerator() {
                 const model = availableModels.find((m) => m.id === music.model);
                 if (model) {
                   setSelectedModel(model.modelKey);
-                  localStorage.setItem(MUSIC_SELECTED_MODEL_KEY, model.modelKey);
+                  localStorage.setItem(
+                    MUSIC_SELECTED_MODEL_KEY,
+                    model.modelKey,
+                  );
                 }
               }
             }}
@@ -947,7 +1007,9 @@ export default function MusicGenerator() {
             onClearHistory={clearAllMusic}
             loading={hasActiveJobs || selectedRunningJobId !== null}
             error={error}
-            progress={selectedRunningJobId !== null ? selectedJobProgress : null}
+            progress={
+              selectedRunningJobId !== null ? selectedJobProgress : null
+            }
             onClearError={() => {
               setLocalError("");
               if (latestFailedJob) {

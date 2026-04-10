@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
+import { resolveAssetUrl } from "../../services/api";
 
 const fallbackTime = 0;
 
@@ -332,7 +333,7 @@ export default function AssetPickerDialog({
                   <div className="aspect-square bg-gray-800">
                     {asset.type === "image" && asset.url && (
                       <img
-                        src={asset.url}
+                        src={resolveAssetUrl(asset.url)}
                         alt={asset.title}
                         className="w-full h-full object-cover"
                       />
@@ -340,7 +341,7 @@ export default function AssetPickerDialog({
                     {asset.type === "video" && asset.url && (
                       <div className="w-full h-full flex items-center justify-center bg-gray-800">
                         <video
-                          src={asset.url}
+                          src={resolveAssetUrl(asset.url)}
                           className="w-full h-full object-cover"
                           muted
                         />

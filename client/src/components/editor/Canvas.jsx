@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useEditor } from "../../context/EditorContext";
 import { useApp } from "../../context/AppContext";
+import { resolveAssetUrl } from "../../services/api";
 
 const HANDLE_SIZE = 12;
 const ROTATION_OFFSET = 35;
@@ -312,13 +313,21 @@ export default function Canvas() {
   // Resolve asset from library if needed
   const resolveAsset = useCallback(
     (clip) => {
+      const resolveUrl = (url) => {
+        try {
+          return resolveAssetUrl(url);
+        } catch {
+          return url;
+        }
+      };
+
       if (clip.sourceUrl && isValidSource(clip.sourceUrl)) {
-        return clip.sourceUrl;
+        return resolveUrl(clip.sourceUrl);
       }
       if (clip.assetRef && libraryAssets) {
         const asset = libraryAssets.find((a) => a.id === clip.assetRef);
         if (asset?.url) {
-          return asset.url;
+          return resolveUrl(asset.url);
         }
       }
       return null;

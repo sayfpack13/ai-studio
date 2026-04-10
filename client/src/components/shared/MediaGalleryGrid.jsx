@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Download,
@@ -15,6 +15,7 @@ import {
   Music,
 } from "lucide-react";
 import { Button } from "../ui";
+import { resolveAssetUrl } from "../../services/api";
 
 const MEDIA_ICONS = {
   image: Image,
@@ -34,6 +35,32 @@ export default function MediaGalleryGrid({
 }) {
   const [hoveredId, setHoveredId] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [brokenIds, setBrokenIds] = useState(() => new Set());
+  const [failedThumbIds, setFailedThumbIds] = useState(() => new Set());
+
+  const markBroken = (id) => {
+    let shouldRemove = false;
+    setBrokenIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      shouldRemove = true;
+      return next;
+    });
+
+    if (shouldRemove && typeof onDelete === "function") {
+      onDelete(id);
+    }
+  };
+
+  const markThumbFailed = (id) => {
+    setFailedThumbIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
 
   const handleCopyPrompt = (e, item) => {
     e.stopPropagation();
@@ -45,7 +72,7 @@ export default function MediaGalleryGrid({
   const handleDownload = (e, item) => {
     e.stopPropagation();
     const link = document.createElement("a");
-    link.href = item.url;
+    link.href = resolveAssetUrl(item.url);
     const ext =
       mediaType === "image" ? "png" : mediaType === "video" ? "mp4" : "mp3";
     link.download = `generated-${item.id}.${ext}`;
@@ -69,33 +96,40 @@ export default function MediaGalleryGrid({
 
   const isInCompare = (itemId) => selectedForCompare.includes(itemId);
 
+  const visibleItems = useMemo(() => {
+    return (items || []).filter((item) => item && !brokenIds.has(item.id));
+  }, [items, brokenIds]);
+
   // Render thumbnail based on media type
   const renderThumbnail = (item) => {
     if (mediaType === "image") {
       return (
         <img
-          src={item.url}
+          src={resolveAssetUrl(item.url)}
           alt={item.prompt?.slice(0, 30) || "Generated image"}
           className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+          onError={() => markBroken(item.id)}
         />
       );
     }
     if (mediaType === "video") {
       return (
         <div className="w-full h-full bg-gray-800 flex items-center justify-center relative">
-          {item.thumbnail ? (
+          {item.thumbnail && !failedThumbIds.has(item.id) ? (
             <img
-              src={item.thumbnail}
+              src={resolveAssetUrl(item.thumbnail)}
               alt=""
               className="w-full h-full object-cover"
+              onError={() => markThumbFailed(item.id)}
             />
           ) : (
             <video
-              src={item.url}
+              src={resolveAssetUrl(item.url)}
               className="w-full h-full object-cover"
               muted
               playsInline
               preload="metadata"
+              onError={() => markBroken(item.id)}
             />
           )}
           <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -118,7 +152,7 @@ export default function MediaGalleryGrid({
     <div
       className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 ${className}`}
     >
-      {items.map((item) => {
+      {visibleItems.map((item) => {
         const isHovered = hoveredId === item.id;
         const isComparing = isInCompare(item.id);
 
@@ -230,7 +264,7 @@ export default function MediaGalleryGrid({
         );
       })}
 
-      {items.length === 0 && (
+      {visibleItems.length === 0 && (
         <div className="col-span-full flex flex-col items-center justify-center py-12 text-gray-400">
           <Maximize2 className="w-12 h-12 mb-3 opacity-50" />
           <p className="text-sm">No {mediaType}s generated yet</p>

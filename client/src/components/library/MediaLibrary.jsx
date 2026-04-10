@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
-import { uploadLibraryFile } from "../../services/api";
+import { resolveAssetUrl, uploadLibraryFile } from "../../services/api";
 
 const fallbackTime = 0;
 
 function isInvalidMediaUrl(url) {
   if (!url) return true;
-  if (url.includes('videolan.org')) return true;
-  if (url.startsWith('data:')) return true;
+  if (url.includes("videolan.org")) return true;
+  if (url.startsWith("data:")) return true;
   return false;
 }
 
@@ -190,7 +190,7 @@ export default function MediaLibrary() {
   const mergedAssets = useMemo(() => {
     const apiAssets = (libraryAssets || [])
       .map(normalizeLibraryAsset)
-      .filter(a => a && !isInvalidMediaUrl(a.url));
+      .filter((a) => a && !isInvalidMediaUrl(a.url));
 
     const historyAssets = [
       ...(getImageIds?.() || []).map((id) =>
@@ -219,7 +219,7 @@ export default function MediaLibrary() {
     const normalizeUrl = (url) => {
       if (!url) return null;
       // Remove trailing slashes and convert to lowercase for comparison
-      return url.replace(/\/+$/, '').toLowerCase();
+      return url.replace(/\/+$/, "").toLowerCase();
     };
 
     const byUrlOrId = new Map();
@@ -227,7 +227,9 @@ export default function MediaLibrary() {
     // Add API assets first (they have preference)
     for (const asset of apiAssets) {
       const normalizedUrl = normalizeUrl(asset.url);
-      const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
+      const dedupeKey = normalizedUrl
+        ? `url:${normalizedUrl}`
+        : `id:${asset.id}`;
       if (!byUrlOrId.has(dedupeKey)) {
         byUrlOrId.set(dedupeKey, asset);
       }
@@ -236,7 +238,9 @@ export default function MediaLibrary() {
     // Add history assets, skipping if URL already exists
     for (const asset of historyAssets) {
       const normalizedUrl = normalizeUrl(asset.url);
-      const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
+      const dedupeKey = normalizedUrl
+        ? `url:${normalizedUrl}`
+        : `id:${asset.id}`;
       if (!byUrlOrId.has(dedupeKey)) {
         byUrlOrId.set(dedupeKey, asset);
       }
@@ -407,30 +411,34 @@ export default function MediaLibrary() {
 
             {asset.url && asset.type === "image" && (
               <img
-                src={asset.url}
+                src={resolveAssetUrl(asset.url)}
                 alt={asset.title}
                 className="w-full h-28 object-cover rounded"
               />
             )}
 
-            {asset.url && asset.type === "video" && (
-              asset.thumbnail ? (
+            {asset.url &&
+              asset.type === "video" &&
+              (asset.thumbnail ? (
                 <img
-                  src={asset.thumbnail}
+                  src={resolveAssetUrl(asset.thumbnail)}
                   alt={asset.title}
                   className="w-full h-28 object-cover rounded"
                 />
               ) : (
                 <video
-                  src={asset.url}
+                  src={resolveAssetUrl(asset.url)}
                   className="w-full h-28 object-cover rounded"
                   muted
                 />
-              )
-            )}
+              ))}
 
             {asset.url && asset.type === "audio" && (
-              <audio src={asset.url} controls className="w-full" />
+              <audio
+                src={resolveAssetUrl(asset.url)}
+                controls
+                className="w-full"
+              />
             )}
 
             <div className="flex justify-between items-center">
@@ -499,7 +507,7 @@ export default function MediaLibrary() {
             <div className="p-4 overflow-auto flex-1">
               {previewAsset.type === "image" && previewAsset.url && (
                 <img
-                  src={previewAsset.url}
+                  src={resolveAssetUrl(previewAsset.url)}
                   alt={previewAsset.title || "Image preview"}
                   className="max-w-full max-h-[70vh] mx-auto rounded"
                 />
@@ -507,7 +515,7 @@ export default function MediaLibrary() {
 
               {previewAsset.type === "video" && previewAsset.url && (
                 <video
-                  src={previewAsset.url}
+                  src={resolveAssetUrl(previewAsset.url)}
                   controls
                   autoPlay
                   className="w-full max-h-[70vh] rounded"
@@ -518,7 +526,7 @@ export default function MediaLibrary() {
                 <div className="max-w-xl mx-auto space-y-3">
                   <p className="text-sm text-gray-300">Audio preview</p>
                   <audio
-                    src={previewAsset.url}
+                    src={resolveAssetUrl(previewAsset.url)}
                     controls
                     autoPlay
                     className="w-full"

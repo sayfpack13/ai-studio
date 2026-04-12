@@ -7,6 +7,7 @@ import { requireApiKey } from "../middleware/auth.js";
 import { findModel } from "../utils/models.js";
 import libraryService from "../services/library-service.js";
 import { saveBuffer } from "../services/file-storage.js";
+import { generateImage as hfGenerateImage } from "../utils/gradio-client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1012,6 +1013,48 @@ router.post("/generate", async (req, res) => {
       });
     }
 
+    // ── HuggingFace Gradio Space ──────────────────────────────────────
+    if (providerId === "huggingface") {
+      const spaceUrl = provider.apiBaseUrl;
+      const hfToken = apiKey || undefined;
+
+      if (!spaceUrl) {
+        return res.status(400).json({
+          error: "HuggingFace Space URL is not configured. Set it in Admin → Providers → HuggingFace.",
+        });
+      }
+
+      try {
+        const result = await hfGenerateImage(spaceUrl, hfToken, {
+          prompt: effectivePrompt,
+          width: normalizedWidth || 1024,
+          height: normalizedHeight || 1024,
+          num_inference_steps: normalizedNumInferenceSteps || 4,
+          guidance_scale: normalizedGuidanceScale || 0.0,
+          seed: -1,
+        });
+
+        const imageUrl = result.url;
+        await libraryService.createAsset({
+          type: "image",
+          source: "image",
+          title: effectivePrompt.slice(0, 80) || "Generated image",
+          url: imageUrl,
+          metadata: { model: modelId, provider: providerId },
+        });
+
+        return res.json({
+          success: true,
+          data: [{ url: imageUrl, revised_prompt: effectivePrompt }],
+        });
+      } catch (error) {
+        console.error("[HuggingFace] Image generation error:", error.message);
+        return res.status(502).json({
+          error: `HuggingFace image generation failed: ${error.message}`,
+        });
+      }
+    }
+
     // Determine endpoint and request format
     const isOllamaNative =
       isLocalOllama ||
@@ -1031,7 +1074,7 @@ router.post("/generate", async (req, res) => {
       const parts = modelId.split("/");
       if (
         parts.length >= 2 &&
-        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
           parts[0],
         )
       ) {
@@ -1246,7 +1289,7 @@ router.post("/edit", async (req, res) => {
       const parts = modelId.split("/");
       if (
         parts.length >= 2 &&
-        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
           parts[0],
         )
       ) {

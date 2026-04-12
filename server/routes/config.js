@@ -133,6 +133,47 @@ router.post('/update', requireAuth, async (req, res) => {
   }
 });
 
+// Deploy HuggingFace Space (requires JWT auth)
+router.post('/deploy-hf-space', requireAuth, async (req, res) => {
+  try {
+    const { token, spaceName } = req.body;
+    const hfToken = token || req.config.providers?.huggingface?.apiKey;
+
+    if (!hfToken) {
+      return res.status(400).json({ error: 'HuggingFace token is required. Provide it in the request or configure it in Providers.' });
+    }
+    if (!spaceName) {
+      return res.status(400).json({ error: 'Space name is required.' });
+    }
+
+    const { deployHFSpace } = await import('../scripts/deploy-hf-space.js');
+    const result = await deployHFSpace({ spaceName, token: hfToken });
+
+    // Auto-configure the HuggingFace provider with the new Space URL
+    if (req.config.providers?.huggingface) {
+      req.config.providers.huggingface.apiBaseUrl = result.spaceUrl;
+      req.config.providers.huggingface.enabled = true;
+      if (token && !req.config.providers.huggingface.apiKey) {
+        req.config.providers.huggingface.apiKey = token;
+      }
+      await fs.writeFile(req.configPath, JSON.stringify(req.config, null, 2));
+    }
+
+    res.json({
+      success: true,
+      repoId: result.repoId,
+      spaceUrl: result.spaceUrl,
+      username: result.username,
+      message: `Space deployed! Set ZeroGPU hardware in Space Settings.`,
+    });
+  } catch (error) {
+    console.error('HF Space deploy error:', error.response?.data || error.message);
+    res.status(500).json({
+      error: error.response?.data?.error || error.message || 'Failed to deploy HuggingFace Space',
+    });
+  }
+});
+
 // Check if API is configured (public)
 router.get('/status', async (req, res) => {
   const providers = Object.values(req.config.providers || {}).map((provider) => ({

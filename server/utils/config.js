@@ -38,6 +38,15 @@ const DEFAULT_PROVIDERS = {
     modelsFile: "ollama",
     apiType: "ollama-native",
   },
+  huggingface: {
+    id: "huggingface",
+    name: "HuggingFace",
+    apiBaseUrl: "",
+    apiKey: "",
+    enabled: false,
+    modelsFile: "huggingface",
+    apiType: "gradio",
+  },
 };
 
 function normalizeProvider(providerId, provider = {}) {
@@ -125,7 +134,10 @@ export function getConfiguredProviders(config) {
 }
 
 export function isProviderConfigured(provider) {
-  return Boolean(provider?.enabled && provider?.apiBaseUrl && provider?.apiKey);
+  if (!provider?.enabled || !provider?.apiBaseUrl) return false;
+  // Gradio-based providers (HuggingFace Spaces) don't require an API key for public spaces
+  if (provider.apiType === "gradio") return true;
+  return Boolean(provider.apiKey);
 }
 
 export function maskSecret(value) {

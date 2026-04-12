@@ -346,6 +346,15 @@ export const updateConfig = async (config) => {
   return await response.json();
 };
 
+// Deploy HuggingFace Space (requires JWT)
+export const deployHFSpace = async ({ token, spaceName }) => {
+  const response = await authFetch(`${API_BASE_URL}/config/deploy-hf-space`, {
+    method: "POST",
+    body: JSON.stringify({ token, spaceName }),
+  });
+  return await response.json();
+};
+
 // Test provider connection (requires JWT)
 export const testProviderConnection = async (providerId) => {
   const response = await authFetch(`${API_BASE_URL}/config/test`, {

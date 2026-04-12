@@ -5,6 +5,10 @@ import { requireApiKey } from "../middleware/auth.js";
 import { findModel } from "../utils/models.js";
 import libraryService from "../services/library-service.js";
 import { saveBuffer } from "../services/file-storage.js";
+import {
+  generateVideo as hfGenerateVideo,
+  downloadGradioFile,
+} from "../utils/gradio-client.js";
 
 const router = express.Router();
 
@@ -1056,7 +1060,7 @@ router.post("/generate", async (req, res) => {
       const parts = modelId.split("/");
       if (
         parts.length >= 2 &&
-        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
           parts[0],
         )
       ) {
@@ -1074,6 +1078,80 @@ router.post("/generate", async (req, res) => {
         apiKey,
         timeout,
       });
+    }
+
+    // ── HuggingFace Gradio Space (video) ──────────────────────────────
+    if (providerId === "huggingface") {
+      const spaceUrl = provider.apiBaseUrl;
+      const hfToken = apiKey || undefined;
+
+      if (!spaceUrl) {
+        return res.status(400).json({
+          error: "HuggingFace Space URL is not configured. Set it in Admin → Providers → HuggingFace.",
+        });
+      }
+
+      // Resolve image input
+      let imageInput = req.body?.image || null;
+      if (imageInput && imageInput.startsWith("/uploads/")) {
+        const b64 = await localFileToBase64(imageInput);
+        imageInput = Buffer.from(b64, "base64");
+      } else if (imageInput && imageInput.startsWith("http")) {
+        // URL — pass directly
+      } else if (imageInput && imageInput.length > 100) {
+        imageInput = Buffer.from(imageInput, "base64");
+      }
+
+      try {
+        const result = await hfGenerateVideo(spaceUrl, hfToken, {
+          image: imageInput,
+          prompt,
+          negative_prompt: req.body?.wanNegativePrompt || req.body?.negative_prompt || "",
+          width: Number(req.body?.wanWidth) || 832,
+          height: Number(req.body?.wanHeight) || 480,
+          num_frames: Number(req.body?.wanFrames) || Number(req.body?.frames) || 81,
+          guidance_scale: Number(req.body?.wanGuidanceScale) || 5.0,
+          num_inference_steps: Number(req.body?.wanSteps) || 25,
+          seed: req.body?.wanSeed != null ? Number(req.body.wanSeed) : -1,
+        });
+
+        const videoBuffer = await downloadGradioFile(result.url);
+
+        const fsMod = await import("fs");
+        const pathMod = await import("path");
+        const crypto = await import("crypto");
+        const videoHash = crypto.createHash("md5").update(videoBuffer).digest("hex");
+        const slug = String(prompt || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48);
+        const namePrefix = slug ? `hf_video_${slug}` : "hf_video";
+        const filename = `${namePrefix}_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
+        const videosDir = pathMod.join(process.cwd(), "data", "uploads", "videos");
+        if (!fsMod.existsSync(videosDir)) {
+          fsMod.mkdirSync(videosDir, { recursive: true });
+        }
+        const filePath = pathMod.join(videosDir, filename);
+        const fsp = await import("fs/promises");
+        await fsp.writeFile(filePath, videoBuffer);
+
+        const localUrl = `/uploads/videos/${filename}`;
+
+        await libraryService.createAsset({
+          type: "video",
+          source: "video",
+          title: String(prompt).slice(0, 80) || "Generated video",
+          url: localUrl,
+          metadata: { model: modelId, provider: "huggingface" },
+        });
+
+        return res.json({
+          success: true,
+          data: [{ url: localUrl, revised_prompt: prompt }],
+        });
+      } catch (error) {
+        console.error("[HuggingFace] Video generation error:", error.message);
+        return res.status(502).json({
+          error: `HuggingFace video generation failed: ${error.message}`,
+        });
+      }
     }
 
     const isOllamaNative =

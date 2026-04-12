@@ -15,6 +15,7 @@ const GATEWAY_PREFIXES = new Set([
   "chutes-private",
   "nanogpt",
   "ollama",
+  "huggingface",
 ]);
 
 const ROOT_PROVIDER_MODEL_FILES = {
@@ -29,6 +30,7 @@ const PROVIDER_DEFAULT_GATEWAY_PREFIX = {
   chutes: "chutes",
   nanogpt: "nanogpt",
   ollama: "ollama",
+  huggingface: "huggingface",
 };
 
 const PROVIDER_ALLOWED_PREFIXES = {
@@ -36,6 +38,7 @@ const PROVIDER_ALLOWED_PREFIXES = {
   chutes: new Set(["chutes"]),
   nanogpt: new Set(["nanogpt"]),
   ollama: new Set(["ollama"]),
+  huggingface: new Set(["huggingface"]),
 };
 
 function prettifyName(modelId) {

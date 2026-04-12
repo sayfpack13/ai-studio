@@ -32,6 +32,11 @@ import {
   localFileToBase64,
   ensureJpegBase64,
 } from "./routes/video.js";
+import {
+  generateImage as hfGenerateImage,
+  generateVideo as hfGenerateVideo,
+  downloadGradioFile,
+} from "./utils/gradio-client.js";
 
 dotenv.config();
 
@@ -329,7 +334,7 @@ async function processChatJob({ payload, setProgress, isCanceled }) {
     const parts = modelId.split("/");
     if (
       parts.length >= 2 &&
-      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
         parts[0],
       )
     ) {
@@ -504,13 +509,48 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
     }
   }
 
+  // ── HuggingFace Gradio Space ──────────────────────────────────────
+  if (providerContext.providerId === "huggingface") {
+    const spaceUrl = providerContext.provider.apiBaseUrl;
+    const hfToken = providerContext.provider.apiKey || undefined;
+
+    if (!spaceUrl) {
+      throw new Error("HuggingFace Space URL is not configured. Set it in Admin → Providers → HuggingFace.");
+    }
+
+    try {
+      const result = await hfGenerateImage(spaceUrl, hfToken, {
+        prompt,
+        width: Number(payload?.width) || 1024,
+        height: Number(payload?.height) || 1024,
+        num_inference_steps: Number(payload?.numInferenceSteps) || 4,
+        guidance_scale: Number(payload?.guidanceScale) || 0.0,
+        seed: payload?.seed != null ? Number(payload.seed) : -1,
+      });
+
+      const imageUrl = result.url;
+      await libraryService.createAsset({
+        type: "image",
+        source: "image",
+        title: payload?.prompt?.slice(0, 80) || "Generated image",
+        url: imageUrl,
+        metadata: { model: modelId, provider: "huggingface" },
+      });
+
+      await setProgress(100, { stage: "completed" });
+      return { success: true, data: [{ url: imageUrl, revised_prompt: prompt }] };
+    } catch (error) {
+      throw new Error(`HuggingFace image generation failed: ${error.message}`);
+    }
+  }
+
   // Strip gateway prefix for API call
   let actualModelId = modelId;
   if (modelId && modelId.includes("/")) {
     const parts = modelId.split("/");
     if (
       parts.length >= 2 &&
-      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
         parts[0],
       )
     ) {
@@ -621,6 +661,82 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
     });
   }
 
+  // ── HuggingFace Gradio Space (video) ──────────────────────────────
+  if (providerContext.providerId === "huggingface") {
+    const spaceUrl = providerContext.provider.apiBaseUrl;
+    const hfToken = providerContext.provider.apiKey || undefined;
+
+    if (!spaceUrl) {
+      throw new Error("HuggingFace Space URL is not configured. Set it in Admin → Providers → HuggingFace.");
+    }
+
+    await setProgress(20, { stage: "requesting_provider" });
+
+    // Resolve image: could be a URL, local path, or base64
+    let imageInput = payload?.image || null;
+    if (imageInput && imageInput.startsWith("/uploads/")) {
+      const b64 = await localFileToBase64(imageInput);
+      imageInput = Buffer.from(b64, "base64");
+    } else if (imageInput && imageInput.startsWith("http")) {
+      // Pass URL directly — gradio-client handles it
+    } else if (imageInput && imageInput.length > 100) {
+      imageInput = Buffer.from(imageInput, "base64");
+    }
+
+    try {
+      const result = await hfGenerateVideo(spaceUrl, hfToken, {
+        image: imageInput,
+        prompt,
+        negative_prompt: payload?.wanNegativePrompt || payload?.negative_prompt || "",
+        width: Number(payload?.wanWidth) || 832,
+        height: Number(payload?.wanHeight) || 480,
+        num_frames: Number(payload?.wanFrames) || Number(payload?.frames) || 81,
+        guidance_scale: Number(payload?.wanGuidanceScale) || 5.0,
+        num_inference_steps: Number(payload?.wanSteps) || 25,
+        seed: payload?.wanSeed != null ? Number(payload.wanSeed) : -1,
+      });
+
+      await setProgress(80, { stage: "processing_response" });
+
+      // Download the video from the Gradio result URL
+      const videoUrl = result.url;
+      const videoBuffer = await downloadGradioFile(videoUrl);
+
+      // Save locally
+      const path = await import("path");
+      const crypto = await import("crypto");
+      const fsMod = await import("fs");
+      const videoHash = crypto.createHash("md5").update(videoBuffer).digest("hex");
+      const slug = String(prompt || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48);
+      const namePrefix = slug ? `hf_video_${slug}` : "hf_video";
+      const filename = `${namePrefix}_${Date.now()}_${videoHash.substring(0, 8)}.mp4`;
+      const videosDir = path.join(process.cwd(), "data", "uploads", "videos");
+      if (!fsMod.existsSync(videosDir)) {
+        fsMod.mkdirSync(videosDir, { recursive: true });
+      }
+      const filePath = path.join(videosDir, filename);
+      await fs.writeFile(filePath, videoBuffer);
+
+      const localUrl = `/uploads/videos/${filename}`;
+
+      await libraryService.createAsset({
+        type: "video",
+        source: "video",
+        title: String(prompt).slice(0, 80) || "Generated video",
+        url: localUrl,
+        metadata: { model: modelId, provider: "huggingface" },
+      });
+
+      await setProgress(100, { stage: "completed" });
+      return {
+        success: true,
+        data: [{ url: localUrl, revised_prompt: prompt }],
+      };
+    } catch (error) {
+      throw new Error(`HuggingFace video generation failed: ${error.message}`);
+    }
+  }
+
   const modelInfo = await findModel(
     config,
     modelId,
@@ -639,7 +755,7 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
     const parts = modelId.split("/");
     if (
       parts.length >= 2 &&
-      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
         parts[0],
       )
     ) {
@@ -1219,7 +1335,7 @@ async function processMusicJob({ payload, setProgress, isCanceled }) {
     const parts = modelId.split("/");
     if (
       parts.length >= 2 &&
-      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+      ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
         parts[0],
       )
     ) {

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Shield, Key, Server, Check, X, Loader2, Plus, Trash2, Zap, Settings, LogOut, Lock, Layers } from 'lucide-react';
+import { Shield, Key, Server, Check, X, Loader2, Plus, Trash2, Zap, Settings, LogOut, Lock, Layers, Cloud } from 'lucide-react';
 import { loginAdmin, verifyToken, getConfig, updateConfig, logoutAdmin, getToken, testProviderConnection } from '../services/api';
 import { Button, Input } from './ui';
 import { LoadingSpinner } from './shared';
 import ChutesPage from './Chutes/ChutesPage';
+import HFSetupPage from './HuggingFace/HFSetupPage';
 
 export default function AdminDashboard({ onAuthChange }) {
   const [password, setPassword] = useState('');
@@ -282,10 +283,21 @@ export default function AdminDashboard({ onAuthChange }) {
           <Layers className="w-4 h-4" />
           Chutes Deployments
         </button>
+        <button
+          onClick={() => setActiveTab('huggingface')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition-colors ${
+            activeTab === 'huggingface'
+              ? 'bg-gray-700 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+          }`}
+        >
+          <Cloud className="w-4 h-4" />
+          HuggingFace
+        </button>
       </div>
 
       {/* Content */}
-      {activeTab === 'providers' ? (
+      {activeTab === 'providers' && (
         <div className="space-y-4">
           <form onSubmit={handleSaveConfig} className="space-y-3">
             {config.providers.map((provider) => (
@@ -404,9 +416,11 @@ export default function AdminDashboard({ onAuthChange }) {
             </Button>
           </form>
         </div>
-      ) : (
-        <ChutesPage />
       )}
+
+      {activeTab === 'chutes' && <ChutesPage />}
+
+      {activeTab === 'huggingface' && <HFSetupPage />}
     </div>
   );
 }

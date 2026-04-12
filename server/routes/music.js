@@ -142,7 +142,7 @@ router.post("/generate", async (req, res) => {
       const parts = modelId.split("/");
       if (
         parts.length >= 2 &&
-        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt"].includes(
+        ["ollama", "blackboxai", "blackbox", "chutes", "nanogpt", "huggingface"].includes(
           parts[0],
         )
       ) {

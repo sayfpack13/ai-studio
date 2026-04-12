@@ -4,9 +4,11 @@
   "type": "module",
   "scripts": {
     "start": "nodemon server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "deploy:hf": "node scripts/deploy-hf-space.js"
   },
   "dependencies": {
+    "@gradio/client": "^2.2.0",
     "axios": "^1.6.2",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",

@@ -69,7 +69,7 @@ export function requireApiKey(req, res, next) {
     modelKey
   })
     .then((context) => {
-      if (!context.provider || !isProviderConfigured(context.provider)) {
+      if (!context.provider || !(context.configured || isProviderConfigured(context.provider))) {
         return res.status(503).json({
           error: `Provider not configured: ${context.providerId || 'unknown'}. Please contact admin.`
         });

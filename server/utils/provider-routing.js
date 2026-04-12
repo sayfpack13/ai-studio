@@ -60,6 +60,18 @@ export async function resolveProviderContext(config, { requestedProvider, modelI
     };
   }
 
+  // HuggingFace Gradio spaces only need apiBaseUrl (apiKey optional for public spaces)
+  if (providerId === 'huggingface' && provider) {
+    return {
+      providerId,
+      provider: {
+        ...provider,
+        apiKey: provider.apiKey || '',
+      },
+      configured: !!(provider.enabled && provider.apiBaseUrl),
+    };
+  }
+
   return {
     providerId,
     provider,

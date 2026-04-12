@@ -28,24 +28,42 @@ else:
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
 # ---------------------------------------------------------------------------
-# Global pipeline loading (persists across GPU-decorated calls)
+# Lazy-loaded pipelines (loaded on first request inside @spaces.GPU)
+# Using sequential CPU offload for minimal VRAM usage on ZeroGPU H200 MIG
 # ---------------------------------------------------------------------------
+flux_pipe = None
+wan_pipe = None
 
-flux_pipe = FluxPipeline.from_pretrained(
-    "black-forest-labs/FLUX.1-schnell",
-    torch_dtype=torch.bfloat16,
-    cache_dir=HF_CACHE_DIR,
-    token=HF_TOKEN,
-)
-flux_pipe.enable_model_cpu_offload()
 
-wan_pipe = WanImageToVideoPipeline.from_pretrained(
-    "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
-    torch_dtype=torch.bfloat16,
-    cache_dir=HF_CACHE_DIR,
-    token=HF_TOKEN,
-)
-wan_pipe.enable_model_cpu_offload()
+def _load_flux():
+    global flux_pipe
+    if flux_pipe is None:
+        print("[FLUX] Loading FLUX.1-schnell...")
+        flux_pipe = FluxPipeline.from_pretrained(
+            "black-forest-labs/FLUX.1-schnell",
+            torch_dtype=torch.bfloat16,
+            cache_dir=HF_CACHE_DIR,
+            token=HF_TOKEN,
+        )
+        flux_pipe.enable_sequential_cpu_offload()
+        print("[FLUX] Loaded.")
+    return flux_pipe
+
+
+def _load_wan():
+    global wan_pipe
+    if wan_pipe is None:
+        print("[WAN] Loading Wan 2.2 I2V A14B...")
+        wan_pipe = WanImageToVideoPipeline.from_pretrained(
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            torch_dtype=torch.bfloat16,
+            cache_dir=HF_CACHE_DIR,
+            token=HF_TOKEN,
+        )
+        wan_pipe.enable_sequential_cpu_offload()
+        print("[WAN] Loaded.")
+    return wan_pipe
+
 
 # ---------------------------------------------------------------------------
 # Image generation  (FLUX.1-schnell)
@@ -61,11 +79,13 @@ def generate_image(
     seed: int = -1,
 ):
     """Generate an image with FLUX.1-schnell."""
+    pipe = _load_flux()
+
     generator = None
     if seed >= 0:
         generator = torch.Generator(device="cpu").manual_seed(seed)
 
-    result = flux_pipe(
+    result = pipe(
         prompt=prompt,
         width=width,
         height=height,
@@ -93,7 +113,7 @@ DEFAULT_NEGATIVE_PROMPT = (
 )
 
 
-@spaces.GPU(duration=120)
+@spaces.GPU(duration=300)
 def generate_video(
     image: Image.Image,
     prompt: str,
@@ -107,6 +127,8 @@ def generate_video(
     progress=gr.Progress(track_tqdm=True),
 ):
     """Generate a video from an image + prompt with Wan 2.2 I2V."""
+    pipe = _load_wan()
+
     target_w = max(MOD_VALUE, (width // MOD_VALUE) * MOD_VALUE)
     target_h = max(MOD_VALUE, (height // MOD_VALUE) * MOD_VALUE)
     num_frames = int(np.clip(num_frames, MIN_FRAMES, MAX_FRAMES))
@@ -117,7 +139,7 @@ def generate_video(
     if seed >= 0:
         generator = torch.Generator(device="cpu").manual_seed(seed)
 
-    output = wan_pipe(
+    output = pipe(
         image=resized,
         prompt=prompt,
         negative_prompt=negative_prompt or DEFAULT_NEGATIVE_PROMPT,

@@ -4,11 +4,11 @@ emoji: 🎬
 colorFrom: blue
 colorTo: purple
 sdk: gradio
-sdk_version: "5.0.0"
+sdk_version: "5.29.0"
 app_file: app.py
 pinned: false
+private: true
 license: mit
-hardware: zero-a10g
 ---
 
 # AI Studio – Image & Video Generation Space

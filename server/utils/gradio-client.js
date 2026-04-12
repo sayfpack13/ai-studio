@@ -17,7 +17,7 @@ async function getClient(spaceUrl, hfToken) {
     opts.hf_token = hfToken;
   }
 
-  console.log("[HF Gradio] Connecting to Space:", spaceUrl);
+  console.log("[HF Gradio] Connecting to Space:", spaceUrl, hfToken ? "(with token)" : "(public)");
   _clientCache = await Client.connect(spaceUrl, opts);
   _cachedSpaceUrl = spaceUrl;
   console.log("[HF Gradio] Connected successfully");

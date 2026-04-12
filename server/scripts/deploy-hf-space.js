@@ -67,34 +67,53 @@ async function createSpaceRepo(token, repoId) {
 }
 
 async function uploadFiles(token, repoId) {
-  const operations = [];
+  const files = [];
 
   for (const filename of SPACE_FILES) {
     const filePath = path.join(SPACE_DIR, filename);
     const content = await fs.readFile(filePath, "utf-8");
     const b64 = Buffer.from(content, "utf-8").toString("base64");
-    operations.push({
-      key: "file",
-      value: { path: filename, content: b64, encoding: "base64" },
+    files.push({
+      path: filename,
+      content: b64,
+      encoding: "base64",
     });
   }
 
-  await axios.post(
-    `${HF_API}/spaces/${repoId}/commit/main`,
-    {
-      summary: "Deploy AI Studio Space (FLUX + Wan I2V)",
-      operations: operations.map((op) => ({
-        key: op.key,
-        value: op.value,
-      })),
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    },
-  );
+  // Retry up to 3 times with delay (Space repo may need a moment to be ready)
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await axios.post(
+        `${HF_API}/spaces/${repoId}/commit/main`,
+        {
+          summary: "Deploy AI Studio Space (FLUX + Wan I2V)",
+          files,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 30000,
+        },
+      );
+      console.log("Files uploaded successfully.");
+      return;
+    } catch (err) {
+      const status = err.response?.status;
+      const body = err.response?.data;
+      console.error(`Upload attempt ${attempt}/${MAX_RETRIES} failed:`, status, JSON.stringify(body).slice(0, 300));
+      if (attempt < MAX_RETRIES) {
+        const delay = attempt * 3000;
+        console.log(`Retrying in ${delay / 1000}s...`);
+        await new Promise((r) => setTimeout(r, delay));
+      } else {
+        const msg = typeof body === "string" ? body : body?.error || body?.message || JSON.stringify(body);
+        throw new Error(`Upload failed after ${MAX_RETRIES} attempts: ${status} - ${msg}`);
+      }
+    }
+  }
 }
 
 export async function deployHFSpace({ spaceName, token }) {
@@ -105,9 +124,14 @@ export async function deployHFSpace({ spaceName, token }) {
   const repoId = spaceName.includes("/") ? spaceName : `${username}/${spaceName}`;
 
   await createSpaceRepo(token, repoId);
+
+  // Brief pause to let the repo initialize on HuggingFace's side
+  await new Promise((r) => setTimeout(r, 2000));
+
   await uploadFiles(token, repoId);
 
-  const spaceUrl = `https://${username}-${spaceName.replace(/\//g, "-")}.hf.space`;
+  const spaceSlug = repoId.replace(/\//g, "-");
+  const spaceUrl = `https://${spaceSlug}.hf.space`;
   return { repoId, spaceUrl, username };
 }
 

@@ -8,18 +8,34 @@ from diffusers import FluxPipeline, WanImageToVideoPipeline, UniPCMultistepSched
 from diffusers.utils import export_to_video
 
 # ---------------------------------------------------------------------------
+# Persistent storage: use HF Bucket mount if available, otherwise /tmp
+# The bucket mount path is /data by default on HuggingFace Spaces
+# ---------------------------------------------------------------------------
+DATA_DIR = os.environ.get("DATA_DIR", "/data")
+HAS_PERSISTENT_STORAGE = os.path.isdir(DATA_DIR) and os.access(DATA_DIR, os.W_OK)
+if HAS_PERSISTENT_STORAGE:
+    HF_CACHE_DIR = os.path.join(DATA_DIR, "hf_cache")
+    os.makedirs(HF_CACHE_DIR, exist_ok=True)
+    os.environ["HF_HOME"] = HF_CACHE_DIR
+    os.environ["HUGGINGFACE_HUB_CACHE"] = HF_CACHE_DIR
+else:
+    HF_CACHE_DIR = None
+
+# ---------------------------------------------------------------------------
 # Global pipeline loading (persists across GPU-decorated calls)
 # ---------------------------------------------------------------------------
 
 flux_pipe = FluxPipeline.from_pretrained(
     "black-forest-labs/FLUX.1-schnell",
     torch_dtype=torch.bfloat16,
+    cache_dir=HF_CACHE_DIR,
 )
 flux_pipe.enable_model_cpu_offload()
 
 wan_pipe = WanImageToVideoPipeline.from_pretrained(
     "Wan-AI/Wan2.1-I2V-14B-480P",
     torch_dtype=torch.float16,
+    cache_dir=HF_CACHE_DIR,
 )
 wan_pipe.scheduler = UniPCMultistepScheduler.from_config(wan_pipe.scheduler.config)
 wan_pipe.enable_model_cpu_offload()
@@ -107,7 +123,9 @@ def generate_video(
     )
 
     frames = output.frames[0]
-    out_path = f"/tmp/wan_{os.getpid()}_{seed}.mp4"
+    out_dir = os.path.join(DATA_DIR, "output") if HAS_PERSISTENT_STORAGE else "/tmp"
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"wan_{os.getpid()}_{seed}.mp4")
     export_to_video(frames, out_path, fps=FIXED_FPS)
     return out_path
 

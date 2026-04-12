@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import gradio as gr
 from PIL import Image
-from diffusers import FluxPipeline, WanImageToVideoPipeline, UniPCMultistepScheduler
+from diffusers import FluxPipeline, WanImageToVideoPipeline
 from diffusers.utils import export_to_video
 
 # ---------------------------------------------------------------------------
@@ -22,6 +22,12 @@ else:
     HF_CACHE_DIR = None
 
 # ---------------------------------------------------------------------------
+# Authentication: read HF token from Space Secrets for gated models
+# Add "HF_TOKEN" as a Secret in your Space Settings on HuggingFace.
+# ---------------------------------------------------------------------------
+HF_TOKEN = os.environ.get("HF_TOKEN")
+
+# ---------------------------------------------------------------------------
 # Global pipeline loading (persists across GPU-decorated calls)
 # ---------------------------------------------------------------------------
 
@@ -29,15 +35,16 @@ flux_pipe = FluxPipeline.from_pretrained(
     "black-forest-labs/FLUX.1-schnell",
     torch_dtype=torch.bfloat16,
     cache_dir=HF_CACHE_DIR,
+    token=HF_TOKEN,
 )
 flux_pipe.enable_model_cpu_offload()
 
 wan_pipe = WanImageToVideoPipeline.from_pretrained(
-    "Wan-AI/Wan2.1-I2V-14B-480P",
-    torch_dtype=torch.float16,
+    "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+    torch_dtype=torch.bfloat16,
     cache_dir=HF_CACHE_DIR,
+    token=HF_TOKEN,
 )
-wan_pipe.scheduler = UniPCMultistepScheduler.from_config(wan_pipe.scheduler.config)
 wan_pipe.enable_model_cpu_offload()
 
 # ---------------------------------------------------------------------------
@@ -70,7 +77,7 @@ def generate_image(
 
 
 # ---------------------------------------------------------------------------
-# Video generation  (Wan 2.1 I2V 14B 480P)
+# Video generation  (Wan 2.2 I2V A14B)
 # ---------------------------------------------------------------------------
 
 MOD_VALUE = 16
@@ -94,12 +101,12 @@ def generate_video(
     width: int = 832,
     height: int = 480,
     num_frames: int = 81,
-    guidance_scale: float = 5.0,
-    num_inference_steps: int = 25,
+    guidance_scale: float = 3.5,
+    num_inference_steps: int = 40,
     seed: int = -1,
     progress=gr.Progress(track_tqdm=True),
 ):
-    """Generate a video from an image + prompt with Wan 2.1 I2V."""
+    """Generate a video from an image + prompt with Wan 2.2 I2V."""
     target_w = max(MOD_VALUE, (width // MOD_VALUE) * MOD_VALUE)
     target_h = max(MOD_VALUE, (height // MOD_VALUE) * MOD_VALUE)
     num_frames = int(np.clip(num_frames, MIN_FRAMES, MAX_FRAMES))
@@ -135,7 +142,7 @@ def generate_video(
 # ---------------------------------------------------------------------------
 
 with gr.Blocks(title="AI Studio – Image & Video") as demo:
-    gr.Markdown("# AI Studio – FLUX Image + Wan Video Generation")
+    gr.Markdown("# AI Studio – FLUX Image + Wan 2.2 Video Generation")
 
     with gr.Tab("Image Generation"):
         with gr.Row():
@@ -166,8 +173,8 @@ with gr.Blocks(title="AI Studio – Image & Video") as demo:
                 vid_width = gr.Slider(256, 1280, value=832, step=16, label="Width")
                 vid_height = gr.Slider(256, 720, value=480, step=16, label="Height")
                 vid_frames = gr.Slider(17, 81, value=81, step=4, label="Frames")
-                vid_guidance = gr.Slider(0.0, 10.0, value=5.0, step=0.5, label="Guidance Scale")
-                vid_steps = gr.Slider(1, 50, value=25, step=1, label="Steps")
+                vid_guidance = gr.Slider(0.0, 10.0, value=3.5, step=0.5, label="Guidance Scale")
+                vid_steps = gr.Slider(1, 50, value=40, step=1, label="Steps")
                 vid_seed = gr.Number(value=-1, label="Seed (-1 = random)", precision=0)
                 vid_btn = gr.Button("Generate Video", variant="primary")
             with gr.Column():

@@ -16,7 +16,7 @@ license: mit
 Single HuggingFace Space with ZeroGPU that provides:
 
 - **Image generation** via FLUX.1-schnell (4-step fast generation)
-- **Video generation** via Wan 2.1 I2V 14B 480P (image-to-video)
+- **Video generation** via Wan 2.2 I2V A14B (image-to-video)
 
 ## API Endpoints
 

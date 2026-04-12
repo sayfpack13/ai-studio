@@ -1,5 +1,6 @@
 import express from "express";
 import axios from "axios";
+import sharp from "sharp";
 import { requireApiKey } from "../middleware/auth.js";
 import { findModel } from "../utils/models.js";
 import libraryService from "../services/library-service.js";
@@ -528,6 +529,23 @@ export async function localFileToBase64(filePath) {
   }
 }
 
+/**
+ * Ensure base64 image data is JPEG (RGB, no alpha).
+ * Non-JPEG formats (PNG, WEBP, GIF, etc.) are converted to JPEG via sharp.
+ * Returns raw base64 string (no data URI prefix).
+ */
+export async function ensureJpegBase64(base64Data) {
+  const isJpeg = base64Data.startsWith("/9j/");
+  if (isJpeg) return base64Data;
+
+  const inputBuffer = Buffer.from(base64Data, "base64");
+  const jpegBuffer = await sharp(inputBuffer)
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  return jpegBuffer.toString("base64");
+}
+
 async function handleWanI2VGeneration({
   req,
   res,
@@ -617,10 +635,21 @@ async function handleWanI2VGeneration({
     }
   }
 
-  // Chutes Wan 2.2 I2V API requires parameters wrapped in { args: { ... } }
-  const requestData = {
-    args: { ...args, image: imageValue },
-  };
+  // Convert non-JPEG images to JPEG (strips alpha channel, ensures RGB)
+  if (imageValue && !imageValue.startsWith("http")) {
+    if (!imageValue.startsWith("/9j/")) {
+      try {
+        const originalLen = imageValue.length;
+        imageValue = await ensureJpegBase64(imageValue);
+        console.log(`[Wan I2V] Converted image → JPEG | base64 length: ${originalLen} → ${imageValue.length}`);
+      } catch (convErr) {
+        console.error("[Wan I2V] Image conversion failed:", convErr.message);
+      }
+    }
+  }
+
+  // Chutes Wan 2.2 I2V API expects flat parameters (no "args" wrapper)
+  const requestData = { ...args, image: imageValue };
 
   // Build headers - skip Authorization for public chutes
   const isPublicChute = req.providerContext?.isPublicChute;
@@ -647,7 +676,7 @@ async function handleWanI2VGeneration({
       // Log request for debugging
       console.log("[Wan I2V] Sending request to:", WAN_I2V_ENDPOINT, attempt > 0 ? `(attempt ${attempt + 1})` : "");
       console.log("[Wan I2V] Request data keys:", Object.keys(requestData));
-      console.log("[Wan I2V] Args keys:", Object.keys(requestData.args));
+      console.log("[Wan I2V] Request keys:", Object.keys(requestData));
       console.log("[Wan I2V] Prompt length:", args.prompt?.length || 0);
       console.log(
         "[Wan I2V] Image type:",

@@ -1,6 +1,850 @@
 {
-  "updatedAt": "2026-04-10T16:19:21.001Z",
+  "updatedAt": "2026-04-12T12:37:25.518Z",
   "jobs": [
+    {
+      "id": "video_1775997411460_f16460021386",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "cinematic realistic scene of a lone woman standing in the center of a destroyed city street during a storm, rain falling steadily, dark clouds above, subtle lightning in the distance\n\nshe stands still facing forward, calm and powerful presence, no movement except wind and rain\n\ncamera slowly pushes in from wide shot to medium shot in a smooth continuous motion\n\nenvironment slowly intensifies (wind, rain, distant lightning), but character remains perfectly still\n\nat peak moment, a strong lightning flash lights the entire scene for a brief instant\n\nimmediately after the flash, scene subtly resets to the original wide shot composition (same position, same framing), creating a seamless loop effect\n\nultra realistic, cinematic lighting, high contrast, dramatic atmosphere, depth of field, film style, no fantasy effects, no sci-fi elements",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775997378367_815d500d3284",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775997411457_ly2lf34k5",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "cinematic realistic scene of a lone woman standing in the center of a destroyed city street during a storm, rain falling steadily, dark clouds above, subtle lightning in the distance\n\nshe stands still",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_cinematic_realistic_scene_of_a_lone_woman_standi_1775997445480_e4233979.mp4",
+            "thumbnail": null,
+            "revised_prompt": "cinematic realistic scene of a lone woman standing in the center of a destroyed city street during a storm, rain falling steadily, dark clouds above, subtle lightning in the distance\n\nshe stands still facing forward, calm and powerful presence, no movement except wind and rain\n\ncamera slowly pushes in from wide shot to medium shot in a smooth continuous motion\n\nenvironment slowly intensifies (wind, rain, distant lightning), but character remains perfectly still\n\nat peak moment, a strong lightning flash lights the entire scene for a brief instant\n\nimmediately after the flash, scene subtly resets to the original wide shot composition (same position, same framing), creating a seamless loop effect\n\nultra realistic, cinematic lighting, high contrast, dramatic atmosphere, depth of field, film style, no fantasy effects, no sci-fi elements"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T12:36:51.460Z",
+      "updatedAt": "2026-04-12T12:37:25.515Z",
+      "startedAt": "2026-04-12T12:36:51.465Z",
+      "completedAt": "2026-04-12T12:37:25.515Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-12T12:36:51.460Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T12:36:51.465Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T12:36:51.470Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T12:36:51.477Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T12:37:25.477Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-12T12:37:25.511Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-12T12:37:25.515Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775996526501_5954c97bf8e1",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "same T-800 terminator endoskeleton, continuity from previous shot, damaged metallic chrome body with fire and smoke\n\nrobot movement strictly mechanical and non-human, rigid joints, segmented motion, visible step-by-step actuation, slight pauses between each movement, jerky and stuttering behavior, no fluid motion\n\nservo motor behavior: head rotates in sharp increments, arms move with delayed response, legs locking and unlocking unnaturally\n\nrobot attempts one final step, leg partially fails, knee joint locks abruptly\n\nsudden imbalance, torso tilts forward in a stiff unnatural way (no smooth falling), body collapses in heavy, rigid segments\n\nimpact on ground feels heavy and metallic, limbs hit ground in sequence (not fluid), sparks on contact\n\nred eyes flicker erratically, then dim in steps (not instant), final flicker then complete shutdown\n\nbody remains motionless, slight twitch of a finger then fully still, smoke rising, small flames continuing\n\ncamera slowly pulls back and slightly lowers, framing full body on the ground, cinematic low angle, dramatic lighting, ash and embers in air\n\nultra realistic, high detail, volumetric lighting, no human behavior, fully robotic face, consistent character",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775996522389_02cefb4f1e4b.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775996526497_p5isqxz99",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "video"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "same T-800 terminator endoskeleton, continuity from previous shot, damaged metallic chrome body with fire and smoke\n\nrobot movement strictly mechanical and non-human, rigid joints, segmented motion, v",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "Network error: Unable to connect to the video generation service.",
+        "name": "Error",
+        "stack": "Error: Network error: Unable to connect to the video generation service.\n    at processWanI2VJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:966:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async processVideoJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:614:12)\n    at async #processLoop (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T12:22:06.501Z",
+      "updatedAt": "2026-04-12T12:24:38.918Z",
+      "startedAt": "2026-04-12T12:22:06.505Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-04-12T12:24:38.918Z",
+      "history": [
+        {
+          "at": "2026-04-12T12:22:06.501Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T12:22:06.505Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T12:22:06.509Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T12:22:06.515Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T12:24:38.918Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775996163733_9cb3033428a5",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "same T-800 terminator endoskeleton, continuity from previous shot, full metallic chrome skeleton\n\nrobot walking forward with stiff, unnatural robotic movement, slight jerks and mechanical glitches in joints, head movement delayed and precise, no smooth human motion\n\nbody heavily damaged, exposed internal parts sparking, small flames burning on shoulder and chest, dark smoke rising from its body, glowing red eyes flickering\n\nenvironment filled with smoke and embers, post-apocalyptic battlefield, dim cinematic lighting\n\nrobot begins to slow down, steps becoming unstable, movements stuttering, one arm partially failing\n\ncamera slowly pulling back while slightly lowering angle, maintaining full body in frame, subtle shake for impact\n\nterminator stops, stands still for a moment, sparks intensify, eyes flicker rapidly, then shut off completely\n\nrobot powers down and freezes in place, slight forward tilt, smoke and fire still active around the body\n\nultra realistic, cinematic, volumetric lighting, high detail, consistent design, no human skin",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775996159337_0b73387399ba.png",
+        "wanFrames": 140,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775996163729_js4cruvx8",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 140,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "video"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "same T-800 terminator endoskeleton, continuity from previous shot, full metallic chrome skeleton\n\nrobot walking forward with stiff, unnatural robotic movement, slight jerks and mechanical glitches in ",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_same_t_800_terminator_endoskeleton_continuity_fr_1775996459256_4bb9a841.mp4",
+            "thumbnail": null,
+            "revised_prompt": "same T-800 terminator endoskeleton, continuity from previous shot, full metallic chrome skeleton\n\nrobot walking forward with stiff, unnatural robotic movement, slight jerks and mechanical glitches in joints, head movement delayed and precise, no smooth human motion\n\nbody heavily damaged, exposed internal parts sparking, small flames burning on shoulder and chest, dark smoke rising from its body, glowing red eyes flickering\n\nenvironment filled with smoke and embers, post-apocalyptic battlefield, dim cinematic lighting\n\nrobot begins to slow down, steps becoming unstable, movements stuttering, one arm partially failing\n\ncamera slowly pulling back while slightly lowering angle, maintaining full body in frame, subtle shake for impact\n\nterminator stops, stands still for a moment, sparks intensify, eyes flicker rapidly, then shut off completely\n\nrobot powers down and freezes in place, slight forward tilt, smoke and fire still active around the body\n\nultra realistic, cinematic, volumetric lighting, high detail, consistent design, no human skin"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T12:16:03.733Z",
+      "updatedAt": "2026-04-12T12:20:59.281Z",
+      "startedAt": "2026-04-12T12:16:03.738Z",
+      "completedAt": "2026-04-12T12:20:59.281Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-12T12:16:03.733Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T12:16:03.738Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T12:16:03.744Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T12:16:03.752Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T12:20:59.253Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-12T12:20:59.278Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-12T12:20:59.281Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775995977049_e4c55b27703a",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body reveal, heavy mechanical movement, dust falling off its body\n\ncamera slowly pulling backward (dolly out), capturing more of the body as it rises, smooth cinematic motion, slight handheld shake\n\nterminator begins walking forward with heavy steps, natural robotic motion, arms slightly swinging, head stable and scanning forward\n\ncamera continues falling back to keep full body centered in frame, low angle cinematic shot, dramatic lighting, post-apocalyptic war environment, smoke and particles in air\n\nultra realistic, high detail, cinematic, volumetric lighting, depth of field, consistent character design, no human skin, fully robotic face",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775994484541_7ae23a2ed006.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775995977033_8lfa0x9no",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body r",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_realistic_t_800_terminator_endoskeleton_rising_f_1775996083592_cd516fbb.mp4",
+            "thumbnail": null,
+            "revised_prompt": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body reveal, heavy mechanical movement, dust falling off its body\n\ncamera slowly pulling backward (dolly out), capturing more of the body as it rises, smooth cinematic motion, slight handheld shake\n\nterminator begins walking forward with heavy steps, natural robotic motion, arms slightly swinging, head stable and scanning forward\n\ncamera continues falling back to keep full body centered in frame, low angle cinematic shot, dramatic lighting, post-apocalyptic war environment, smoke and particles in air\n\nultra realistic, high detail, cinematic, volumetric lighting, depth of field, consistent character design, no human skin, fully robotic face"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T12:12:57.048Z",
+      "updatedAt": "2026-04-12T12:14:43.619Z",
+      "startedAt": "2026-04-12T12:12:57.052Z",
+      "completedAt": "2026-04-12T12:14:43.619Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-12T12:12:57.048Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T12:12:57.052Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T12:12:57.057Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T12:12:57.062Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T12:14:43.587Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-12T12:14:43.616Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-12T12:14:43.619Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775995574239_5ce445601c68",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body reveal, heavy mechanical movement, dust falling off its body\n\ncamera slowly pulling backward (dolly out), capturing more of the body as it rises, smooth cinematic motion, slight handheld shake\n\nterminator begins walking forward with heavy steps, natural robotic motion, arms slightly swinging, head stable and scanning forward\n\ncamera continues falling back to keep full body centered in frame, low angle cinematic shot, dramatic lighting, post-apocalyptic war environment, smoke and particles in air\n\nultra realistic, high detail, cinematic, volumetric lighting, depth of field, consistent character design, no human skin, fully robotic face",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775994484541_7ae23a2ed006.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775995574225_ri0pyk3mb",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body r",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "Wan I2V generation failed",
+        "name": "Error",
+        "stack": "Error: Wan I2V generation failed\n    at processWanI2VJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:965:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async processVideoJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:614:12)\n    at async #processLoop (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T12:06:14.239Z",
+      "updatedAt": "2026-04-12T12:07:59.987Z",
+      "startedAt": "2026-04-12T12:06:14.244Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-04-12T12:07:59.987Z",
+      "history": [
+        {
+          "at": "2026-04-12T12:06:14.239Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T12:06:14.244Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T12:06:14.250Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T12:06:14.257Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T12:07:59.987Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775995150447_1ddc27228970",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body reveal, heavy mechanical movement, dust falling off its body\n\ncamera slowly pulling backward (dolly out), capturing more of the body as it rises, smooth cinematic motion, slight handheld shake\n\nterminator begins walking forward with heavy steps, natural robotic motion, arms slightly swinging, head stable and scanning forward\n\ncamera continues falling back to keep full body centered in frame, low angle cinematic shot, dramatic lighting, post-apocalyptic war environment, smoke and particles in air\n\nultra realistic, high detail, cinematic, volumetric lighting, depth of field, consistent character design, no human skin, fully robotic face",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775994484541_7ae23a2ed006.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775995150433_4w3qb1t4j",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body r",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "Invalid request: Invalid request: {\"detail\":\"Invalid input parameters\"}",
+        "name": "Error",
+        "stack": "Error: Invalid request: Invalid request: {\"detail\":\"Invalid input parameters\"}\n    at processWanI2VJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:954:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async processVideoJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:613:12)\n    at async #processLoop (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T11:59:10.447Z",
+      "updatedAt": "2026-04-12T11:59:37.626Z",
+      "startedAt": "2026-04-12T11:59:10.451Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-04-12T11:59:37.626Z",
+      "history": [
+        {
+          "at": "2026-04-12T11:59:10.447Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T11:59:10.451Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T11:59:10.459Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T11:59:10.466Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T11:59:37.626Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775994799673_4a90be675ff1",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body reveal, heavy mechanical movement, dust falling off its body\n\ncamera slowly pulling backward (dolly out), capturing more of the body as it rises, smooth cinematic motion, slight handheld shake\n\nterminator begins walking forward with heavy steps, natural robotic motion, arms slightly swinging, head stable and scanning forward\n\ncamera continues falling back to keep full body centered in frame, low angle cinematic shot, dramatic lighting, post-apocalyptic war environment, smoke and particles in air\n\nultra realistic, high detail, cinematic, volumetric lighting, depth of field, consistent character design, no human skin, fully robotic face",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775994484541_7ae23a2ed006.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775994799657_0q3sbqij6",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body r",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "Invalid request: Invalid request: {\"detail\":\"Invalid input parameters\"}",
+        "name": "Error",
+        "stack": "Error: Invalid request: Invalid request: {\"detail\":\"Invalid input parameters\"}\n    at processWanI2VJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:943:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async processVideoJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:613:12)\n    at async #processLoop (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T11:53:19.673Z",
+      "updatedAt": "2026-04-12T11:54:11.079Z",
+      "startedAt": "2026-04-12T11:53:19.677Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-04-12T11:54:11.079Z",
+      "history": [
+        {
+          "at": "2026-04-12T11:53:19.673Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T11:53:19.677Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T11:53:19.681Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T11:53:19.686Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T11:54:11.079Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1775994493757_ab803da9bdf9",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body reveal, heavy mechanical movement, dust falling off its body\n\ncamera slowly pulling backward (dolly out), capturing more of the body as it rises, smooth cinematic motion, slight handheld shake\n\nterminator begins walking forward with heavy steps, natural robotic motion, arms slightly swinging, head stable and scanning forward\n\ncamera continues falling back to keep full body centered in frame, low angle cinematic shot, dramatic lighting, post-apocalyptic war environment, smoke and particles in air\n\nultra realistic, high detail, cinematic, volumetric lighting, depth of field, consistent character design, no human skin, fully robotic face",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1775994484541_7ae23a2ed006.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1775994493752_0pcjfwsau",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "video"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic T-800 terminator endoskeleton rising from ground, metallic chrome skeleton covered in dust and debris, glowing red eyes activating\n\nrobot slowly stands up from crouched position, full body r",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "Invalid request: Invalid request: {\"detail\":\"Invalid input parameters\"}",
+        "name": "Error",
+        "stack": "Error: Invalid request: Invalid request: {\"detail\":\"Invalid input parameters\"}\n    at processWanI2VJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:947:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async processVideoJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:613:12)\n    at async #processLoop (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-12T11:48:13.757Z",
+      "updatedAt": "2026-04-12T11:48:19.772Z",
+      "startedAt": "2026-04-12T11:48:13.761Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-04-12T11:48:19.772Z",
+      "history": [
+        {
+          "at": "2026-04-12T11:48:13.757Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-12T11:48:13.761Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-12T11:48:13.764Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-12T11:48:13.771Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-12T11:48:19.772Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1775837929683_19608fe3b820",
       "type": "video",
@@ -1051,11 +1895,7 @@
       "pipelineId": null,
       "stepType": null,
       "dependsOn": [],
-      "payload": {
-        "__fileRef": true,
-        "filename": "video_1775817491054_4e9bd971d371_payload.json",
-        "dataType": "payload"
-      },
+      "payload": null,
       "metadata": {
         "videoId": "vid_1775817491048_ymj58kd1m",
         "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",

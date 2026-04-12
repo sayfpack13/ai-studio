@@ -30,6 +30,7 @@ import {
   getWanI2VTimeoutMs,
   imageUrlToBase64,
   localFileToBase64,
+  ensureJpegBase64,
 } from "./routes/video.js";
 
 dotenv.config();
@@ -830,8 +831,29 @@ async function processWanI2VJob({
 
   await setProgress(20, { stage: "requesting_provider" });
 
-  // Chutes Wan 2.2 I2V API requires parameters wrapped in an "args" object
-  const requestData = { args: { ...args, image: imageValue } };
+  // Convert non-JPEG images to JPEG (strips alpha channel, ensures RGB compatibility)
+  if (imageValue && !imageValue.startsWith("http")) {
+    const prefix = imageValue.substring(0, 20);
+    const formatHint = prefix.startsWith("/9j/") ? "JPEG"
+      : prefix.startsWith("iVBOR") ? "PNG"
+      : prefix.startsWith("UklGR") ? "WEBP"
+      : prefix.startsWith("R0lGO") ? "GIF"
+      : `unknown (prefix: ${prefix.substring(0, 8)})`;
+    console.log("[Wan I2V Job] Image format detected:", formatHint, "| base64 length:", imageValue.length);
+
+    if (!prefix.startsWith("/9j/")) {
+      try {
+        const originalLen = imageValue.length;
+        imageValue = await ensureJpegBase64(imageValue);
+        console.log(`[Wan I2V Job] Converted ${formatHint} → JPEG | base64 length: ${originalLen} → ${imageValue.length}`);
+      } catch (convErr) {
+        console.error("[Wan I2V Job] Image conversion failed:", convErr.message);
+      }
+    }
+  }
+
+  // Chutes Wan 2.2 I2V API expects flat parameters (no "args" wrapper)
+  const requestData = { ...args, image: imageValue };
 
   // Build headers — skip Authorization for public chutes
   const isPublicChute = providerContext.isPublicChute;
@@ -845,6 +867,7 @@ async function processWanI2VJob({
   const MAX_WAN_RETRIES = 3;
   const RETRY_DELAYS = [15000, 30000, 60000]; // 15s, 30s, 60s exponential backoff
   let lastError = null;
+  let response;
 
   for (let attempt = 0; attempt <= MAX_WAN_RETRIES; attempt++) {
     if (isCanceled()) throw new Error("Canceled");
@@ -857,14 +880,8 @@ async function processWanI2VJob({
       }
 
       console.log("[Wan I2V Job] Sending request to:", WAN_I2V_ENDPOINT, attempt > 0 ? `(attempt ${attempt + 1})` : "");
-      console.log("[Wan I2V Job] Args keys:", Object.keys(requestData.args));
-      console.log("[Wan I2V Job] Prompt length:", args.prompt?.length || 0);
-      console.log(
-        "[Wan I2V Job] Image type:",
-        imageValue.startsWith("http") ? "URL" : "base64",
-        "length:",
-        imageValue?.length || 0,
-      );
+      const debugArgs = { ...requestData, image: `<${typeof requestData.image === "string" ? (requestData.image.startsWith("http") ? "URL" : "base64") : "unknown"} len=${String(requestData.image || "").length}>`, prompt: `<len=${String(requestData.prompt || "").length}>` };
+      console.log("[Wan I2V Job] Full args (redacted):", JSON.stringify(debugArgs));
       console.log("[Wan I2V Job] Frames:", args.frames);
 
       const wanTimeoutMs = getWanI2VTimeoutMs({
@@ -919,12 +936,14 @@ async function processWanI2VJob({
       }
 
       console.error("[Wan I2V Job] API error:", axiosError.message);
-      console.error(
-        "[Wan I2V Job] Status:",
-        axiosError.response?.status,
-        "Data length:",
-        axiosError.response?.data?.length ?? 0,
-      );
+      if (axiosError.response?.data) {
+        try {
+          const rawBody = Buffer.from(axiosError.response.data).toString("utf8");
+          console.error("[Wan I2V Job] Status:", axiosError.response?.status, "Response body:", rawBody);
+        } catch {
+          console.error("[Wan I2V Job] Status:", axiosError.response?.status, "Data length:", axiosError.response?.data?.length ?? 0);
+        }
+      }
 
       // Only retry on server errors that may be transient
       const isRetryable =

@@ -109,7 +109,7 @@ export default function ImageGenerator() {
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
   const [steps, setSteps] = useState(30);
-  const [guidanceScale, setGuidanceScale] = useState(7.5);
+  const [guidanceScale, setGuidanceScale] = useState(4.0);
   const [debugMode, setDebugMode] = useState(false);
   const [customParamsText, setCustomParamsText] = useState("");
   const [debugDetails, setDebugDetails] = useState(null);

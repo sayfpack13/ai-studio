@@ -1029,9 +1029,11 @@ router.post("/generate", async (req, res) => {
           prompt: effectivePrompt,
           width: normalizedWidth || 1024,
           height: normalizedHeight || 1024,
-          num_inference_steps: normalizedNumInferenceSteps || 4,
-          guidance_scale: normalizedGuidanceScale || 0.0,
+          num_inference_steps: normalizedNumInferenceSteps || 30,
+          guidance_scale: normalizedGuidanceScale || 4.0,
           seed: -1,
+          randomize_seed: true,
+          input_images: req.body.input_images || [],
         });
 
         const imageUrl = result.url;

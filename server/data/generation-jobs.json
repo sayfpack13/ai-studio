@@ -1,6 +1,124 @@
 {
-  "updatedAt": "2026-04-12T12:37:25.518Z",
+  "updatedAt": "2026-04-13T09:47:49.563Z",
   "jobs": [
+    {
+      "id": "video_1776073561051_e1d88dca4280",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "cinematic cyberpunk city at night, slow camera push forward, neon lights flickering, fog drifting, mysterious masked figure standing still, subtle head movement, glowing blue accents, particles floating, seamless loop, ultra realistic, 4k, smooth motion",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1776073539593_88af3a12c5d6",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776073561048_mucb3e433",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "cinematic cyberpunk city at night, slow camera push forward, neon lights flickering, fog drifting, mysterious masked figure standing still, subtle head movement, glowing blue accents, particles floati",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_cinematic_cyberpunk_city_at_night_slow_camera_pu_1776073669538_3b609aa5.mp4",
+            "thumbnail": null,
+            "revised_prompt": "cinematic cyberpunk city at night, slow camera push forward, neon lights flickering, fog drifting, mysterious masked figure standing still, subtle head movement, glowing blue accents, particles floating, seamless loop, ultra realistic, 4k, smooth motion"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-13T09:46:01.051Z",
+      "updatedAt": "2026-04-13T09:47:49.560Z",
+      "startedAt": "2026-04-13T09:46:01.055Z",
+      "completedAt": "2026-04-13T09:47:49.560Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-13T09:46:01.051Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-13T09:46:01.055Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-13T09:46:01.062Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-13T09:46:01.070Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-13T09:47:49.531Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-13T09:47:49.558Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-13T09:47:49.560Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1775997411460_f16460021386",
       "type": "video",

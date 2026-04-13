@@ -33,7 +33,10 @@ export function resetClient() {
 }
 
 /**
- * Generate an image via the FLUX endpoint on the HF Space.
+ * Generate an image via the FLUX.2-dev endpoint on the HF Space.
+ *
+ * Uses the /infer API which handles remote text encoding (CPU)
+ * and only bills GPU for diffusion inference.
  *
  * @param {string} spaceUrl  - Full Space URL (e.g. "https://user-space.hf.space")
  * @param {string} hfToken   - HuggingFace API token (optional for public spaces)
@@ -41,9 +44,11 @@ export function resetClient() {
  * @param {string} options.prompt
  * @param {number} [options.width=1024]
  * @param {number} [options.height=1024]
- * @param {number} [options.num_inference_steps=4]
- * @param {number} [options.guidance_scale=0.0]
+ * @param {number} [options.num_inference_steps=30]
+ * @param {number} [options.guidance_scale=4.0]
  * @param {number} [options.seed=-1]
+ * @param {boolean} [options.randomize_seed=true]
+ * @param {Array}  [options.input_images=[]] - Optional reference images for I2I editing
  * @returns {{ url: string }} Object with a data URL of the generated image
  */
 export async function generateImage(spaceUrl, hfToken, options = {}) {
@@ -53,22 +58,36 @@ export async function generateImage(spaceUrl, hfToken, options = {}) {
     prompt = "",
     width = 1024,
     height = 1024,
-    num_inference_steps = 4,
-    guidance_scale = 0.0,
+    num_inference_steps = 30,
+    guidance_scale = 4.0,
     seed = -1,
+    randomize_seed = true,
+    input_images = [],
   } = options;
 
-  console.log("[HF Gradio] Calling /generate_image with prompt length:", prompt.length);
+  console.log("[HF Gradio] Calling /infer with prompt length:", prompt.length);
 
-  const result = await client.predict("/generate_image", {
+  // Build the Gradio call parameters matching infer_image() signature:
+  // prompt, input_images, seed, randomize_seed, width, height, steps, guidance
+  const callParams = {
     prompt,
+    input_images: input_images.length > 0 ? input_images : null,
+    seed,
+    randomize_seed,
     width,
     height,
     num_inference_steps,
     guidance_scale,
-    seed,
-  });
+  };
 
+  // Gradio doesn't accept None as a value; use null for empty gallery
+  if (input_images.length === 0) {
+    delete callParams.input_images;
+  }
+
+  const result = await client.predict("/infer", callParams);
+
+  // /infer returns [image, seed] — extract the image
   const imageData = result?.data?.[0];
   if (!imageData) {
     throw new Error("HuggingFace Space returned no image data");

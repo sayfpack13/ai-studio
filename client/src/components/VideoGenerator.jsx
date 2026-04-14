@@ -400,7 +400,26 @@ export default function VideoGenerator() {
     [availableModels, selectedModel],
   );
 
-  const isWanI2VSelected = selectedModelInfo?.id === WAN_I2V_MODEL_ID;
+  const isWanI2VSelected = 
+    selectedModelInfo?.id === WAN_I2V_MODEL_ID || 
+    (selectedModelInfo?.id && selectedModelInfo.id.toLowerCase().includes("i2v"));
+
+  const isHuggingFaceSpace = selectedModelInfo?.provider === "huggingface" && selectedModelInfo?.id?.includes("/");
+  const activeSpaceUrl = isHuggingFaceSpace 
+    ? `https://huggingface.co/spaces/${selectedModelInfo.id}` 
+    : null;
+
+  const [spaceUrlCopied, setSpaceUrlCopied] = useState(false);
+  const handleCopySpaceUrl = useCallback(async () => {
+    if (!activeSpaceUrl) return;
+    try {
+      await navigator.clipboard.writeText(activeSpaceUrl);
+      setSpaceUrlCopied(true);
+      setTimeout(() => setSpaceUrlCopied(false), 1200);
+    } catch {
+      setSpaceUrlCopied(false);
+    }
+  }, [activeSpaceUrl]);
 
   // Load models on mount
   useEffect(() => {
@@ -1403,6 +1422,42 @@ export default function VideoGenerator() {
         <div className="w-full lg:w-[45%] flex flex-col border-r border-gray-700">
           <div className="flex-1 overflow-y-auto p-4">
             <div className="space-y-4">
+              {/* Space URL Display (if applicable) */}
+              {isHuggingFaceSpace && activeSpaceUrl && (
+                <div className="bg-cyan-950/20 border border-cyan-800/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+                    <span className="text-sm font-medium text-cyan-200">
+                      HuggingFace Public/Private Space Connected
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5 space-y-1">
+                    <div className="text-gray-400">
+                      Using space: {selectedModelInfo.id}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={activeSpaceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 truncate text-cyan-300 hover:text-cyan-200 underline"
+                        title={activeSpaceUrl}
+                      >
+                        {activeSpaceUrl}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleCopySpaceUrl}
+                        disabled={!activeSpaceUrl}
+                        className="px-2 py-1 rounded border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {spaceUrlCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Prompt */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">

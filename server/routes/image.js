@@ -1052,13 +1052,18 @@ router.post("/generate", async (req, res) => {
           const isTongyiModel = /Tongyi-MAI\/Z-Image-Turbo/i.test(
             normalizedHfModel,
           );
+          const isFluxModel = /black-forest-labs\/FLUX\.1-dev/i.test(
+            normalizedHfModel,
+          );
           const hfSpaceTarget = String(req.body?.hfSpaceTarget || "").toLowerCase();
           const hfCustomSpace = String(req.body?.hfCustomSpace || "").trim();
           const spaceUrl = isTongyiModel
             ? hfSpaceTarget === "custom"
               ? hfCustomSpace || process.env.HF_TONGYI_SPACE_URL || DEFAULT_TONGYI_SPACE
               : DEFAULT_TONGYI_SPACE
-            : process.env.HF_IMAGE_SPACE_URL || provider.apiBaseUrl;
+            : isFluxModel
+              ? "black-forest-labs/FLUX.1-dev"
+              : process.env.HF_IMAGE_SPACE_URL || provider.apiBaseUrl;
 
           if (!spaceUrl) {
             return res.status(400).json({
@@ -1096,8 +1101,12 @@ router.post("/generate", async (req, res) => {
                 height: normalizedHeight || 1024,
                 num_inference_steps: normalizedNumInferenceSteps || 30,
                 guidance_scale: normalizedGuidanceScale || 4.0,
-                seed: -1,
-                randomize_seed: true,
+                seed: req.body?.seed != null ? Number(req.body.seed) : -1,
+                randomize_seed: typeof req.body?.random_seed === "boolean"
+                  ? req.body.random_seed
+                  : req.body?.seed != null
+                    ? false
+                    : true,
                 input_images: req.body.input_images || [],
               });
 

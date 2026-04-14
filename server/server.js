@@ -545,13 +545,18 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
         const isTongyiModel = /Tongyi-MAI\/Z-Image-Turbo/i.test(
           normalizedHfModel,
         );
+        const isFluxModel = /black-forest-labs\/FLUX\.1-dev/i.test(
+          normalizedHfModel,
+        );
         const hfSpaceTarget = String(payload?.hfSpaceTarget || "").toLowerCase();
         const hfCustomSpace = String(payload?.hfCustomSpace || "").trim();
         const spaceUrl = isTongyiModel
           ? hfSpaceTarget === "custom"
             ? hfCustomSpace || process.env.HF_TONGYI_SPACE_URL || DEFAULT_TONGYI_SPACE
             : DEFAULT_TONGYI_SPACE
-          : process.env.HF_IMAGE_SPACE_URL || providerContext.provider.apiBaseUrl;
+          : isFluxModel
+            ? "black-forest-labs/FLUX.1-dev"
+            : process.env.HF_IMAGE_SPACE_URL || providerContext.provider.apiBaseUrl;
 
         if (!spaceUrl) {
           throw new Error("HuggingFace image Space URL is not configured. Set HF_IMAGE_SPACE_URL or Admin → Providers → HuggingFace.");
@@ -590,7 +595,11 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
               num_inference_steps: Number(payload?.numInferenceSteps) || 30,
               guidance_scale: Number(payload?.guidanceScale) || 4.0,
               seed: payload?.seed != null ? Number(payload.seed) : -1,
-              randomize_seed: true,
+              randomize_seed: typeof payload?.random_seed === "boolean"
+                ? payload.random_seed
+                : payload?.seed != null
+                  ? false
+                  : true,
               input_images: Array.isArray(payload?.input_images)
                 ? payload.input_images
                 : [],

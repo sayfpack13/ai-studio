@@ -1082,8 +1082,9 @@ router.post("/generate", async (req, res) => {
 
     // ── HuggingFace Gradio Space (video) ──────────────────────────────
     if (providerId === "huggingface") {
-      const spaceUrl = process.env.HF_VIDEO_SPACE_URL || provider.apiBaseUrl;
-      const hfToken = apiKey || undefined;
+      const hfToken = apiKey || process.env.HF_TOKEN || undefined;
+      const isSpace = actualModelId && actualModelId.includes("/");
+      const spaceUrl = isSpace ? actualModelId : (process.env.HF_VIDEO_SPACE_URL || provider.apiBaseUrl);
 
       if (!spaceUrl) {
         return res.status(400).json({
@@ -1110,12 +1111,12 @@ router.post("/generate", async (req, res) => {
           width: Number(req.body?.wanWidth) || 832,
           height: Number(req.body?.wanHeight) || 480,
           num_frames: Number(req.body?.wanFrames) || Number(req.body?.frames) || 81,
-          guidance_scale: Number(req.body?.wanGuidanceScale) || 5.0,
-          num_inference_steps: Number(req.body?.wanSteps) || 25,
-          seed: req.body?.wanSeed != null ? Number(req.body.wanSeed) : -1,
-        });
+guidance_scale: Number(req.body?.wanGuidanceScale) || req.body?.guidance_scale || 5.0,
+            num_inference_steps: Number(req.body?.wanSteps) || req.body?.num_inference_steps || 25,
+            seed: req.body?.wanSeed != null ? Number(req.body.wanSeed) : (req.body?.seed != null ? Number(req.body.seed) : -1),
+          });
 
-        const videoBuffer = await downloadGradioFile(result.url);
+          const videoBuffer = await downloadGradioFile(result.url, hfToken);
 
         const fsMod = await import("fs");
         const pathMod = await import("path");
@@ -1139,12 +1140,7 @@ router.post("/generate", async (req, res) => {
           source: "video",
           title: String(prompt).slice(0, 80) || "Generated video",
           url: localUrl,
-          metadata: { model: modelId, provider: "huggingface" },
-        });
-
-        return res.json({
-          success: true,
-          data: [{ url: localUrl, revised_prompt: prompt }],
+            metadata: { model: modelId, provider: "huggingface", mode: "space", spaceUrl },
         });
       } catch (error) {
         console.error("[HuggingFace] Video generation error:", error.message);

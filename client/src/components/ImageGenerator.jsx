@@ -152,6 +152,7 @@ export default function ImageGenerator() {
   const [height, setHeight] = useState(1024);
   const [steps, setSteps] = useState(30);
   const [guidanceScale, setGuidanceScale] = useState(4.0);
+  const [seed, setSeed] = useState("");
   const [debugMode, setDebugMode] = useState(false);
   const [customParamsText, setCustomParamsText] = useState("");
   const [debugDetails, setDebugDetails] = useState(null);
@@ -979,10 +980,14 @@ export default function ImageGenerator() {
         height: supportsWidthHeight ? height : undefined,
         guidanceScale: isZImageTurbo
           ? Number(zImageParams.guidanceScale)
-          : undefined,
+          : Number(guidanceScale),
         numInferenceSteps: isZImageTurbo
           ? Number(zImageParams.numInferenceSteps)
-          : undefined,
+          : Number(steps),
+        seed:
+          seed === "" || seed == null
+            ? undefined
+            : Number(seed),
         input_args: isHunyuanImage3
           ? hunyuanInputArgs
           : isQwenImage2512
@@ -1459,7 +1464,7 @@ export default function ImageGenerator() {
     if (modelId === "chutes/hunyuan-image-3") return hunyuanParams;
     if (modelId === "chutes/Qwen-Image-2512") return qwenImageParams;
     if (modelId === "huggingface/Tongyi-MAI/Z-Image-Turbo") return tongyiParams;
-    return { width, height, steps, guidanceScale, negativePrompt };
+    return { width, height, steps, guidanceScale, negativePrompt, seed };
   }, [
     selectedModelInfo?.id,
     zImageParams,
@@ -1471,6 +1476,7 @@ export default function ImageGenerator() {
     steps,
     guidanceScale,
     negativePrompt,
+    seed,
   ]);
 
   const handleImageParamsChange = useCallback(
@@ -1503,6 +1509,7 @@ export default function ImageGenerator() {
           setGuidanceScale(newParams.guidanceScale);
         if (newParams.negativePrompt !== undefined)
           setNegativePrompt(newParams.negativePrompt);
+        if (newParams.seed !== undefined) setSeed(newParams.seed);
       }
     },
     [selectedModelInfo?.id, imageParams],

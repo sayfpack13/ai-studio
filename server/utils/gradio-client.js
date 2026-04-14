@@ -342,17 +342,43 @@ export async function generateVideo(spaceUrl, hfToken, options = {}) {
 
   console.log("[HF Gradio] Calling /generate_video with prompt length:", prompt.length);
 
-  const result = await client.predict("/generate_video", {
-    image: imageRef,
-    prompt,
-    negative_prompt,
-    width,
-    height,
-    num_frames,
-    guidance_scale,
-    num_inference_steps,
-    seed,
-  });
+  // If this is the specific r3gm Space, format the parameters to its required payload schema
+  const isAOTiPreview = spaceUrl && spaceUrl.toLowerCase().includes("r3gm/wan2-2-fp8da-aoti-preview");
+  
+  let payload;
+  if (isAOTiPreview) {
+    payload = {
+      input_image: imageRef,
+      last_image: imageRef, // Fallback required per the API doc
+      prompt: String(prompt || ""),
+      steps: Number(num_inference_steps) || 6,
+      negative_prompt: String(negative_prompt || ""),
+      duration_seconds: 3.5, // Not mapped from current defaults natively, using the API default
+      guidance_scale: Number(guidance_scale) || 1,
+      guidance_scale_2: 1, 
+      seed: Number(seed) === -1 ? 42 : Number(seed),
+      randomize_seed: Number(seed) === -1,
+      quality: 6,
+      scheduler: "UniPCMultistep",
+      flow_shift: 3,
+      frame_multiplier: "16",
+      video_component: true,
+    };
+  } else {
+    payload = {
+      image: imageRef,
+      prompt,
+      negative_prompt,
+      width,
+      height,
+      num_frames,
+      guidance_scale,
+      num_inference_steps,
+      seed,
+    };
+  }
+
+  const result = await client.predict("/generate_video", payload);
 
   const videoData = result?.data?.[0];
   if (!videoData) {

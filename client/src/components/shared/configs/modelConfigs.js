@@ -4,9 +4,9 @@ import { Zap, Gauge, Sparkles, Square, RectangleHorizontal, RectangleVertical, M
 export const aspectRatioPresets = [
   { id: "1:1", label: "Square", ratio: "1:1", width: 1024, height: 1024, icon: Square },
   { id: "4:3", label: "Classic", ratio: "4:3", width: 1024, height: 768, icon: RectangleHorizontal },
-  { id: "2:3", label: "Portrait", ratio: "2:3", width: 768, height: 1024, icon: RectangleVertical },
+  { id: "2:3", label: "Portrait", ratio: "2:3", width: 768, height: 1152, icon: RectangleVertical },
   { id: "3:4", label: "Tall", ratio: "3:4", width: 864, height: 1152, icon: RectangleVertical },
-  { id: "3:2", label: "Landscape", ratio: "3:2", width: 1024, height: 768, icon: RectangleHorizontal },
+  { id: "3:2", label: "Landscape", ratio: "3:2", width: 1152, height: 768, icon: RectangleHorizontal },
   { id: "2:1", label: "Panorama", ratio: "2:1", width: 1280, height: 640, icon: Maximize },
   { id: "1:2", label: "Vertical Panorama", ratio: "1:2", width: 640, height: 1280, icon: RectangleVertical },
   { id: "16:9", label: "Widescreen", ratio: "16:9", width: 1280, height: 720, icon: Maximize },
@@ -197,6 +197,35 @@ export const imageModelConfigs = {
     ],
   },
 
+  // FLUX.1-dev (HuggingFace Space)
+  "huggingface/black-forest-labs/FLUX.1-dev": {
+    id: "huggingface/black-forest-labs/FLUX.1-dev",
+    name: "FLUX.1-dev",
+    supportsSize: true,
+    supportsWidthHeight: true,
+    supportsSteps: true,
+    supportsGuidanceScale: true,
+    supportsShift: false,
+    supportsNegativePrompt: false, // FLUX doesn't normally use negative prompt in the API call
+    supportsSeed: true,
+    supportsRandomSeed: true,
+    supportsQualityPresets: false,
+    defaultValues: {
+      width: 1024,
+      height: 1024,
+      steps: 28,
+      guidanceScale: 3.5,
+      seed: 0,
+      randomSeed: true,
+    },
+    ranges: {
+      width: { min: 256, max: 2048 },
+      height: { min: 256, max: 2048 },
+      steps: { min: 1, max: 50 },
+      guidanceScale: { min: 1, max: 15, step: 0.1 },
+    },
+  },
+
   // Tongyi Z-Image Turbo (HuggingFace Space / API)
   "huggingface/Tongyi-MAI/Z-Image-Turbo": {
     id: "huggingface/Tongyi-MAI/Z-Image-Turbo",
@@ -345,6 +374,30 @@ export const videoModelConfigs = {
       fps: { min: 12, max: 60 },
       width: { min: 320, max: 1920 },
       height: { min: 240, max: 1080 },
+    },
+  },
+
+  // Wan 2.2 I2V HuggingFace Space
+  "huggingface/r3gm/wan2-2-fp8da-aoti-preview": {
+    id: "huggingface/r3gm/wan2-2-fp8da-aoti-preview",
+    name: "Wan 2.2 I2V (Fast)",
+    supportsDuration: false,
+    supportsFps: false,
+    supportsWidthHeight: false, 
+    supportsSteps: true,
+    supportsCfgScale: true,
+    supportsNegativePrompt: true,
+    supportsSeed: true,
+    supportsQualityPresets: false,
+    defaultValues: {
+      numInferenceSteps: 6,
+      guidanceScale: 1.0,
+      negativePrompt: "",
+      seed: "",
+    },
+    ranges: {
+      numInferenceSteps: { min: 6, max: 50 },
+      guidanceScale: { min: 0.1, max: 20 },
     },
   },
 };

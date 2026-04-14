@@ -886,6 +886,12 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
     }
 
     try {
+      // Use AOTi-appropriate defaults for Wan 2.2 I2V A14B (Lightning LoRA)
+      // which expects low step counts (4-8) and low guidance scale (~1.0)
+      const aotiDefaults = isWanI2VA14B
+        ? { num_inference_steps: 6, guidance_scale: 1.0, guidance_scale_2: 1, duration_seconds: 3.5, quality: 6, scheduler: "UniPCMultistep", flow_shift: 3, frame_multiplier: 16 }
+        : { num_inference_steps: 25, guidance_scale: 5.0 };
+
       const result = await hfGenerateVideo(spaceUrl, hfToken, {
         image: imageInput,
         prompt,
@@ -893,9 +899,15 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
         width: Number(payload?.wanWidth) || 832,
         height: Number(payload?.wanHeight) || 480,
         num_frames: Number(payload?.wanFrames) || Number(payload?.frames) || 81,
-        guidance_scale: Number(payload?.wanGuidanceScale) || 5.0,
-        num_inference_steps: Number(payload?.wanSteps) || 25,
-        seed: payload?.wanSeed != null ? Number(payload.wanSeed) : -1,
+        guidance_scale: Number(payload?.wanGuidanceScale) || payload?.guidance_scale || aotiDefaults.guidance_scale,
+        guidance_scale_2: Number(payload?.wanGuidanceScale2) || aotiDefaults.guidance_scale_2 || 1,
+        num_inference_steps: Number(payload?.wanSteps) || payload?.num_inference_steps || aotiDefaults.num_inference_steps,
+        seed: payload?.wanSeed != null ? Number(payload.wanSeed) : (payload?.seed != null ? Number(payload.seed) : -1),
+        duration_seconds: Number(payload?.wanDurationSeconds) || aotiDefaults.duration_seconds || 3.5,
+        quality: Number(payload?.wanQuality) || aotiDefaults.quality || 6,
+        scheduler: payload?.wanScheduler || aotiDefaults.scheduler || "UniPCMultistep",
+        flow_shift: Number(payload?.wanFlowShift) || aotiDefaults.flow_shift || 3,
+        frame_multiplier: Number(payload?.wanFrameMultiplier) || aotiDefaults.frame_multiplier || 16,
       });
 
       await setProgress(80, { stage: "processing_response" });

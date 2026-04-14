@@ -1118,6 +1118,12 @@ router.post("/generate", async (req, res) => {
       }
 
       try {
+        // Use AOTi-appropriate defaults for Wan 2.2 I2V A14B (Lightning LoRA)
+        // which expects low step counts (4-8) and low guidance scale (~1.0)
+        const aotiDefaults = isWanI2VA14B
+          ? { num_inference_steps: 6, guidance_scale: 1.0, guidance_scale_2: 1, duration_seconds: 3.5, quality: 6, scheduler: "UniPCMultistep", flow_shift: 3, frame_multiplier: 16 }
+          : { num_inference_steps: 25, guidance_scale: 5.0 };
+
         const result = await hfGenerateVideo(spaceUrl, hfToken, {
           image: imageInput,
           prompt,
@@ -1125,10 +1131,16 @@ router.post("/generate", async (req, res) => {
           width: Number(req.body?.wanWidth) || 832,
           height: Number(req.body?.wanHeight) || 480,
           num_frames: Number(req.body?.wanFrames) || Number(req.body?.frames) || 81,
-guidance_scale: Number(req.body?.wanGuidanceScale) || req.body?.guidance_scale || 5.0,
-            num_inference_steps: Number(req.body?.wanSteps) || req.body?.num_inference_steps || 25,
-            seed: req.body?.wanSeed != null ? Number(req.body.wanSeed) : (req.body?.seed != null ? Number(req.body.seed) : -1),
-          });
+          guidance_scale: Number(req.body?.wanGuidanceScale) || req.body?.guidance_scale || aotiDefaults.guidance_scale,
+          guidance_scale_2: Number(req.body?.wanGuidanceScale2) || aotiDefaults.guidance_scale_2 || 1,
+          num_inference_steps: Number(req.body?.wanSteps) || req.body?.num_inference_steps || aotiDefaults.num_inference_steps,
+          seed: req.body?.wanSeed != null ? Number(req.body.wanSeed) : (req.body?.seed != null ? Number(req.body.seed) : -1),
+          duration_seconds: Number(req.body?.wanDurationSeconds) || aotiDefaults.duration_seconds || 3.5,
+          quality: Number(req.body?.wanQuality) || aotiDefaults.quality || 6,
+          scheduler: req.body?.wanScheduler || aotiDefaults.scheduler || "UniPCMultistep",
+          flow_shift: Number(req.body?.wanFlowShift) || aotiDefaults.flow_shift || 3,
+          frame_multiplier: Number(req.body?.wanFrameMultiplier) || aotiDefaults.frame_multiplier || 16,
+        });
 
           const videoBuffer = await downloadGradioFile(result.url, hfToken);
 

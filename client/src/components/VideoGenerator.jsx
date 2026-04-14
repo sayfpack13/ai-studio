@@ -380,6 +380,12 @@ export default function VideoGenerator() {
   const [wanResolution, setWanResolution] = useState("480p");
   const [wanGuidanceScale, setWanGuidanceScale] = useState(1);
   const [wanGuidanceScale2, setWanGuidanceScale2] = useState(1);
+  const [wanSteps, setWanSteps] = useState(6);
+  const [wanDurationSeconds, setWanDurationSeconds] = useState(3.5);
+  const [wanQuality, setWanQuality] = useState(6);
+  const [wanScheduler, setWanScheduler] = useState("UniPCMultistep");
+  const [wanFlowShift, setWanFlowShift] = useState(3);
+  const [wanFrameMultiplier, setWanFrameMultiplier] = useState(16);
   const [wanNegativePrompt, setWanNegativePrompt] = useState(
     WAN_DEFAULT_NEGATIVE_PROMPT,
   );
@@ -1089,6 +1095,12 @@ export default function VideoGenerator() {
             ? {
                 hfSpaceTarget,
                 hfCustomSpace: hfSpaceTarget === "custom" ? hfCustomSpace.trim() : "",
+                wanSteps,
+                wanDurationSeconds,
+                wanQuality,
+                wanScheduler,
+                wanFlowShift,
+                wanFrameMultiplier,
               }
             : {}),
         },
@@ -1960,6 +1972,164 @@ export default function VideoGenerator() {
                           <span>10</span>
                         </div>
                       </div>
+
+                      {/* Inference Steps (shown for HF A14B model) */}
+                      {isWanI2VA14B && (
+                        <div>
+                          <div className="flex items-baseline justify-between mb-1">
+                            <label className="text-xs text-gray-400">
+                              Inference Steps
+                            </label>
+                            <span className="text-xs text-gray-500">
+                              {wanSteps}
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="4"
+                            max="30"
+                            step="1"
+                            value={wanSteps}
+                            onChange={(e) => setWanSteps(Number(e.target.value))}
+                            className="w-full accent-indigo-500"
+                          />
+                          <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                            <span>4 (fast)</span>
+                            <span>30 (quality)</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* A14B Space Parameters */}
+                      {isWanI2VA14B && (
+                        <>
+                          {/* Video Quality */}
+                          <div>
+                            <div className="flex items-baseline justify-between mb-1">
+                              <label className="text-xs text-gray-400">
+                                Video Quality
+                              </label>
+                              <span className="text-xs text-gray-500">
+                                {wanQuality}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1"
+                              max="10"
+                              step="1"
+                              value={wanQuality}
+                              onChange={(e) => setWanQuality(Number(e.target.value))}
+                              className="w-full accent-indigo-500"
+                            />
+                            <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                              <span>1 (low)</span>
+                              <span>10 (high)</span>
+                            </div>
+                          </div>
+
+                          {/* Duration (seconds) */}
+                          <div>
+                            <div className="flex items-baseline justify-between mb-1">
+                              <label className="text-xs text-gray-400">
+                                Duration (seconds)
+                              </label>
+                              <span className="text-xs text-gray-500">
+                                {wanDurationSeconds}s
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1"
+                              max="10"
+                              step="0.5"
+                              value={wanDurationSeconds}
+                              onChange={(e) => setWanDurationSeconds(Number(e.target.value))}
+                              className="w-full accent-indigo-500"
+                            />
+                            <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                              <span>1s</span>
+                              <span>10s</span>
+                            </div>
+                          </div>
+
+                          {/* Flow Shift */}
+                          <div>
+                            <div className="flex items-baseline justify-between mb-1">
+                              <label className="text-xs text-gray-400">
+                                Flow Shift
+                              </label>
+                              <span className="text-xs text-gray-500">
+                                {wanFlowShift}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1"
+                              max="10"
+                              step="0.5"
+                              value={wanFlowShift}
+                              onChange={(e) => setWanFlowShift(Number(e.target.value))}
+                              className="w-full accent-indigo-500"
+                            />
+                            <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
+                              <span>1 (subtle)</span>
+                              <span>10 (dynamic)</span>
+                            </div>
+                          </div>
+
+                          {/* Frame Multiplier (Video Fluidity) */}
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1.5">
+                              Video Fluidity (FPS)
+                            </label>
+                            <div className="flex gap-1.5">
+                              {[
+                                { value: 16, label: "16 fps" },
+                                { value: 32, label: "32 fps" },
+                                { value: 64, label: "64 fps" },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => setWanFrameMultiplier(opt.value)}
+                                  className={`flex-1 py-1.5 rounded text-sm transition-colors ${
+                                    wanFrameMultiplier === opt.value
+                                      ? "bg-indigo-600 text-white"
+                                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Scheduler */}
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1.5">
+                              Scheduler
+                            </label>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[
+                                { value: "UniPCMultistep", label: "UniPC" },
+                                { value: "FlowMatchEulerDiscrete", label: "FlowMatch" },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => setWanScheduler(opt.value)}
+                                  className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                                    wanScheduler === opt.value
+                                      ? "bg-indigo-600 text-white"
+                                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
 
                       {/* Seed */}
                       <div>

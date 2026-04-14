@@ -318,8 +318,15 @@ export async function generateVideo(spaceUrl, hfToken, options = {}) {
     height = 480,
     num_frames = 81,
     guidance_scale = 5.0,
+    guidance_scale_2 = 1,
     num_inference_steps = 25,
     seed = -1,
+    // AOTi-specific parameters (used when spaceUrl matches r3gm/wan2-2-fp8da-aoti-preview)
+    duration_seconds = 3.5,
+    quality = 6,
+    scheduler = "UniPCMultistep",
+    flow_shift = 3,
+    frame_multiplier = 16,
   } = options;
 
   if (!image) {
@@ -347,21 +354,31 @@ export async function generateVideo(spaceUrl, hfToken, options = {}) {
   
   let payload;
   if (isAOTiPreview) {
+    // AOTi Space uses a different parameter schema:
+    // - steps: 4-8 recommended (Lightning LoRA fast inference)
+    // - guidance_scale: typically 1.0 for I2V
+    // - quality: 1-10 (controls output quality, not steps)
+    // - frame_multiplier: 16/32/64 (fps enhancement)
+    // - flow_shift: controls motion dynamics (3-6 typical)
+    // Map from caller params, capping steps to the Space's optimal range
+    const aotiSteps = Math.min(Math.max(Number(num_inference_steps) || 6, 4), 50);
+    const aotiGuidanceScale = Number(guidance_scale) > 0 ? Number(guidance_scale) : 1;
+
     payload = {
       input_image: imageRef,
       last_image: imageRef, // Fallback required per the API doc
       prompt: String(prompt || ""),
-      steps: Number(num_inference_steps) || 6,
+      steps: aotiSteps,
       negative_prompt: String(negative_prompt || ""),
-      duration_seconds: 3.5, // Not mapped from current defaults natively, using the API default
-      guidance_scale: Number(guidance_scale) || 1,
-      guidance_scale_2: 1, 
+      duration_seconds: Number(duration_seconds) || 3.5,
+      guidance_scale: aotiGuidanceScale,
+      guidance_scale_2: Number(guidance_scale_2) || 1,
       seed: Number(seed) === -1 ? 42 : Number(seed),
       randomize_seed: Number(seed) === -1,
-      quality: 6,
-      scheduler: "UniPCMultistep",
-      flow_shift: 3,
-      frame_multiplier: 16,
+      quality: Number(quality) || 6,
+      scheduler: String(scheduler) || "UniPCMultistep",
+      flow_shift: Number(flow_shift) || 3,
+      frame_multiplier: Number(frame_multiplier) || 16,
       video_component: true,
     };
   } else {

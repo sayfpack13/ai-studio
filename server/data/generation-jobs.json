@@ -1,6 +1,124 @@
 {
-  "updatedAt": "2026-04-14T20:05:51.022Z",
+  "updatedAt": "2026-04-14T20:19:27.896Z",
   "jobs": [
+    {
+      "id": "video_1776197910063_951c591b74ac",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "make the women dance",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/asset_1775997378367_815d500d3284",
+        "wanFrames": 33,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776197910051_s28z8perb",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 33,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "make the women dance",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/hf_video_make_the_women_dance_1776197967882_861fb55a.mp4",
+            "revised_prompt": "make the women dance"
+          }
+        ]
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-14T20:18:30.063Z",
+      "updatedAt": "2026-04-14T20:19:27.889Z",
+      "startedAt": "2026-04-14T20:18:30.068Z",
+      "completedAt": "2026-04-14T20:19:27.889Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-14T20:18:30.063Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-14T20:18:30.068Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-14T20:18:30.073Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-14T20:18:30.078Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-14T20:19:26.492Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-14T20:19:27.885Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-14T20:19:27.889Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1776197002591_9e47fd6f1b45",
       "type": "video",

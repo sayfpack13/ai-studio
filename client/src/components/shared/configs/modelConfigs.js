@@ -397,13 +397,13 @@ export const videoModelConfigs = {
     },
   },
 
-  // Wan 2.2 I2V HuggingFace Space
-  "huggingface/r3gm/wan2-2-fp8da-aoti-preview": {
-    id: "huggingface/r3gm/wan2-2-fp8da-aoti-preview",
-    name: "Wan 2.2 I2V (Fast)",
+  // Wan 2.2 I2V A14B (HuggingFace Space - routes to r3gm space by default)
+  "huggingface/Wan2.2-I2V-A14B": {
+    id: "huggingface/Wan2.2-I2V-A14B",
+    name: "Wan 2.2 I2V A14B",
     supportsDuration: false,
     supportsFps: false,
-    supportsWidthHeight: false, 
+    supportsWidthHeight: false,
     supportsSteps: true,
     supportsCfgScale: true,
     supportsNegativePrompt: true,
@@ -416,7 +416,7 @@ export const videoModelConfigs = {
       seed: "",
     },
     ranges: {
-      numInferenceSteps: { min: 6, max: 50 },
+      numInferenceSteps: { min: 4, max: 30 },
       guidanceScale: { min: 0.1, max: 20 },
     },
   },

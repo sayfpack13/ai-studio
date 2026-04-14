@@ -1084,7 +1084,21 @@ router.post("/generate", async (req, res) => {
     if (providerId === "huggingface") {
       const hfToken = apiKey || process.env.HF_TOKEN || undefined;
       const isSpace = actualModelId && actualModelId.includes("/");
-      const spaceUrl = isSpace ? actualModelId : (process.env.HF_VIDEO_SPACE_URL || provider.apiBaseUrl);
+
+      // Wan 2.2 I2V A14B uses a specific Space by default
+      const isWanI2VA14B = /Wan2\.2-I2V-A14B/i.test(actualModelId || "");
+      const DEFAULT_WAN_I2V_A14B_SPACE = "r3gm/wan2-2-fp8da-aoti-preview";
+      const hfSpaceTarget = String(req.body?.hfSpaceTarget || "").toLowerCase();
+      const hfCustomSpace = String(req.body?.hfCustomSpace || "").trim();
+
+      let spaceUrl;
+      if (isWanI2VA14B) {
+        spaceUrl = hfSpaceTarget === "custom"
+          ? hfCustomSpace || process.env.HF_WAN_I2V_A14B_SPACE_URL || DEFAULT_WAN_I2V_A14B_SPACE
+          : DEFAULT_WAN_I2V_A14B_SPACE;
+      } else {
+        spaceUrl = isSpace ? actualModelId : (process.env.HF_VIDEO_SPACE_URL || provider.apiBaseUrl);
+      }
 
       if (!spaceUrl) {
         return res.status(400).json({

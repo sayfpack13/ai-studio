@@ -35,6 +35,7 @@ const IMAGE_HF_MODE_KEY = "blackbox_ai_image_hf_mode";
 const IMAGE_HF_SPACE_TARGET_KEY = "blackbox_ai_image_hf_space_target";
 const IMAGE_HF_CUSTOM_SPACE_KEY = "blackbox_ai_image_hf_custom_space";
 const PUBLIC_TONGYI_SPACE_ID = "mrfakename/Z-Image-Turbo";
+const PUBLIC_FLUX_SPACE_ID = "black-forest-labs/FLUX.1-dev";
 
 const toHuggingFaceSpacePageUrl = (spaceValue) => {
   const raw = String(spaceValue || "").trim();
@@ -1035,11 +1036,11 @@ export default function ImageGenerator() {
           : undefined,
         hfMode: isHuggingFaceSelection ? hfMode : undefined,
         hfSpaceTarget:
-          isTongyiZImageTurbo && isHuggingFaceSelection && hfMode === "space"
+          isHFSpaceModel && isHuggingFaceSelection && hfMode === "space"
             ? hfSpaceTarget
             : undefined,
         hfCustomSpace:
-          isTongyiZImageTurbo &&
+          isHFSpaceModel &&
           isHuggingFaceSelection &&
           hfMode === "space" &&
           hfSpaceTarget === "custom"
@@ -1084,11 +1085,11 @@ export default function ImageGenerator() {
           : undefined,
         hfMode: isHuggingFaceSelection ? hfMode : undefined,
         hfSpaceTarget:
-          isTongyiZImageTurbo && isHuggingFaceSelection && hfMode === "space"
+          isHFSpaceModel && isHuggingFaceSelection && hfMode === "space"
             ? hfSpaceTarget
             : undefined,
         hfCustomSpace:
-          isTongyiZImageTurbo &&
+          isHFSpaceModel &&
           isHuggingFaceSelection &&
           hfMode === "space" &&
           hfSpaceTarget === "custom"
@@ -1430,6 +1431,9 @@ export default function ImageGenerator() {
   );
   const isTongyiZImageTurbo =
     selectedModelInfo?.id === "huggingface/Tongyi-MAI/Z-Image-Turbo";
+  const isFluxModel =
+    selectedModelInfo?.id === "huggingface/black-forest-labs/FLUX.1-dev";
+  const isHFSpaceModel = isTongyiZImageTurbo || isFluxModel;
   const selectedProviderForModel =
     selectedModelInfo?.configuredProvider ||
     selectedModelInfo?.provider ||
@@ -1446,16 +1450,35 @@ export default function ImageGenerator() {
       : PUBLIC_TONGYI_SPACE_ID;
   const activeTongyiSpaceUrl = toHuggingFaceSpacePageUrl(activeTongyiSpaceValue);
 
-  const handleCopyTongyiSpaceUrl = useCallback(async () => {
-    if (!activeTongyiSpaceUrl) return;
+  const activeFluxSpaceValue =
+    hfSpaceTarget === "custom" && hfCustomSpace.trim()
+      ? hfCustomSpace.trim()
+      : PUBLIC_FLUX_SPACE_ID;
+  const activeFluxSpaceUrl = toHuggingFaceSpacePageUrl(activeFluxSpaceValue);
+
+  const activeSpaceLabel = isFluxModel
+    ? `FLUX.1-dev`
+    : `Tongyi Z-Image-Turbo`;
+  const activeSpaceValue = isFluxModel
+    ? activeFluxSpaceValue
+    : activeTongyiSpaceValue;
+  const activeSpaceUrl = isFluxModel
+    ? activeFluxSpaceUrl
+    : activeTongyiSpaceUrl;
+  const activePublicSpaceId = isFluxModel
+    ? PUBLIC_FLUX_SPACE_ID
+    : PUBLIC_TONGYI_SPACE_ID;
+
+  const handleCopySpaceUrl = useCallback(async () => {
+    if (!activeSpaceUrl) return;
     try {
-      await navigator.clipboard.writeText(activeTongyiSpaceUrl);
+      await navigator.clipboard.writeText(activeSpaceUrl);
       setSpaceUrlCopied(true);
       setTimeout(() => setSpaceUrlCopied(false), 1200);
     } catch {
       setSpaceUrlCopied(false);
     }
-  }, [activeTongyiSpaceUrl]);
+  }, [activeSpaceUrl]);
 
   // Unified params for ImagePresetPanel
   const imageParams = useMemo(() => {
@@ -1762,10 +1785,10 @@ export default function ImageGenerator() {
                     Manual selection only. No automatic fallback.
                   </p>
 
-                  {isTongyiZImageTurbo && hfMode === "space" && (
+                  {isHFSpaceModel && hfMode === "space" && (
                     <div className="pt-2 border-t border-gray-700 space-y-2">
                       <label className="block text-xs font-medium text-gray-300">
-                        Tongyi Space Target
+                        {activeSpaceLabel} Space Target
                       </label>
                       <div className="flex gap-2">
                         <button
@@ -1799,7 +1822,7 @@ export default function ImageGenerator() {
                             type="text"
                             value={hfCustomSpace}
                             onChange={(e) => setHfCustomSpace(e.target.value)}
-                            placeholder="username/your-z-image-space or https://...hf.space"
+                            placeholder={`username/your-space or https://...hf.space`}
                             className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
                           />
                         </div>
@@ -1809,22 +1832,22 @@ export default function ImageGenerator() {
                         <div>
                           {hfSpaceTarget === "custom"
                             ? `Using custom space: ${hfCustomSpace || "(not set)"}`
-                            : `Using public space: ${PUBLIC_TONGYI_SPACE_ID}`}
+                            : `Using public space: ${activePublicSpaceId}`}
                         </div>
                         <div className="flex items-center gap-2">
                           <a
-                            href={activeTongyiSpaceUrl || "#"}
+                            href={activeSpaceUrl || "#"}
                             target="_blank"
                             rel="noreferrer"
                             className="flex-1 truncate text-cyan-300 hover:text-cyan-200 underline"
-                            title={activeTongyiSpaceUrl}
+                            title={activeSpaceUrl}
                           >
-                            {activeTongyiSpaceUrl || "No Space URL set"}
+                            {activeSpaceUrl || "No Space URL set"}
                           </a>
                           <button
                             type="button"
-                            onClick={handleCopyTongyiSpaceUrl}
-                            disabled={!activeTongyiSpaceUrl}
+                            onClick={handleCopySpaceUrl}
+                            disabled={!activeSpaceUrl}
                             className="px-2 py-1 rounded border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {spaceUrlCopied ? "Copied" : "Copy"}

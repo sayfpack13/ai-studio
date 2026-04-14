@@ -361,7 +361,7 @@ export async function generateVideo(spaceUrl, hfToken, options = {}) {
       quality: 6,
       scheduler: "UniPCMultistep",
       flow_shift: 3,
-      frame_multiplier: "16",
+      frame_multiplier: 16,
       video_component: true,
     };
   } else {

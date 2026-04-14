@@ -21,6 +21,24 @@ export const aspectRatioPresets = [
   { id: "3:8", label: "Tall Banner", ratio: "3:8", width: 576, height: 1536, icon: RectangleVertical },
 ];
 
+// Common image size presets with named labels + ratio shown.
+// Used as the default size preset list for models that don't define their own.
+export const commonImageSizePresets = [
+  { id: "square", label: "Square 1:1", width: 1024, height: 1024 },
+  { id: "portrait", label: "Portrait 3:4", width: 768, height: 1024 },
+  { id: "tall", label: "Tall 2:3", width: 768, height: 1152 },
+  { id: "landscape", label: "Landscape 4:3", width: 1024, height: 768 },
+  { id: "widescreen", label: "Widescreen 16:9", width: 1280, height: 720 },
+  { id: "mobile", label: "Mobile 9:16", width: 720, height: 1280 },
+  { id: "cinema", label: "Cinema 21:9", width: 1344, height: 576 },
+  { id: "desktop", label: "Desktop 16:10", width: 1280, height: 800 },
+  { id: "panorama", label: "Panorama 2:1", width: 1280, height: 640 },
+  { id: "ultra-wide", label: "Ultra Wide 16:3", width: 1536, height: 288 },
+  { id: "ultra-tall", label: "Ultra Tall 3:16", width: 288, height: 1536 },
+  { id: "wide-banner", label: "Wide Banner 8:3", width: 1536, height: 576 },
+  { id: "tall-banner", label: "Tall Banner 3:8", width: 576, height: 1536 },
+];
+
 // Quality presets for standard models
 export const qualityPresets = {
   fast: {
@@ -154,6 +172,7 @@ export const imageModelConfigs = {
       steps: { min: 10, max: 100 },
       guidanceScale: { min: 1, max: 20 },
     },
+    sizePresets: commonImageSizePresets,
   },
 
   // Z-Image Turbo
@@ -224,6 +243,7 @@ export const imageModelConfigs = {
       steps: { min: 1, max: 50 },
       guidanceScale: { min: 1, max: 15, step: 0.1 },
     },
+    sizePresets: commonImageSizePresets,
   },
 
   // Tongyi Z-Image Turbo (HuggingFace Space / API)

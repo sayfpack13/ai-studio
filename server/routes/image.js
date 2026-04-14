@@ -33,7 +33,7 @@ function withHfSpaceQuotaHint(message = "") {
     return text;
   }
 
-  return `${text} Use your own duplicated Space for dedicated quota (set HF_TONGYI_SPACE_URL to your Space, e.g. username/your-z-image-space).`;
+  return `${text} Use your own duplicated Space for dedicated quota (set HF_TONGYI_SPACE_URL or HF_FLUX_SPACE_URL to your Space, e.g. username/your-space).`;
 }
 
 function normalizeChutesImageModel(modelId = "") {
@@ -1057,12 +1057,15 @@ router.post("/generate", async (req, res) => {
           );
           const hfSpaceTarget = String(req.body?.hfSpaceTarget || "").toLowerCase();
           const hfCustomSpace = String(req.body?.hfCustomSpace || "").trim();
+          const DEFAULT_FLUX_SPACE = "black-forest-labs/FLUX.1-dev";
           const spaceUrl = isTongyiModel
             ? hfSpaceTarget === "custom"
               ? hfCustomSpace || process.env.HF_TONGYI_SPACE_URL || DEFAULT_TONGYI_SPACE
               : DEFAULT_TONGYI_SPACE
             : isFluxModel
-              ? "black-forest-labs/FLUX.1-dev"
+              ? hfSpaceTarget === "custom"
+                ? hfCustomSpace || process.env.HF_FLUX_SPACE_URL || DEFAULT_FLUX_SPACE
+                : DEFAULT_FLUX_SPACE
               : process.env.HF_IMAGE_SPACE_URL || provider.apiBaseUrl;
 
           if (!spaceUrl) {

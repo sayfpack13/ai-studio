@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sliders, RotateCcw, Square, RectangleHorizontal, RectangleVertical, Maximize, Lock, Unlock } from "lucide-react";
 import { Button } from "../ui";
 import { SliderControl, NumberInput, PresetCard, PresetCardGrid, CollapsiblePanel, TextAreaInput, TextInput } from "./ui";
-import { getModelConfig, aspectRatioPresets, qualityPresets } from "./configs";
+import { getModelConfig, commonImageSizePresets, qualityPresets } from "./configs";
 
 export default function ImagePresetPanel({
   modelId,
@@ -27,7 +27,7 @@ export default function ImagePresetPanel({
 
   // Determine selected size preset based on current params
   const getSelectedSizeId = useMemo(() => {
-    const sizePresets = config.sizePresets || aspectRatioPresets;
+    const sizePresets = config.sizePresets || commonImageSizePresets;
 
     if (config.supportsWidthHeight) {
       // For models that use width/height
@@ -168,7 +168,7 @@ export default function ImagePresetPanel({
   const activeQualityPresets = config.qualityPresets || qualityPresets;
 
   // Get size presets for current model
-  const sizePresets = config.sizePresets || aspectRatioPresets;
+  const sizePresets = config.sizePresets || commonImageSizePresets;
 
   // Calculate current aspect ratio label
   const getCurrentAspectRatioLabel = () => {

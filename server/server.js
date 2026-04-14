@@ -56,7 +56,7 @@ function withHfSpaceQuotaHint(message = "") {
     return text;
   }
 
-  return `${text} Use your own duplicated Space for dedicated quota (set HF_TONGYI_SPACE_URL to your Space, e.g. username/your-z-image-space).`;
+  return `${text} Use your own duplicated Space for dedicated quota (set HF_TONGYI_SPACE_URL or HF_FLUX_SPACE_URL to your Space, e.g. username/your-space).`;
 }
 
 // Middleware
@@ -550,12 +550,15 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
         );
         const hfSpaceTarget = String(payload?.hfSpaceTarget || "").toLowerCase();
         const hfCustomSpace = String(payload?.hfCustomSpace || "").trim();
+        const DEFAULT_FLUX_SPACE = "black-forest-labs/FLUX.1-dev";
         const spaceUrl = isTongyiModel
           ? hfSpaceTarget === "custom"
             ? hfCustomSpace || process.env.HF_TONGYI_SPACE_URL || DEFAULT_TONGYI_SPACE
             : DEFAULT_TONGYI_SPACE
           : isFluxModel
-            ? "black-forest-labs/FLUX.1-dev"
+            ? hfSpaceTarget === "custom"
+              ? hfCustomSpace || process.env.HF_FLUX_SPACE_URL || DEFAULT_FLUX_SPACE
+              : DEFAULT_FLUX_SPACE
             : process.env.HF_IMAGE_SPACE_URL || providerContext.provider.apiBaseUrl;
 
         if (!spaceUrl) {
@@ -836,7 +839,33 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
 
   // ── HuggingFace Gradio Space (video) ──────────────────────────────
   if (providerContext.providerId === "huggingface") {
-    const spaceUrl = process.env.HF_VIDEO_SPACE_URL || providerContext.provider.apiBaseUrl;
+    // Strip gateway prefix to get the actual model ID
+    let actualVideoModelId = modelId;
+    if (modelId && modelId.includes("/")) {
+      const parts = modelId.split("/");
+      if (
+        parts.length >= 2 &&
+        ["huggingface"].includes(parts[0])
+      ) {
+        actualVideoModelId = parts.slice(1).join("/");
+      }
+    }
+
+    const isSpace = actualVideoModelId && actualVideoModelId.includes("/");
+    const isWanI2VA14B = /Wan2\.2-I2V-A14B/i.test(actualVideoModelId || "");
+    const DEFAULT_WAN_I2V_A14B_SPACE = "r3gm/wan2-2-fp8da-aoti-preview";
+    const hfSpaceTarget = String(payload?.hfSpaceTarget || "").toLowerCase();
+    const hfCustomSpace = String(payload?.hfCustomSpace || "").trim();
+
+    let spaceUrl;
+    if (isWanI2VA14B) {
+      spaceUrl = hfSpaceTarget === "custom"
+        ? hfCustomSpace || process.env.HF_WAN_I2V_A14B_SPACE_URL || DEFAULT_WAN_I2V_A14B_SPACE
+        : DEFAULT_WAN_I2V_A14B_SPACE;
+    } else {
+      spaceUrl = isSpace ? actualVideoModelId : (process.env.HF_VIDEO_SPACE_URL || providerContext.provider.apiBaseUrl);
+    }
+
     const hfToken = providerContext.provider.apiKey || undefined;
 
     if (!spaceUrl) {

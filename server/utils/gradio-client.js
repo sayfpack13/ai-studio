@@ -1,35 +1,77 @@
 import { Client, handle_file } from "@gradio/client";
 
-let _clientCache = null;
-let _cachedSpaceUrl = null;
+const _clientCacheBySpace = new Map();
 
 /**
  * Get or create a Gradio client connection to the HuggingFace Space.
- * Reuses the connection if the Space URL hasn't changed.
+ * Reuses the connection if the Space URL and Token hasn't changed.
  */
 async function getClient(spaceUrl, hfToken) {
-  if (_clientCache && _cachedSpaceUrl === spaceUrl) {
-    return _clientCache;
+  const cleanToken = hfToken ? String(hfToken).replace(/^Bearer\s+/i, "").trim() : null;
+  const cacheKey = `${spaceUrl}|${cleanToken || ""}`;
+  if (_clientCacheBySpace.has(cacheKey)) {
+    return _clientCacheBySpace.get(cacheKey);
   }
 
   const opts = {};
-  if (hfToken) {
-    opts.hf_token = hfToken;
+  if (cleanToken) {
+    // Note: The JS Gradio Client expects the property 'token', not 'hf_token'
+    opts.token = cleanToken;
   }
 
-  console.log("[HF Gradio] Connecting to Space:", spaceUrl, hfToken ? "(with token)" : "(public)");
-  _clientCache = await Client.connect(spaceUrl, opts);
-  _cachedSpaceUrl = spaceUrl;
+  console.log("[HF Gradio] Connecting to Space:", spaceUrl, cleanToken ? "(with token)" : "(public)");
+  const client = await Client.connect(spaceUrl, opts);
+  _clientCacheBySpace.set(cacheKey, client);
   console.log("[HF Gradio] Connected successfully");
-  return _clientCache;
+  return client;
 }
 
 /**
  * Reset the cached client (e.g. after config change).
  */
 export function resetClient() {
-  _clientCache = null;
-  _cachedSpaceUrl = null;
+  _clientCacheBySpace.clear();
+}
+
+function toNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toGalleryFileRef(item) {
+  if (!item) return null;
+
+  if (Buffer.isBuffer(item)) {
+    return handle_file(new Blob([item], { type: "image/jpeg" }));
+  }
+
+  if (typeof item === "string") {
+    const trimmed = item.trim();
+    if (!trimmed) return null;
+
+    if (trimmed.startsWith("data:image/")) {
+      const [, base64 = ""] = trimmed.split(",", 2);
+      if (!base64) return null;
+      const buf = Buffer.from(base64, "base64");
+      return handle_file(new Blob([buf], { type: "image/jpeg" }));
+    }
+
+    return handle_file(trimmed);
+  }
+
+  if (typeof item === "object") {
+    if (item.image && typeof item.image === "string") {
+      return toGalleryFileRef(item.image);
+    }
+    if (item.url && typeof item.url === "string") {
+      return handle_file(item.url);
+    }
+    if (item.path && typeof item.path === "string") {
+      return handle_file(item.path);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -65,23 +107,27 @@ export async function generateImage(spaceUrl, hfToken, options = {}) {
     input_images = [],
   } = options;
 
+  const galleryRefs = Array.isArray(input_images)
+    ? input_images.map(toGalleryFileRef).filter(Boolean)
+    : [];
+
   console.log("[HF Gradio] Calling /infer with prompt length:", prompt.length);
 
   // Build the Gradio call parameters matching infer_image() signature:
   // prompt, input_images, seed, randomize_seed, width, height, steps, guidance
   const callParams = {
-    prompt,
-    input_images: input_images.length > 0 ? input_images : null,
-    seed,
-    randomize_seed,
-    width,
-    height,
-    num_inference_steps,
-    guidance_scale,
+    prompt: String(prompt ?? ""),
+    input_images: galleryRefs.length > 0 ? galleryRefs : null,
+    seed: toNumber(seed, -1),
+    randomize_seed: Boolean(randomize_seed),
+    width: toNumber(width, 1024),
+    height: toNumber(height, 1024),
+    num_inference_steps: toNumber(num_inference_steps, 30),
+    guidance_scale: toNumber(guidance_scale, 4.0),
   };
 
   // Gradio doesn't accept None as a value; use null for empty gallery
-  if (input_images.length === 0) {
+  if (galleryRefs.length === 0) {
     delete callParams.input_images;
   }
 
@@ -100,6 +146,148 @@ export async function generateImage(spaceUrl, hfToken, options = {}) {
   }
 
   return { url: imageUrl };
+}
+
+function extractImageUrlFromTongyiGallery(galleryData) {
+  if (!galleryData) return null;
+
+  if (typeof galleryData === "string") {
+    return galleryData;
+  }
+
+  if (Array.isArray(galleryData)) {
+    for (const item of galleryData) {
+      if (typeof item === "string") return item;
+      if (item?.url) return item.url;
+      if (item?.image?.url) return item.image.url;
+      if (item?.image?.path) return item.image.path;
+      if (item?.path) return item.path;
+      if (Array.isArray(item) && item[0]?.url) return item[0].url;
+    }
+  }
+
+  if (galleryData?.url) return galleryData.url;
+  if (galleryData?.image?.url) return galleryData.image.url;
+
+  return null;
+}
+
+/**
+ * Normalizes a requested resolution string to the closest allowed choice in Tongyi Space.
+ */
+function normalizeTongyiResolution(resString) {
+  const allowed = [
+    "1024x1024 ( 1:1 )", "1152x896 ( 9:7 )", "896x1152 ( 7:9 )", "1152x864 ( 4:3 )",
+    "864x1152 ( 3:4 )", "1248x832 ( 3:2 )", "832x1248 ( 2:3 )", "1280x720 ( 16:9 )",
+    "720x1280 ( 9:16 )", "1344x576 ( 21:9 )", "576x1344 ( 9:21 )", "1280x1280 ( 1:1 )",
+    "1440x1120 ( 9:7 )", "1120x1440 ( 7:9 )", "1472x1104 ( 4:3 )", "1104x1472 ( 3:4 )",
+    "1536x1024 ( 3:2 )", "1024x1536 ( 2:3 )", "1536x864 ( 16:9 )", "864x1536 ( 9:16 )",
+    "1680x720 ( 21:9 )", "720x1680 ( 9:21 )", "1536x1536 ( 1:1 )", "1728x1344 ( 9:7 )",
+    "1344x1728 ( 7:9 )", "1728x1296 ( 4:3 )", "1296x1728 ( 3:4 )", "1872x1248 ( 3:2 )",
+    "1248x1872 ( 2:3 )", "2048x1152 ( 16:9 )", "1152x2048 ( 9:16 )", "2016x864 ( 21:9 )",
+    "864x2016 ( 9:21 )"
+  ];
+  if (allowed.includes(resString)) return resString;
+
+  const fallbackMap = {
+    "4:3": "1152x864 ( 4:3 )",
+    "3:4": "864x1152 ( 3:4 )",
+    "16:9": "1280x720 ( 16:9 )",
+    "9:16": "720x1280 ( 9:16 )",
+    "1:1": "1024x1024 ( 1:1 )",
+    "21:9": "1344x576 ( 21:9 )",
+    "9:21": "576x1344 ( 9:21 )",
+    "3:2": "1248x832 ( 3:2 )",
+    "2:3": "832x1248 ( 2:3 )",
+  };
+
+  for (const [ratio, validForm] of Object.entries(fallbackMap)) {
+    if (resString && resString.includes(`( ${ratio} )`)) {
+      return validForm;
+    }
+  }
+  return "1024x1024 ( 1:1 )";
+}
+
+/**
+ * Generate image via Tongyi Z-Image Turbo Space API.
+ * Endpoint: /generate or /generate_image (mrfakename)
+ * Params follow official Space docs.
+ */
+export async function generateTongyiZImage(spaceUrl, hfToken, options = {}) {
+  const client = await getClient(spaceUrl, hfToken);
+
+  const {
+    prompt = "",
+    resolution = "1024x1024 ( 1:1 )",
+    seed = 42,
+    steps = 8,
+    shift = 3,
+    random_seed = true,
+    gallery_images = [],
+  } = options;
+
+  console.log("[HF Gradio] Calling Tongyi Z-Image with prompt length:", prompt.length);
+
+  // Support alternative mrfakename space signature
+  const isMrFakeName = spaceUrl && spaceUrl.toLowerCase().includes("mrfakename/z-image-turbo");
+
+  let parsedWidth = 1024;
+  let parsedHeight = 1024;
+  if (isMrFakeName && resolution) {
+    const match = resolution.match(/(\d+)\s*[x×]\s*(\d+)/i);
+    if (match) {
+      parsedWidth = toNumber(match[1], 1024);
+      parsedHeight = toNumber(match[2], 1024);
+    }
+  }
+
+  let result;
+  if (isMrFakeName) {
+    result = await client.predict("/generate_image", {
+      prompt: String(prompt ?? ""),
+      height: parsedHeight,
+      width: parsedWidth,
+      num_inference_steps: toNumber(steps, 9),
+      seed: toNumber(seed, 42),
+      randomize_seed: Boolean(random_seed),
+    });
+  } else {
+    result = await client.predict("/generate", {
+      prompt: String(prompt ?? ""),
+        resolution: normalizeTongyiResolution(String(resolution ?? "1024x1024 ( 1:1 )")),
+      random_seed: Boolean(random_seed),
+      gallery_images: Array.isArray(gallery_images) ? gallery_images : [],
+    });
+  }
+
+  // Expected return shape: [gallery, seed_used, seed]
+  // or for mrfakename: [image_url, seed_used]
+  let imageUrl = null;
+  let seedUsed = null;
+  let finalSeed = null;
+
+  if (isMrFakeName) {
+    imageUrl = typeof result?.data?.[0] === "string" ? result.data[0] : result?.data?.[0]?.url;
+    seedUsed = result?.data?.[1];
+    finalSeed = seedUsed;
+    if (!imageUrl) throw new Error("MrFakeName Space returned no image URL");
+  } else {
+    const gallery = result?.data?.[0];
+    seedUsed = result?.data?.[1];
+    finalSeed = result?.data?.[2];
+
+    imageUrl = extractImageUrlFromTongyiGallery(gallery);
+    if (!imageUrl) {
+      throw new Error("Tongyi Space returned no image URL in gallery output");
+    }
+  }
+
+  return {
+    url: imageUrl,
+    seedUsed: seedUsed != null ? String(seedUsed) : undefined,
+    seed: finalSeed,
+  };
 }
 
 /**
@@ -187,9 +375,14 @@ export async function generateVideo(spaceUrl, hfToken, options = {}) {
 /**
  * Download a file from a Gradio result URL and return it as a Buffer.
  */
-export async function downloadGradioFile(url) {
+export async function downloadGradioFile(url, hfToken) {
   const { default: axios } = await import("axios");
   const response = await axios.get(url, {
+    headers: hfToken
+      ? {
+          Authorization: `Bearer ${String(hfToken).replace(/^Bearer\s+/i, "").trim()}`,
+        }
+      : undefined,
     responseType: "arraybuffer",
     timeout: 120000,
   });

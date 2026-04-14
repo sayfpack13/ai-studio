@@ -8,6 +8,7 @@
     "deploy:hf": "node scripts/deploy-hf-space.js"
   },
   "dependencies": {
+    "@huggingface/inference": "^4.8.0",
     "@gradio/client": "^2.2.0",
     "axios": "^1.6.2",
     "better-sqlite3": "^12.8.0",

@@ -1,6 +1,7 @@
-# HuggingFace Space models (via Gradio API)
+# HuggingFace models
 # Format: category:gateway/model-id|Display Name
 
+image:huggingface/Tongyi-MAI/Z-Image-Turbo|Tongyi Z-Image-Turbo (replicate)
 image:huggingface/FLUX.1-schnell|FLUX.1 Schnell
 image:huggingface/FLUX.1-dev|FLUX.1 Dev
 

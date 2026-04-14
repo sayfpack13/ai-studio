@@ -18,6 +18,8 @@ export default function ImagePresetPanel({
 
   const config = useMemo(() => getModelConfig(modelId), [modelId]);
 
+  const toSizeString = (w, h) => `${Math.round(w)}x${Math.round(h)}`;
+
   // Get current values with defaults
   const getValue = (key) => {
     return params?.[key] ?? config.defaultValues?.[key] ?? "";
@@ -26,35 +28,59 @@ export default function ImagePresetPanel({
   // Determine selected size preset based on current params
   const getSelectedSizeId = useMemo(() => {
     const sizePresets = config.sizePresets || aspectRatioPresets;
-    
-    if (config.supportsSize) {
-      // For models like Hunyuan that use size string
-      const currentSize = getValue("size");
-      return sizePresets.find(p => p.id === currentSize)?.id || null;
-    } else if (config.supportsWidthHeight) {
+
+    if (config.supportsWidthHeight) {
       // For models that use width/height
       const currentWidth = getValue("width");
       const currentHeight = getValue("height");
       const matching = sizePresets.find(p => p.width === currentWidth && p.height === currentHeight);
       return matching?.id || null;
+    } else if (config.supportsSize) {
+      // For models that only use size string
+      const currentSize = getValue("size");
+      return sizePresets.find(p => p.id === currentSize)?.id || null;
     }
     return null;
   }, [config, params]);
 
   // Update a single parameter
   const updateParam = (key, value) => {
-    onParamsChange?.((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    onParamsChange?.((prev) => {
+      const next = {
+        ...prev,
+        [key]: value,
+      };
+
+      if (config.supportsSize && config.supportsWidthHeight) {
+        const nextWidth = key === "width" ? value : next.width;
+        const nextHeight = key === "height" ? value : next.height;
+        if (Number.isFinite(Number(nextWidth)) && Number.isFinite(Number(nextHeight))) {
+          next.size = toSizeString(Number(nextWidth), Number(nextHeight));
+        }
+      }
+
+      return next;
+    });
   };
 
   // Update multiple parameters
   const updateParams = (updates) => {
-    onParamsChange?.((prev) => ({
-      ...prev,
-      ...updates,
-    }));
+    onParamsChange?.((prev) => {
+      const next = {
+        ...prev,
+        ...updates,
+      };
+
+      if (config.supportsSize && config.supportsWidthHeight) {
+        const nextWidth = next.width;
+        const nextHeight = next.height;
+        if (Number.isFinite(Number(nextWidth)) && Number.isFinite(Number(nextHeight))) {
+          next.size = toSizeString(Number(nextWidth), Number(nextHeight));
+        }
+      }
+
+      return next;
+    });
   };
 
   // Handle aspect ratio preset selection
@@ -116,7 +142,13 @@ export default function ImagePresetPanel({
 
   // Handle size preset selection (for models that use size string)
   const handleSizePresetSelect = (preset) => {
-    if (config.supportsSize) {
+    if (config.supportsSize && config.supportsWidthHeight) {
+      updateParams({
+        width: preset.width,
+        height: preset.height,
+        size: preset.id,
+      });
+    } else if (config.supportsSize) {
       updateParam("size", preset.id);
     } else if (config.supportsWidthHeight) {
       updateParams({
@@ -218,7 +250,8 @@ export default function ImagePresetPanel({
             }))}
             selectedId={getSelectedSizeId}
             onSelect={handleSizePresetSelect}
-            columns={sizePresets.length > 3 ? 4 : 3}
+            columns={sizePresets.length > 8 ? 3 : sizePresets.length > 3 ? 4 : 3}
+            className={sizePresets.length > 8 ? "max-h-64 overflow-y-auto pr-1" : ""}
           />
         </div>
       </div>
@@ -335,7 +368,7 @@ export default function ImagePresetPanel({
               {/* Shift Slider (Z-Image) */}
               {config.supportsShift && (
                 <SliderControl
-                  label="Shift"
+                  label={config.shiftLabel || "Shift"}
                   value={getValue("shift")}
                   onChange={(v) => updateParam("shift", v)}
                   min={config.ranges?.shift?.min || 1}
@@ -343,6 +376,19 @@ export default function ImagePresetPanel({
                   step={0.5}
                   formatValue={(v) => v?.toFixed(1)}
                 />
+              )}
+
+              {/* Random Seed toggle */}
+              {config.supportsRandomSeed && (
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(getValue("randomSeed"))}
+                    onChange={(e) => updateParam("randomSeed", e.target.checked)}
+                    className="rounded"
+                  />
+                  Random Seed
+                </label>
               )}
 
               {/* Negative Prompt */}

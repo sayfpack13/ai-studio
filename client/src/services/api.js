@@ -347,10 +347,33 @@ export const updateConfig = async (config) => {
 };
 
 // Deploy HuggingFace Space (requires JWT)
-export const deployHFSpace = async ({ token, spaceName }) => {
+export const deployHFSpace = async ({ token, spaceName, templateName }) => {
   const response = await authFetch(`${API_BASE_URL}/config/deploy-hf-space`, {
     method: "POST",
-    body: JSON.stringify({ token, spaceName }),
+    body: JSON.stringify({ token, spaceName, templateName }),
+  });
+  return await response.json();
+};
+
+// List local backend HF deploy targets and deployment status (requires JWT)
+export const listHFDeployTargets = async ({ token } = {}) => {
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  const response = await authFetch(`${API_BASE_URL}/config/hf-deploy-targets${query}`);
+  return await response.json();
+};
+
+// List HuggingFace Spaces (requires JWT)
+export const listHFSpaces = async ({ token } = {}) => {
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  const response = await authFetch(`${API_BASE_URL}/config/hf-spaces${query}`);
+  return await response.json();
+};
+
+// Re-deploy an existing HuggingFace Space from local template (requires JWT)
+export const redeployHFSpace = async ({ token, repoId, templateName }) => {
+  const response = await authFetch(`${API_BASE_URL}/config/redeploy-hf-space`, {
+    method: "POST",
+    body: JSON.stringify({ token, repoId, templateName }),
   });
   return await response.json();
 };

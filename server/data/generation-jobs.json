@@ -1,6 +1,242 @@
 {
-  "updatedAt": "2026-04-13T09:47:49.563Z",
+  "updatedAt": "2026-04-13T14:25:58.276Z",
   "jobs": [
+    {
+      "id": "video_1776090251052_d66d23939841",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "e-girl standing in a dark neon street, red and purple lighting, slow head movement, blinking, wind moving hair, glowing red eyes, light smoke around, subtle camera zoom, phonk aesthetic, cinematic lighting, loopable animation, 4k",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1776090232706_bfd16d789464",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776090251049_ij3pv0cif",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "e-girl standing in a dark neon street, red and purple lighting, slow head movement, blinking, wind moving hair, glowing red eyes, light smoke around, subtle camera zoom, phonk aesthetic, cinematic lig",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_e_girl_standing_in_a_dark_neon_street_red_and_pu_1776090358235_727cc078.mp4",
+            "thumbnail": null,
+            "revised_prompt": "e-girl standing in a dark neon street, red and purple lighting, slow head movement, blinking, wind moving hair, glowing red eyes, light smoke around, subtle camera zoom, phonk aesthetic, cinematic lighting, loopable animation, 4k"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-13T14:24:11.052Z",
+      "updatedAt": "2026-04-13T14:25:58.272Z",
+      "startedAt": "2026-04-13T14:24:11.054Z",
+      "completedAt": "2026-04-13T14:25:58.272Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-13T14:24:11.052Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-13T14:24:11.054Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-13T14:24:11.057Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-13T14:24:11.060Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-13T14:25:58.231Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-13T14:25:58.270Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-13T14:25:58.272Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776089213293_1e10d6b2a0bd",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "e-girl standing in a neon cyberpunk street at night, slow head movement, blinking, wind moving hair, glowing blue eyes, wearing headphones, light rain falling, reflections on wet ground, subtle camera zoom in and out, dark phonk aesthetic, smooth loop animation, cinematic lighting, 4k",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1776089192535_3ba46348c3ba",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776089213288_zzwik3ylu",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "e-girl standing in a neon cyberpunk street at night, slow head movement, blinking, wind moving hair, glowing blue eyes, wearing headphones, light rain falling, reflections on wet ground, subtle camera",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_e_girl_standing_in_a_neon_cyberpunk_street_at_ni_1776089327615_8ea857bd.mp4",
+            "thumbnail": null,
+            "revised_prompt": "e-girl standing in a neon cyberpunk street at night, slow head movement, blinking, wind moving hair, glowing blue eyes, wearing headphones, light rain falling, reflections on wet ground, subtle camera zoom in and out, dark phonk aesthetic, smooth loop animation, cinematic lighting, 4k"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-13T14:06:53.293Z",
+      "updatedAt": "2026-04-13T14:08:47.654Z",
+      "startedAt": "2026-04-13T14:06:53.296Z",
+      "completedAt": "2026-04-13T14:08:47.654Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-13T14:06:53.293Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-13T14:06:53.296Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-13T14:06:53.300Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-13T14:06:53.305Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-13T14:08:47.611Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-13T14:08:47.650Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-13T14:08:47.654Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1776073561051_e1d88dca4280",
       "type": "video",

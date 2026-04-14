@@ -7,7 +7,11 @@ import { requireApiKey } from "../middleware/auth.js";
 import { findModel } from "../utils/models.js";
 import libraryService from "../services/library-service.js";
 import { saveBuffer } from "../services/file-storage.js";
-import { generateImage as hfGenerateImage } from "../utils/gradio-client.js";
+import {
+  generateImage as hfGenerateImage,
+  generateTongyiZImage,
+} from "../utils/gradio-client.js";
+import { generateImageViaInference } from "../utils/hf-inference-client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,6 +25,16 @@ const CHUTES_DIRECT_ENDPOINT_MODELS = {
 };
 
 const CHUTES_SHARED_IMAGE_MODELS = new Set(["Qwen-Image-2512", "JuggernautXL"]);
+const DEFAULT_TONGYI_SPACE = "mrfakename/Z-Image-Turbo";
+
+function withHfSpaceQuotaHint(message = "") {
+  const text = String(message || "");
+  if (!/exceeded your gpu quota|gpu quota/i.test(text)) {
+    return text;
+  }
+
+  return `${text} Use your own duplicated Space for dedicated quota (set HF_TONGYI_SPACE_URL to your Space, e.g. username/your-z-image-space).`;
+}
 
 function normalizeChutesImageModel(modelId = "") {
   return String(modelId || "")
@@ -493,7 +507,7 @@ router.post("/generate", async (req, res) => {
 
     const isLocalOllama = !!(localOllamaUrl && providerId === "ollama");
 
-    if (!isLocalOllama) {
+    if (!isLocalOllama && providerId !== "huggingface") {
       const modelInfo = await findModel(
         req.config,
         modelId,
@@ -1013,36 +1027,192 @@ router.post("/generate", async (req, res) => {
       });
     }
 
-    // ── HuggingFace Gradio Space ──────────────────────────────────────
+    // ── HuggingFace Inference Providers (image) ───────────────────────
     if (providerId === "huggingface") {
-      const spaceUrl = provider.apiBaseUrl;
-      const hfToken = apiKey || undefined;
+      const hfMode =
+        req.body?.hfMode ||
+        process.env.HF_IMAGE_MODE ||
+        "inference";
+      const hfToken = apiKey || process.env.HF_TOKEN || undefined;
+      const hfModel =
+        req.body?.hfModel ||
+        process.env.HF_IMAGE_MODEL ||
+        "Tongyi-MAI/Z-Image-Turbo";
+      const normalizedHfModel = String(hfModel).replace(/^huggingface\//i, "");
+      const hfImageProvider = process.env.HF_IMAGE_PROVIDER || "replicate";
 
-      if (!spaceUrl) {
+      if (!["inference", "space"].includes(hfMode)) {
         return res.status(400).json({
-          error: "HuggingFace Space URL is not configured. Set it in Admin → Providers → HuggingFace.",
+          error: "Invalid HuggingFace mode. Use 'inference' or 'space'.",
+        });
+      }
+
+      if (hfMode === "space") {
+        try {
+          const isTongyiModel = /Tongyi-MAI\/Z-Image-Turbo/i.test(
+            normalizedHfModel,
+          );
+          const hfSpaceTarget = String(req.body?.hfSpaceTarget || "").toLowerCase();
+          const hfCustomSpace = String(req.body?.hfCustomSpace || "").trim();
+          const spaceUrl = isTongyiModel
+            ? hfSpaceTarget === "custom"
+              ? hfCustomSpace || process.env.HF_TONGYI_SPACE_URL || DEFAULT_TONGYI_SPACE
+              : DEFAULT_TONGYI_SPACE
+            : process.env.HF_IMAGE_SPACE_URL || provider.apiBaseUrl;
+
+          if (!spaceUrl) {
+            return res.status(400).json({
+              error: "HuggingFace image Space URL is not configured. Set HF_IMAGE_SPACE_URL or Admin → Providers → HuggingFace.",
+            });
+          }
+
+          const result = isTongyiModel
+            ? await generateTongyiZImage(spaceUrl, hfToken, {
+                prompt: effectivePrompt,
+                resolution:
+                  req.body?.resolution ||
+                  req.body?.tongyiParams?.size ||
+                  req.body?.tongyiParams?.resolution ||
+                  "1024x1024 ( 1:1 )",
+                seed:
+                  req.body?.seed ?? req.body?.tongyiParams?.seed ?? 42,
+                steps:
+                  req.body?.steps ?? req.body?.tongyiParams?.steps ?? 8,
+                shift:
+                  req.body?.shift ?? req.body?.tongyiParams?.shift ?? 3,
+                random_seed:
+                  req.body?.random_seed ??
+                  req.body?.tongyiParams?.random_seed ??
+                  true,
+                gallery_images: Array.isArray(req.body?.gallery_images)
+                  ? req.body.gallery_images
+                  : Array.isArray(req.body?.tongyiParams?.gallery_images)
+                    ? req.body.tongyiParams.gallery_images
+                    : [],
+              })
+            : await hfGenerateImage(spaceUrl, hfToken, {
+                prompt: effectivePrompt,
+                width: normalizedWidth || 1024,
+                height: normalizedHeight || 1024,
+                num_inference_steps: normalizedNumInferenceSteps || 30,
+                guidance_scale: normalizedGuidanceScale || 4.0,
+                seed: -1,
+                randomize_seed: true,
+                input_images: req.body.input_images || [],
+              });
+
+          let imageUrl = result.url;
+          if (typeof imageUrl === "string" && !imageUrl.startsWith("/uploads/")) {
+            if (/^data:image\//i.test(imageUrl)) {
+              const [header, base64Payload] = imageUrl.split(",", 2);
+              const mimeMatch = header?.match(/^data:(image\/[^;]+);base64$/i);
+              if (!base64Payload || !mimeMatch?.[1]) {
+                throw new Error("Space returned an invalid data URL image payload");
+              }
+              const fileBuffer = Buffer.from(base64Payload, "base64");
+              const saved = await saveBuffer(fileBuffer, mimeMatch[1], "image");
+              imageUrl = saved.url;
+            } else if (/^https?:\/\//i.test(imageUrl)) {
+              try {
+                const response = await axios.get(imageUrl, {
+                  responseType: "arraybuffer",
+                  timeout: 120000,
+                  headers: hfToken
+                    ? {
+                        Authorization: `Bearer ${String(hfToken).replace(/^Bearer\s+/i, "").trim()}`,
+                      }
+                    : undefined,
+                });
+                const mimeType =
+                  String(response.headers?.["content-type"] || "").split(";")[0] ||
+                  "image/png";
+                const saved = await saveBuffer(
+                  Buffer.from(response.data),
+                  mimeType,
+                  "image",
+                );
+                imageUrl = saved.url;
+              } catch (cacheErr) {
+                throw new Error(
+                  `Failed to persist Space image into backend storage: ${cacheErr?.message || cacheErr}`,
+                );
+              }
+            }
+          }
+
+          if (typeof imageUrl !== "string" || !imageUrl.startsWith("/uploads/")) {
+            throw new Error("Space image was not persisted to backend storage");
+          }
+          await libraryService.createAsset({
+            type: "image",
+            source: "image",
+            title: effectivePrompt.slice(0, 80) || "Generated image",
+            url: imageUrl,
+            metadata: {
+              model: normalizedHfModel,
+              provider: providerId,
+              hfMode: "space",
+              ...(isTongyiModel
+                ? {
+                    hfSpaceTarget:
+                      hfSpaceTarget === "custom" ? "custom" : "public",
+                    ...(hfSpaceTarget === "custom" && hfCustomSpace
+                      ? { hfCustomSpace }
+                      : {}),
+                  }
+                : {}),
+              ...(result.seedUsed ? { seedUsed: result.seedUsed } : {}),
+              ...(result.seed != null ? { seed: result.seed } : {}),
+            },
+          });
+
+          return res.json({
+            success: true,
+            data: [{ url: imageUrl, revised_prompt: effectivePrompt }],
+          });
+        } catch (error) {
+          console.error("[HuggingFace][Space] Image generation error:", error.message);
+          return res.status(502).json({
+            error: `HuggingFace image generation failed (space mode): ${withHfSpaceQuotaHint(error.message)}`,
+          });
+        }
+      }
+
+      if (!hfToken) {
+        return res.status(400).json({
+          error: "HuggingFace token is not configured. Set Admin → Providers → HuggingFace API key or HF_TOKEN.",
         });
       }
 
       try {
-        const result = await hfGenerateImage(spaceUrl, hfToken, {
+        const result = await generateImageViaInference(hfToken, {
           prompt: effectivePrompt,
+          model: normalizedHfModel,
+          provider: hfImageProvider,
           width: normalizedWidth || 1024,
           height: normalizedHeight || 1024,
           num_inference_steps: normalizedNumInferenceSteps || 30,
           guidance_scale: normalizedGuidanceScale || 4.0,
           seed: -1,
-          randomize_seed: true,
-          input_images: req.body.input_images || [],
         });
 
-        const imageUrl = result.url;
+        const slug = slugifyPrompt(effectivePrompt);
+        const prefix = slug ? `hf_inference_${slug}` : "hf_inference_image";
+        const saved = await saveBuffer(result.buffer, result.mimeType, prefix);
+        const imageUrl = saved.url;
         await libraryService.createAsset({
           type: "image",
           source: "image",
           title: effectivePrompt.slice(0, 80) || "Generated image",
           url: imageUrl,
-          metadata: { model: modelId, provider: providerId },
+          filePath: saved.filepath,
+          metadata: {
+            model: normalizedHfModel,
+            provider: providerId,
+            hfMode: "inference",
+            inferenceProvider: hfImageProvider,
+            sizeBytes: saved.size,
+          },
         });
 
         return res.json({

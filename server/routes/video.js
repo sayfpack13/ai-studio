@@ -1082,12 +1082,12 @@ router.post("/generate", async (req, res) => {
 
     // ── HuggingFace Gradio Space (video) ──────────────────────────────
     if (providerId === "huggingface") {
-      const spaceUrl = provider.apiBaseUrl;
+      const spaceUrl = process.env.HF_VIDEO_SPACE_URL || provider.apiBaseUrl;
       const hfToken = apiKey || undefined;
 
       if (!spaceUrl) {
         return res.status(400).json({
-          error: "HuggingFace Space URL is not configured. Set it in Admin → Providers → HuggingFace.",
+          error: "HuggingFace video Space URL is not configured. Set HF_VIDEO_SPACE_URL or Admin → Providers → HuggingFace.",
         });
       }
 

@@ -9,11 +9,18 @@ import {
   X,
   Loader2,
   ExternalLink,
-  Copy,
   CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { Button, Input } from '../ui';
-import { deployHFSpace, getConfig, updateConfig, testProviderConnection } from '../../services/api';
+import {
+  deployHFSpace,
+  getConfig,
+  testProviderConnection,
+  listHFSpaces,
+  redeployHFSpace,
+  listHFDeployTargets,
+} from '../../services/api';
 
 function Section({ number, title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -38,49 +45,44 @@ function Section({ number, title, children, defaultOpen = false }) {
   );
 }
 
-function CopyBlock({ text }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <div className="relative group">
-      <pre className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm text-gray-300 overflow-x-auto whitespace-pre-wrap">
-        {text}
-      </pre>
-      <button
-        onClick={handleCopy}
-        className="absolute top-2 right-2 p-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
-      >
-        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-      </button>
-    </div>
-  );
-}
+const HF_SETUP_TOKEN_KEY = 'ai_studio_hf_setup_token';
+const ADMIN_SESSION_MSG = 'Admin session missing or expired. Please log in again.';
 
 export default function HFSetupPage() {
   const [hfToken, setHfToken] = useState('');
-  const [spaceName, setSpaceName] = useState('ai-studio-gpu');
-  const [deploying, setDeploying] = useState(false);
-  const [deployResult, setDeployResult] = useState(null);
-  const [deployError, setDeployError] = useState('');
+  const [spaceList, setSpaceList] = useState([]);
+  const [spacesLoading, setSpacesLoading] = useState(false);
+  const [spacesError, setSpacesError] = useState('');
+  const [redeployingRepoId, setRedeployingRepoId] = useState('');
+  const [manageMsg, setManageMsg] = useState('');
+  const [deployTargets, setDeployTargets] = useState([]);
+  const [targetsLoading, setTargetsLoading] = useState(false);
+  const [targetsError, setTargetsError] = useState('');
+  const [targetActionKey, setTargetActionKey] = useState('');
 
   const [spaceUrl, setSpaceUrl] = useState('');
-  const [providerToken, setProviderToken] = useState('');
-  const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   const [configured, setConfigured] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
+    const savedToken = localStorage.getItem(HF_SETUP_TOKEN_KEY) || '';
+    if (savedToken) {
+      setHfToken(savedToken);
+    }
     loadStatus();
   }, []);
+
+  useEffect(() => {
+    if (hfToken.trim()) {
+      localStorage.setItem(HF_SETUP_TOKEN_KEY, hfToken.trim());
+    } else {
+      localStorage.removeItem(HF_SETUP_TOKEN_KEY);
+    }
+  }, [hfToken]);
 
   async function loadStatus() {
     try {
@@ -88,7 +90,6 @@ export default function HFSetupPage() {
       const hf = (cfg.providers || []).find((p) => p.id === 'huggingface');
       if (hf) {
         setConfigured(hf.configured || false);
-        setHasApiKey(hf.hasApiKey || false);
         setSpaceUrl(hf.apiBaseUrl || '');
       }
     } catch {
@@ -96,56 +97,114 @@ export default function HFSetupPage() {
     }
   }
 
-  async function handleDeploy() {
-    if (!hfToken.trim()) {
-      setDeployError('HuggingFace token is required.');
-      return;
-    }
-    setDeploying(true);
-    setDeployError('');
-    setDeployResult(null);
+  async function handleListSpaces() {
+    setSpacesLoading(true);
+    setSpacesError('');
+    setManageMsg('');
     try {
-      const result = await deployHFSpace({ token: hfToken.trim(), spaceName: spaceName.trim() });
+      const result = await listHFSpaces({ token: hfToken.trim() || undefined });
       if (result.error) {
-        setDeployError(result.error);
+        setSpacesError(result.error === 'No token provided' ? ADMIN_SESSION_MSG : result.error);
+        setSpaceList([]);
       } else {
-        setDeployResult(result);
-        setSpaceUrl(result.spaceUrl || '');
-        await loadStatus();
+        setSpaceList(result.spaces || []);
       }
     } catch (err) {
-      setDeployError(err.message || 'Deployment failed');
+      setSpacesError(err.message || 'Failed to list spaces');
+      setSpaceList([]);
     } finally {
-      setDeploying(false);
+      setSpacesLoading(false);
     }
   }
 
-  async function handleSaveProvider() {
-    setSaving(true);
-    setSaveMsg('');
+  async function handleListDeployTargets() {
+    setTargetsLoading(true);
+    setTargetsError('');
+    setManageMsg('');
     try {
-      const payload = {
-        providers: {
-          huggingface: {
-            apiBaseUrl: spaceUrl.trim(),
-            enabled: true,
-            ...(providerToken.trim() ? { apiKey: providerToken.trim() } : {}),
-          },
-        },
-      };
-      const result = await updateConfig(payload);
-      if (result.success) {
-        setSaveMsg('Saved!');
-        await loadStatus();
-        setTimeout(() => setSaveMsg(''), 3000);
+      const result = await listHFDeployTargets({ token: hfToken.trim() || undefined });
+      if (result.error) {
+        setTargetsError(result.error === 'No token provided' ? ADMIN_SESSION_MSG : result.error);
+        setDeployTargets([]);
       } else {
-        setSaveMsg(result.error || 'Failed to save');
+        const targets = result.targets || [];
+        setDeployTargets(targets);
       }
     } catch (err) {
-      setSaveMsg(err.message || 'Failed to save');
+      setTargetsError(err.message || 'Failed to list backend deploy targets');
+      setDeployTargets([]);
     } finally {
-      setSaving(false);
+      setTargetsLoading(false);
     }
+  }
+
+  async function handleDeployTarget(target, mode) {
+    const actionKey = `${mode}:${target.templateName}`;
+    setTargetActionKey(actionKey);
+    setTargetsError('');
+    setManageMsg('');
+    try {
+      const token = hfToken.trim() || undefined;
+      const result =
+        mode === 'redeploy'
+          ? await redeployHFSpace({
+              token,
+              repoId: target.suggestedRepoId,
+              templateName: target.templateName,
+            })
+          : await deployHFSpace({
+              token,
+              spaceName: target.suggestedSpaceName,
+              templateName: target.templateName,
+            });
+
+      if (result.error) {
+        setTargetsError(result.error === 'No token provided' ? ADMIN_SESSION_MSG : result.error);
+      } else {
+        setManageMsg(`${mode === 'redeploy' ? 'Re-deployed' : 'Deployed'} ${result.repoId}`);
+        setSpaceUrl(result.spaceUrl || '');
+        await Promise.all([loadStatus(), handleListDeployTargets(), handleListSpaces()]);
+      }
+    } catch (err) {
+      setTargetsError(err.message || 'Target deployment action failed');
+    } finally {
+      setTargetActionKey('');
+    }
+  }
+
+  async function handleRedeploy(repoId) {
+    setRedeployingRepoId(repoId);
+    setManageMsg('');
+    setSpacesError('');
+    try {
+      const result = await redeployHFSpace({
+        token: hfToken.trim() || undefined,
+        repoId,
+      });
+
+      if (result.error) {
+        setSpacesError(result.error === 'No token provided' ? ADMIN_SESSION_MSG : result.error);
+      } else {
+        setManageMsg(`Re-deployed ${result.repoId}`);
+        await handleListSpaces();
+      }
+    } catch (err) {
+      setSpacesError(err.message || 'Re-deploy failed');
+    } finally {
+      setRedeployingRepoId('');
+    }
+  }
+
+  async function handleSaveToken() {
+    const token = hfToken.trim();
+    if (!token) {
+      setSaveMsg('Token is required.');
+      return;
+    }
+    setSaveMsg('');
+    localStorage.setItem(HF_SETUP_TOKEN_KEY, token);
+    setSaveMsg('Saved!');
+    setTimeout(() => setSaveMsg(''), 3000);
   }
 
   async function handleTest() {
@@ -188,115 +247,215 @@ export default function HFSetupPage() {
         </div>
       </div>
 
-      {/* Step 1: Deploy */}
-      <Section number="1" title="Create & Deploy Space" defaultOpen={!configured}>
+      <Section number="1" title="Backend Deploy Targets" defaultOpen>
         <p className="text-sm text-gray-400">
-          Deploy a HuggingFace Space with FLUX (image) and Wan 2.1 I2V (video) models.
-          Requires a <a href="https://huggingface.co/subscribe/pro" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">HuggingFace Pro</a> account for ZeroGPU access.
+          Local Space templates found in your backend workspace, with deployment status on HuggingFace.
         </p>
 
-        <div className="space-y-3">
-          <Input
-            type="password"
-            label="HuggingFace Token"
-            value={hfToken}
-            onChange={(e) => setHfToken(e.target.value)}
-            placeholder="hf_xxxxxxxxxxxx"
-          />
-          <Input
-            label="Space Name"
-            value={spaceName}
-            onChange={(e) => setSpaceName(e.target.value)}
-            placeholder="ai-studio-gpu"
-          />
+        <Input
+          type="password"
+          label="HuggingFace Token (persistent on this browser)"
+          value={hfToken}
+          onChange={(e) => setHfToken(e.target.value)}
+          placeholder="Leave blank to use saved provider token"
+        />
 
+        <div className="flex items-center gap-3">
           <Button
-            variant="primary"
-            onClick={handleDeploy}
-            disabled={deploying || !hfToken.trim()}
-            leftIcon={deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+            variant="success"
+            onClick={handleSaveToken}
+            disabled={!hfToken.trim()}
+            leftIcon={<Check className="w-4 h-4" />}
           >
-            {deploying ? 'Deploying...' : 'Deploy Space'}
+            Save Token
           </Button>
-
-          {deployError && (
-            <div className="p-3 bg-red-900/30 border border-red-800 text-red-300 rounded-lg text-sm flex items-center gap-2">
-              <X className="w-4 h-4 flex-shrink-0" />
-              {deployError}
-            </div>
-          )}
-
-          {deployResult && (
-            <div className="p-3 bg-green-900/30 border border-green-800 text-green-300 rounded-lg text-sm space-y-2">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 flex-shrink-0" />
-                <span className="font-medium">Space deployed successfully!</span>
-              </div>
-              <div className="text-xs space-y-1 text-gray-300">
-                <p>
-                  Repo:{' '}
-                  <a
-                    href={`https://huggingface.co/spaces/${deployResult.repoId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:underline"
-                  >
-                    {deployResult.repoId}
-                    <ExternalLink className="w-3 h-3 inline ml-1" />
-                  </a>
-                </p>
-                <p>URL: {deployResult.spaceUrl}</p>
-              </div>
-              <p className="text-xs text-yellow-300 mt-1">
-                Next: Go to Space Settings and select <strong>ZeroGPU</strong> hardware, then wait for the Space to build.
-              </p>
-            </div>
+          {saveMsg && (
+            <span className={`text-sm ${saveMsg === 'Saved!' ? 'text-green-400' : 'text-red-400'}`}>
+              {saveMsg}
+            </span>
           )}
         </div>
 
-        <div className="border-t border-gray-700 pt-3 mt-2">
-          <p className="text-xs text-gray-500 mb-2">Or deploy manually via CLI:</p>
-          <CopyBlock text="cd server && npm run deploy:hf -- --name ai-studio-gpu --token hf_xxx" />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={handleListDeployTargets}
+            disabled={targetsLoading}
+            leftIcon={targetsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          >
+            {targetsLoading ? 'Scanning Targets...' : 'Scan Backend Targets'}
+          </Button>
         </div>
+
+        {targetsError && (
+          <div className="p-3 bg-red-900/30 border border-red-800 text-red-300 rounded-lg text-sm flex items-center gap-2">
+            <X className="w-4 h-4 flex-shrink-0" />
+            {targetsError}
+          </div>
+        )}
+
+        {deployTargets.length > 0 && (
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {deployTargets.map((target) => {
+              const deployKey = `deploy:${target.templateName}`;
+              const redeployKey = `redeploy:${target.templateName}`;
+              const isDeploying = targetActionKey === deployKey;
+              const isRedeploying = targetActionKey === redeployKey;
+              return (
+                <div key={target.templateName} className="border border-gray-700 rounded-lg p-3 bg-gray-900/40">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm text-white font-medium truncate">
+                        {target.emoji ? `${target.emoji} ` : ''}{target.title || target.templateName}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {target.suggestedRepoId}
+                      </div>
+                      <div className="text-xs mt-1">
+                        {target.ready ? (
+                          <span className="text-green-400">Template ready</span>
+                        ) : (
+                          <span className="text-red-400">Missing files: {(target.missingFiles || []).join(', ')}</span>
+                        )}
+                        {' • '}
+                        {target.deployed ? (
+                          <span className="text-green-400">Already deployed</span>
+                        ) : (
+                          <span className="text-yellow-400">Not deployed</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      {!target.deployed ? (
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => handleDeployTarget(target, 'deploy')}
+                          disabled={!target.ready || Boolean(targetActionKey)}
+                          leftIcon={isDeploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                        >
+                          {isDeploying ? 'Deploying...' : 'Deploy'}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleDeployTarget(target, 'redeploy')}
+                          disabled={!target.ready || Boolean(targetActionKey)}
+                          leftIcon={isRedeploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                        >
+                          {isRedeploying ? 'Re-deploying...' : 'Re-deploy'}
+                        </Button>
+                      )}
+                      {target.deployedSpace?.pageUrl && (
+                        <a
+                          href={target.deployedSpace.pageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+                        >
+                          Open <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Section>
 
-      {/* Step 2: Configure */}
-      <Section number="2" title="Configure Provider" defaultOpen={!configured}>
+      {/* Step 2: Manage */}
+      <Section number="2" title="Manage Deployed Spaces" defaultOpen={configured}>
         <p className="text-sm text-gray-400">
-          Set the Space URL and (optionally) your HF token for private Spaces.
+          List your HuggingFace Spaces, re-deploy template files, and quickly set provider URL from an existing Space.
         </p>
 
-        <div className="space-y-3">
-          <Input
-            label="Space URL"
-            value={spaceUrl}
-            onChange={(e) => setSpaceUrl(e.target.value)}
-            placeholder="https://username-ai-studio-gpu.hf.space"
-          />
-          <Input
-            type="password"
-            label="HF Token (optional for public Spaces)"
-            value={providerToken}
-            onChange={(e) => setProviderToken(e.target.value)}
-            placeholder={hasApiKey ? 'Leave blank to keep current token' : 'hf_xxxxxxxxxxxx'}
-          />
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="success"
-              onClick={handleSaveProvider}
-              disabled={saving || !spaceUrl.trim()}
-              leftIcon={saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            >
-              {saving ? 'Saving...' : 'Save Configuration'}
-            </Button>
-            {saveMsg && (
-              <span className={`text-sm ${saveMsg === 'Saved!' ? 'text-green-400' : 'text-red-400'}`}>
-                {saveMsg}
-              </span>
-            )}
-          </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={handleListSpaces}
+            disabled={spacesLoading}
+            leftIcon={spacesLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          >
+            {spacesLoading ? 'Loading Spaces...' : 'List My Spaces'}
+          </Button>
+          <span className="text-xs text-gray-500">
+            Uses token from the field above, or saved HuggingFace provider token.
+          </span>
         </div>
+
+        {spacesError && (
+          <div className="p-3 bg-red-900/30 border border-red-800 text-red-300 rounded-lg text-sm flex items-center gap-2">
+            <X className="w-4 h-4 flex-shrink-0" />
+            {spacesError}
+          </div>
+        )}
+
+        {manageMsg && (
+          <div className="p-3 bg-green-900/30 border border-green-800 text-green-300 rounded-lg text-sm flex items-center gap-2">
+            <Check className="w-4 h-4 flex-shrink-0" />
+            {manageMsg}
+          </div>
+        )}
+
+        {spaceList.length > 0 && (
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {spaceList.map((space) => (
+              <div key={space.repoId} className="border border-gray-700 rounded-lg p-3 bg-gray-900/40">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm text-white font-medium truncate">{space.repoId}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {space.private ? 'Private' : 'Public'} • SDK: {space.sdk || 'unknown'} • Likes: {space.likes ?? 0}
+                    </div>
+                    {space.updatedAt && (
+                      <div className="text-[11px] text-gray-500 mt-0.5">Updated: {new Date(space.updatedAt).toLocaleString()}</div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSpaceUrl(space.spaceUrl || '');
+                        setManageMsg(`Selected ${space.repoId} URL in provider config form.`);
+                      }}
+                    >
+                      Use URL
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleRedeploy(space.repoId)}
+                      disabled={redeployingRepoId === space.repoId}
+                      leftIcon={
+                        redeployingRepoId === space.repoId ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Rocket className="w-3.5 h-3.5" />
+                        )
+                      }
+                    >
+                      {redeployingRepoId === space.repoId ? 'Re-deploying...' : 'Re-deploy'}
+                    </Button>
+                    <a
+                      href={space.pageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+                    >
+                      Open <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* Step 3: Test */}

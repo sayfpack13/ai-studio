@@ -4,6 +4,12 @@ import fs from 'fs/promises';
 import { normalizeConfig, maskSecret, isProviderConfigured } from '../utils/config.js';
 import axios from 'axios';
 import { getAutoModelForProvider } from '../utils/models.js';
+import {
+  deployHFSpace,
+  redeployHFSpace,
+  listHFSpaces,
+  listBackendDeployTargets,
+} from '../scripts/deploy-hf-space.js';
 
 const router = express.Router();
 
@@ -133,43 +139,119 @@ router.post('/update', requireAuth, async (req, res) => {
   }
 });
 
-// Deploy HuggingFace Space (requires JWT auth)
+// Deploy HuggingFace Space from local template (requires JWT auth)
 router.post('/deploy-hf-space', requireAuth, async (req, res) => {
   try {
-    const { token, spaceName } = req.body;
-    const hfToken = token || req.config.providers?.huggingface?.apiKey;
+    const token = String(req.body?.token || '').trim();
+    const spaceName = String(req.body?.spaceName || 'Z-Image-Turbo').trim();
+    const templateName = String(req.body?.templateName || 'huggingface-space').trim();
 
-    if (!hfToken) {
-      return res.status(400).json({ error: 'HuggingFace token is required. Provide it in the request or configure it in Providers.' });
+    if (!token) {
+      return res.status(400).json({ error: 'HuggingFace token is required.' });
     }
+
     if (!spaceName) {
       return res.status(400).json({ error: 'Space name is required.' });
     }
 
-    const { deployHFSpace } = await import('../scripts/deploy-hf-space.js');
-    const result = await deployHFSpace({ spaceName, token: hfToken });
+    const result = await deployHFSpace({ token, spaceName, templateName });
 
-    // Auto-configure the HuggingFace provider with the new Space URL
+    // Persist deployed Space URL and token to provider config for convenience
     if (req.config.providers?.huggingface) {
       req.config.providers.huggingface.apiBaseUrl = result.spaceUrl;
+      req.config.providers.huggingface.apiKey = token;
       req.config.providers.huggingface.enabled = true;
-      if (token && !req.config.providers.huggingface.apiKey) {
-        req.config.providers.huggingface.apiKey = token;
-      }
+      const normalized = normalizeConfig(req.config);
+      Object.keys(req.config).forEach((key) => delete req.config[key]);
+      Object.assign(req.config, normalized);
       await fs.writeFile(req.configPath, JSON.stringify(req.config, null, 2));
     }
 
     res.json({
       success: true,
-      repoId: result.repoId,
-      spaceUrl: result.spaceUrl,
-      username: result.username,
-      message: `Space deployed! Set ZeroGPU hardware in Space Settings.`,
+      ...result,
+      message: 'Space deployed successfully. Set ZeroGPU hardware in Space settings before using it.',
     });
   } catch (error) {
-    console.error('HF Space deploy error:', error.response?.data || error.message);
+    console.error('HF Space deploy error:', error);
     res.status(500).json({
-      error: error.response?.data?.error || error.message || 'Failed to deploy HuggingFace Space',
+      error: error?.message || 'Failed to deploy HuggingFace Space.',
+    });
+  }
+});
+
+// List HuggingFace Spaces for current token (requires JWT auth)
+router.get('/hf-spaces', requireAuth, async (req, res) => {
+  try {
+    const tokenFromQuery = String(req.query?.token || '').trim();
+    const token = tokenFromQuery || req.config.providers?.huggingface?.apiKey || process.env.HF_TOKEN || '';
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'HuggingFace token is required. Provide token query param or configure HuggingFace provider API key.',
+      });
+    }
+
+    const result = await listHFSpaces({ token });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('HF Spaces list error:', error);
+    res.status(500).json({
+      error: error?.message || 'Failed to list HuggingFace Spaces.',
+    });
+  }
+});
+
+// List local backend deploy targets and deployment status on HuggingFace
+router.get('/hf-deploy-targets', requireAuth, async (req, res) => {
+  try {
+    const tokenFromQuery = String(req.query?.token || '').trim();
+    const token = tokenFromQuery || req.config.providers?.huggingface?.apiKey || process.env.HF_TOKEN || '';
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'HuggingFace token is required. Provide token query param or configure HuggingFace provider API key.',
+      });
+    }
+
+    const result = await listBackendDeployTargets({ token });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('HF deploy targets error:', error);
+    res.status(500).json({
+      error: error?.message || 'Failed to list backend deploy targets.',
+    });
+  }
+});
+
+// Re-deploy local template files to an existing HuggingFace Space (requires JWT auth)
+router.post('/redeploy-hf-space', requireAuth, async (req, res) => {
+  try {
+    const tokenFromBody = String(req.body?.token || '').trim();
+    const token = tokenFromBody || req.config.providers?.huggingface?.apiKey || process.env.HF_TOKEN || '';
+    const repoId = String(req.body?.repoId || req.body?.spaceName || '').trim();
+    const templateName = String(req.body?.templateName || 'huggingface-space').trim();
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'HuggingFace token is required. Provide token or configure HuggingFace provider API key.',
+      });
+    }
+
+    if (!repoId) {
+      return res.status(400).json({ error: 'repoId is required.' });
+    }
+
+    const result = await redeployHFSpace({ repoId, token, templateName });
+    res.json({
+      success: true,
+      ...result,
+      message: 'Space re-deployed successfully.',
+    });
+  } catch (error) {
+    console.error('HF Space redeploy error:', error);
+    res.status(500).json({
+      error: error?.message || 'Failed to re-deploy HuggingFace Space.',
     });
   }
 });

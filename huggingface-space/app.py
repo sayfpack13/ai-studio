@@ -1,443 +1,663 @@
 import os
 import spaces
-import torch
-import numpy as np
-import gradio as gr
+from dataclasses import dataclass
+import json
+import logging
+import random
+import re
+import shutil
+import sys
+import warnings
+
+# Set persistent cache env before importing diffusers/transformers so they pick up /data.
+DEFAULT_DATA_DIR = "/data" if os.path.isdir("/data") else "/tmp"
+SPACE_DATA_DIR = os.environ.get("SPACE_DATA_DIR", DEFAULT_DATA_DIR)
+CACHE_ROOT = os.environ.get("CACHE_ROOT", os.path.join(SPACE_DATA_DIR, ".cache"))
+HF_HOME = os.environ.get("HF_HOME", os.path.join(CACHE_ROOT, "huggingface"))
+TORCH_HOME = os.environ.get("TORCH_HOME", os.path.join(CACHE_ROOT, "torch"))
+
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("HF_HOME", HF_HOME)
+os.environ.setdefault("HF_HUB_CACHE", os.path.join(HF_HOME, "hub"))
+os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(HF_HOME, "transformers"))
+os.environ.setdefault("TORCH_HOME", TORCH_HOME)
+
 from PIL import Image
-from diffusers import Flux2Pipeline, Flux2Transformer2DModel, WanImageToVideoPipeline
-from diffusers.utils import export_to_video
-from gradio_client import Client as GradioClient
+from diffusers import AutoencoderKL, FlowMatchEulerDiscreteScheduler
+import gradio as gr
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# ---------------------------------------------------------------------------
-# Persistent storage: use HF Bucket mount if available, otherwise /tmp
-# The bucket mount path is /data by default on HuggingFace Spaces
-# ---------------------------------------------------------------------------
-DATA_DIR = os.environ.get("DATA_DIR", "/data")
-HAS_PERSISTENT_STORAGE = os.path.isdir(DATA_DIR) and os.access(DATA_DIR, os.W_OK)
-if HAS_PERSISTENT_STORAGE:
-    HF_CACHE_DIR = os.path.join(DATA_DIR, "hf_cache")
-    os.makedirs(HF_CACHE_DIR, exist_ok=True)
-    os.environ["HF_HOME"] = HF_CACHE_DIR
-    os.environ["HUGGINGFACE_HUB_CACHE"] = HF_CACHE_DIR
-else:
-    HF_CACHE_DIR = None
+from prompt_check import is_unsafe_prompt
 
-# ---------------------------------------------------------------------------
-# Authentication: read HF token from Space Secrets for gated models
-# Add "HF_TOKEN" as a Secret in your Space Settings on HuggingFace.
-# ---------------------------------------------------------------------------
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from diffusers import ZImagePipeline
+from diffusers.models.transformers.transformer_z_image import ZImageTransformer2DModel
+
+from pe import prompt_template
+
+# ==================== Environment Variables ================================== #
+MODEL_PATH = os.environ.get("MODEL_PATH", "Tongyi-MAI/Z-Image-Turbo")
+ENABLE_COMPILE = os.environ.get("ENABLE_COMPILE", "false").lower() == "true"
+ENABLE_WARMUP = os.environ.get("ENABLE_WARMUP", "false").lower() == "true"
+ATTENTION_BACKEND = os.environ.get("ATTENTION_BACKEND", "flash_3")
+UNSAFE_MAX_NEW_TOKEN = int(os.environ.get("UNSAFE_MAX_NEW_TOKEN", "10"))
+DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
 HF_TOKEN = os.environ.get("HF_TOKEN")
-
-# ===========================================================================
-# FLUX.2-dev — Maximum ZeroGPU cost savings setup
-#
-# - Load only transformer + core pipeline at module import
-# - Skip local text stack (tokenizer/text_encoder) to avoid extra loading + Pixtral
-#   placeholder issues; prompts are encoded remotely.
-# - Run only diffusion denoising on GPU.
-# ===========================================================================
-
-print("[FLUX] Loading FLUX.2-dev transformer...")
-flux_transformer = Flux2Transformer2DModel.from_pretrained(
-    "black-forest-labs/FLUX.2-dev",
-    subfolder="transformer",
-    torch_dtype=torch.bfloat16,
-    cache_dir=HF_CACHE_DIR,
-    token=HF_TOKEN,
+UNSAFE_PROMPT_CHECK = os.environ.get(
+    "UNSAFE_PROMPT_CHECK",
+    "You are a safety classifier. Reply only 'yes' if the user prompt requests unsafe, harmful, sexual, violent, illegal, or disallowed content. Reply only 'no' otherwise.",
 )
-
-print("[FLUX] Loading FLUX.2-dev pipeline (remote text encoder mode)...")
-flux_pipe = Flux2Pipeline.from_pretrained(
-    "black-forest-labs/FLUX.2-dev",
-    transformer=flux_transformer,
-    text_encoder=None,
-    tokenizer=None,
-    torch_dtype=torch.bfloat16,
-    cache_dir=HF_CACHE_DIR,
-    token=HF_TOKEN,
-)
-flux_pipe.to("cuda")  # ZeroGPU intercepts this — no GPU allocated until inference
-
-# Try loading pre-compiled AOTI blocks for faster inference (optional optimization)
-try:
-    if hasattr(flux_pipe, "transformer"):
-        spaces.aoti_blocks_load(flux_pipe.transformer, "zerogpu-aoti/FLUX.2", variant="fa3")
-        print("[FLUX] AOTI blocks loaded successfully.")
-except Exception as e:
-    print(f"[FLUX] AOTI blocks not available (non-critical): {e}")
-
-print("[FLUX] FLUX.2-dev loaded.")
-
-# ---------------------------------------------------------------------------
-# Remote text encoder for FLUX.2-dev
-# ---------------------------------------------------------------------------
-_text_encoder_client = None
+# ============================================================================= #
 
 
-def _get_text_encoder_client():
-    global _text_encoder_client
-    if _text_encoder_client is None:
-        print("[FLUX] Connecting to remote text encoder Space...")
-        _text_encoder_client = GradioClient("multimodalart/mistral-text-encoder")
-        print("[FLUX] Remote text encoder connected.")
-    return _text_encoder_client
-
-
-def remote_text_encoder(prompt: str) -> torch.Tensor:
-    """Encode prompt remotely and return CPU prompt_embeds."""
-    client = _get_text_encoder_client()
-    result = client.predict(prompt=prompt, api_name="/encode_text")
+for cache_path in [os.environ["HF_HOME"], os.environ["HF_HUB_CACHE"], os.environ["TRANSFORMERS_CACHE"], os.environ["TORCH_HOME"]]:
     try:
-        prompt_embeds = torch.load(result[0], map_location="cpu", weights_only=True)
-    except TypeError:
-        # Backward compatibility for environments without weights_only
-        prompt_embeds = torch.load(result[0], map_location="cpu")
+        os.makedirs(cache_path, exist_ok=True)
+    except OSError as e:
+        print(f"Warning: could not create cache path '{cache_path}': {e}")
 
-    if isinstance(prompt_embeds, dict):
-        prompt_embeds = prompt_embeds.get("prompt_embeds", list(prompt_embeds.values())[0])
-    return prompt_embeds
+warnings.filterwarnings("ignore")
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
+RES_CHOICES = {
+    "1024": [
+        "1024x1024 ( 1:1 )",
+        "1152x896 ( 9:7 )",
+        "896x1152 ( 7:9 )",
+        "1152x864 ( 4:3 )",
+        "864x1152 ( 3:4 )",
+        "1248x832 ( 3:2 )",
+        "832x1248 ( 2:3 )",
+        "1280x720 ( 16:9 )",
+        "720x1280 ( 9:16 )",
+        "1344x576 ( 21:9 )",
+        "576x1344 ( 9:21 )",
+    ],
+    "1280": [
+        "1280x1280 ( 1:1 )",
+        "1440x1120 ( 9:7 )",
+        "1120x1440 ( 7:9 )",
+        "1472x1104 ( 4:3 )",
+        "1104x1472 ( 3:4 )",
+        "1536x1024 ( 3:2 )",
+        "1024x1536 ( 2:3 )",
+        "1536x864 ( 16:9 )",
+        "864x1536 ( 9:16 )",
+        "1680x720 ( 21:9 )",
+        "720x1680 ( 9:21 )",
+    ],
+    "1536": [
+        "1536x1536 ( 1:1 )",
+        "1728x1344 ( 9:7 )",
+        "1344x1728 ( 7:9 )",
+        "1728x1296 ( 4:3 )",
+        "1296x1728 ( 3:4 )",
+        "1872x1248 ( 3:2 )",
+        "1248x1872 ( 2:3 )",
+        "2048x1152 ( 16:9 )",
+        "1152x2048 ( 9:16 )",
+        "2016x864 ( 21:9 )",
+        "864x2016 ( 9:21 )",
+    ],
+}
+
+RESOLUTION_SET = []
+for resolutions in RES_CHOICES.values():
+    RESOLUTION_SET.extend(resolutions)
+
+EXAMPLE_PROMPTS = [
+    ["一位男士和他的贵宾犬穿着配套的服装参加狗狗秀，室内灯光，背景中有观众。"],
+    [
+        "极具氛围感的暗调人像，一位优雅的中国美女在黑暗的房间里。一束强光通过遮光板，在她的脸上投射出一个清晰的闪电形状的光影，正好照亮一只眼睛。高对比度，明暗交界清晰，神秘感，莱卡相机色调。"
+    ],
+    [
+        "Young Chinese woman in red Hanfu, intricate embroidery. Impeccable makeup, red floral forehead pattern. Elaborate high bun, golden phoenix headdress, red flowers, beads. Holds round folding fan with lady, trees, bird. Neon lightning-bolt lamp (⚡️), bright yellow glow, above extended left palm. Soft-lit outdoor night background, silhouetted tiered pagoda, blurred colorful distant lights."
+    ],
+]
 
 
-# ===========================================================================
-# Wan 2.2 I2V A14B — Module-level loading (ZeroGPU deferred)
-#
-# Loading at module level saves ~300s of GPU time per cold start.
-# Text encoding (T5) and image encoding (CLIP) are done on CPU
-# BEFORE calling @spaces.GPU, so ZeroGPU is only charged for
-# transformer denoising and VAE decoding.
-# ===========================================================================
-
-print("[WAN] Loading Wan 2.2 I2V A14B...")
-wan_pipe = WanImageToVideoPipeline.from_pretrained(
-    "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
-    torch_dtype=torch.bfloat16,
-    cache_dir=HF_CACHE_DIR,
-    token=HF_TOKEN,
-)
-wan_pipe.to("cuda")  # ZeroGPU intercepts — deferred
-wan_pipe.enable_sequential_cpu_offload()  # Components stay on CPU, moved to GPU on-demand
-print("[WAN] Wan 2.2 I2V A14B loaded.")
+def get_resolution(resolution):
+    match = re.search(r"(\d+)\s*[×x]\s*(\d+)", resolution)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return 1024, 1024
 
 
-# ===========================================================================
-# Image generation — FLUX.2-dev
-# ===========================================================================
+def load_models(model_path, enable_compile=False, attention_backend="native"):
+    print(f"Loading models from {model_path}...")
 
-MAX_IMAGE_SIZE = 1024
-MAX_SEED = np.iinfo(np.int32).max
+    # `token` expects a string or None. Passing True sends an invalid bearer token.
+    auth_token = HF_TOKEN if HF_TOKEN else None
+
+    resolved_model_path = model_path
+    if not os.path.exists(model_path) and "/" in model_path:
+        # Mirror snapshot to persistent bucket path so restarts reuse local files.
+        from huggingface_hub import snapshot_download
+
+        local_model_dir = os.path.join(SPACE_DATA_DIR, "models", model_path.replace("/", "--"))
+        os.makedirs(local_model_dir, exist_ok=True)
+        snapshot_download(
+            repo_id=model_path,
+            local_dir=local_model_dir,
+            token=auth_token,
+            resume_download=True,
+        )
+        resolved_model_path = local_model_dir
+        print(f"Using local model snapshot: {resolved_model_path}")
+
+    if not os.path.exists(resolved_model_path):
+        print("Loading VAE from remote...")
+        vae = AutoencoderKL.from_pretrained(
+            f"{resolved_model_path}",
+            subfolder="vae",
+            cache_dir=os.environ["HF_HOME"],
+            torch_dtype=torch.bfloat16,
+            device_map="cuda",
+            token=auth_token,
+        )
+
+        print("Loading Text Encoder from remote...")
+        text_encoder = AutoModelForCausalLM.from_pretrained(
+            f"{resolved_model_path}",
+            subfolder="text_encoder",
+            cache_dir=os.environ["HF_HOME"],
+            torch_dtype=torch.bfloat16,
+            device_map="cuda",
+            token=auth_token,
+        ).eval()
+
+        print("Loading Tokenizer from remote...")
+        tokenizer = AutoTokenizer.from_pretrained(
+            f"{resolved_model_path}", subfolder="tokenizer", cache_dir=os.environ["HF_HOME"], token=auth_token
+        )
+    else:
+        print("Loading VAE from local...")
+        vae = AutoencoderKL.from_pretrained(
+            os.path.join(resolved_model_path, "vae"), torch_dtype=torch.bfloat16, device_map="cuda"
+        )
+
+        print("Loading Text Encoder from local...")
+        text_encoder = AutoModelForCausalLM.from_pretrained(
+            os.path.join(resolved_model_path, "text_encoder"),
+            torch_dtype=torch.bfloat16,
+            device_map="cuda",
+        ).eval()
+
+        print("Loading Tokenizer from local...")
+        tokenizer = AutoTokenizer.from_pretrained(os.path.join(resolved_model_path, "tokenizer"))
+
+    print("Padding tokenizer...")
+    tokenizer.padding_side = "left"
+
+    if enable_compile:
+        print("Enabling torch.compile optimizations...")
+        torch._inductor.config.conv_1x1_as_mm = True
+        torch._inductor.config.coordinate_descent_tuning = True
+        torch._inductor.config.epilogue_fusion = False
+        torch._inductor.config.coordinate_descent_check_all_directions = True
+        torch._inductor.config.max_autotune_gemm = True
+        torch._inductor.config.max_autotune_gemm_backends = "TRITON,ATEN"
+        torch._inductor.config.triton.cudagraphs = False
+
+    print("Initializing ZImagePipeline...")
+    pipe = ZImagePipeline(scheduler=None, vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, transformer=None)
+
+    if enable_compile:
+        pipe.vae.disable_tiling()
+
+    print("Loading Transformer...")
+    if not os.path.exists(resolved_model_path):
+        transformer = ZImageTransformer2DModel.from_pretrained(
+            f"{resolved_model_path}", subfolder="transformer", cache_dir=os.environ["HF_HOME"], token=auth_token, torch_dtype=torch.bfloat16
+        ).to("cuda")
+    else:
+        transformer = ZImageTransformer2DModel.from_pretrained(os.path.join(resolved_model_path, "transformer"), torch_dtype=torch.bfloat16).to(
+            "cuda"
+        )
+    print("Transformer loaded.")
+
+    pipe.transformer = transformer
+
+    # Try the configured attention backend; fall back to "native" if unavailable
+    effective_backend = attention_backend
+    try:
+        print(f"Setting attention backend: {attention_backend}")
+        pipe.transformer.set_attention_backend(attention_backend)
+        print(f"Attention backend set to: {attention_backend}")
+    except (ValueError, RuntimeError) as e:
+        print(f"Attention backend '{attention_backend}' not available ({e}), falling back to 'native'")
+        effective_backend = "native"
+        pipe.transformer.set_attention_backend("native")
+
+    if enable_compile:
+        print("Compiling transformer...")
+        pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune-no-cudagraphs", fullgraph=False)
+
+    print("Moving pipeline to cuda...")
+    pipe.to("cuda", torch.bfloat16)
+
+    print("Loading Safety Checker...")
+    from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
+    from transformers import CLIPImageProcessor
+
+    safety_model_id = "CompVis/stable-diffusion-safety-checker"
+    safety_feature_extractor = CLIPImageProcessor.from_pretrained(safety_model_id, cache_dir=os.environ["HF_HOME"])
+    safety_checker = StableDiffusionSafetyChecker.from_pretrained(
+        safety_model_id, cache_dir=os.environ["HF_HOME"], torch_dtype=torch.float16
+    ).to("cuda")
+
+    pipe.safety_feature_extractor = safety_feature_extractor
+    pipe.safety_checker = safety_checker
+    print("Done loading models.")
+    return pipe, effective_backend
 
 
-def get_image_duration(prompt_embeds, image_list, width, height, num_inference_steps, guidance_scale, seed, progress=gr.Progress(track_tqdm=True)):
-    """Dynamic GPU duration for FLUX.2-dev based on steps and image count."""
-    num_images = 0 if image_list is None else len(image_list)
-    step_duration = 1 + 0.8 * num_images
-    return max(65, int(num_inference_steps) * step_duration + 10)
+def _is_corrupt_safetensors_error(err):
+    msg = str(err).lower()
+    markers = [
+        "incomplete metadata",
+        "file not fully covered",
+        "error while deserializing header",
+    ]
+    return any(marker in msg for marker in markers)
 
 
-@spaces.GPU(duration=get_image_duration)
+def _clear_remote_model_cache(model_path):
+    # Remove Hub cache and persistent mirrored snapshot for this model ID.
+    if "/" not in model_path:
+        return False
+
+    namespace, repo = model_path.split("/", 1)
+    cache_repo_dir = f"models--{namespace}--{repo}"
+
+    candidates = [
+        os.path.join(os.environ.get("HF_HUB_CACHE", ""), cache_repo_dir),
+        os.path.join(os.environ.get("HF_HOME", ""), "hub", cache_repo_dir),
+        os.path.join(SPACE_DATA_DIR, "models", model_path.replace("/", "--")),
+    ]
+
+    removed = False
+    for candidate in candidates:
+        if candidate and os.path.isdir(candidate):
+            try:
+                shutil.rmtree(candidate)
+                print(f"Removed corrupted model cache: {candidate}")
+                removed = True
+            except OSError as e:
+                print(f"Warning: failed to remove cache '{candidate}': {e}")
+    return removed
+
+
 def generate_image(
-    prompt_embeds,
-    image_list=None,  # Optional: list of PIL images for I2I editing
-    width=1024,
-    height=1024,
-    num_inference_steps=30,
-    guidance_scale=4.0,
-    seed=-1,
-    progress=gr.Progress(track_tqdm=True),
-):
-    """Generate an image with FLUX.2-dev using precomputed prompt embeddings."""
-
-    prompt_embeds = prompt_embeds.to("cuda")
-
-    generator = None
-    if seed >= 0:
-        generator = torch.Generator(device="cuda").manual_seed(seed)
-
-    pipe_kwargs = {
-        "prompt_embeds": prompt_embeds,
-        "num_inference_steps": num_inference_steps,
-        "guidance_scale": guidance_scale,
-        "width": width,
-        "height": height,
-        "generator": generator,
-    }
-
-    # Add reference images for I2I editing if provided
-    if image_list is not None and len(image_list) > 0:
-        pipe_kwargs["image"] = image_list[0]
-
-    result = flux_pipe(**pipe_kwargs)
-    return result.images[0]
-
-
-def infer_image(
+    pipe,
     prompt,
-    input_images=None,
-    seed=-1,
-    randomize_seed=False,
-    width=1024,
-    height=1024,
-    num_inference_steps=30,
-    guidance_scale=4.0,
+    resolution="1024x1024",
+    seed=42,
+    guidance_scale=5.0,
+    num_inference_steps=50,
+    shift=3.0,
+    max_sequence_length=512,
     progress=gr.Progress(track_tqdm=True),
 ):
-    """Orchestrate image generation with remote text encoding + GPU denoising."""
-    if randomize_seed:
-        seed = int(np.random.randint(0, MAX_SEED))
+    width, height = get_resolution(resolution)
 
-    # Clamp dimensions to max size and round to nearest multiple of 8
-    width = max(256, min(MAX_IMAGE_SIZE, round(width / 8) * 8))
-    height = max(256, min(MAX_IMAGE_SIZE, round(height / 8) * 8))
+    generator = torch.Generator("cuda").manual_seed(seed)
 
-    # Step 1: Remote text encode (CPU/network bound)
-    progress(0.08, desc="Encoding prompt...")
-    prompt_embeds = remote_text_encoder(prompt)
+    scheduler = FlowMatchEulerDiscreteScheduler(num_train_timesteps=1000, shift=shift)
+    pipe.scheduler = scheduler
 
-    # Step 2: Prepare image list for I2I editing
-    image_list = None
-    if input_images is not None and len(input_images) > 0:
-        image_list = []
-        for item in input_images:
-            # Gallery returns list of tuples (image, caption) or just images
-            if isinstance(item, tuple):
-                image_list.append(item[0])
-            else:
-                image_list.append(item)
-
-    # Step 3: GPU inference
-    progress(0.2, desc="Generating image...")
-    image = generate_image(
-        prompt_embeds=prompt_embeds,
-        image_list=image_list,
-        width=width,
-        height=height,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
-        seed=int(seed),
-        progress=progress,
-    )
-
-    return image, int(seed)
-
-
-# ---------------------------------------------------------------------------
-# Video generation  (Wan 2.2 I2V A14B) — constants
-# ---------------------------------------------------------------------------
-
-MOD_VALUE = 16
-MIN_FRAMES = 17
-MAX_FRAMES = 81
-FIXED_FPS = 16
-
-DEFAULT_NEGATIVE_PROMPT = (
-    "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，"
-    "整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，"
-    "画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，"
-    "静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
-)
-
-
-def get_video_duration(image, prompt, negative_prompt, width, height, num_frames, guidance_scale, num_inference_steps, seed, progress=gr.Progress(track_tqdm=True)):
-    """Dynamic GPU duration for Wan I2V based on frames and steps.
-    Since text/image encoding is done on CPU, this only accounts for
-    transformer denoising + VAE decode.
-    """
-    # Base: ~3s per step at 480p, scales with resolution and frames
-    factor = (num_frames / 81) * (width * height) / (832 * 480)
-    step_duration = max(3.0, 3.0 * factor)
-    return max(60, int(num_inference_steps * step_duration) + 20)
-
-
-@spaces.GPU(duration=get_video_duration)
-def generate_video_gpu(
-    prompt_embeds,         # Pre-computed on CPU
-    negative_prompt_embeds,  # Pre-computed on CPU
-    image_embeds,          # Pre-computed on CPU
-    resized_image,         # PIL image (needed for VAE conditioning)
-    height,
-    width,
-    num_frames,
-    guidance_scale,
-    num_inference_steps,
-    seed,
-    progress=gr.Progress(track_tqdm=True),
-):
-    """GPU-only video inference with pre-computed embeddings.
-    Only transformer denoising + VAE decoding run on GPU.
-    """
-    # Move pre-computed embeddings to GPU
-    prompt_embeds = prompt_embeds.to("cuda")
-    negative_prompt_embeds = negative_prompt_embeds.to("cuda")
-    image_embeds = image_embeds.to("cuda")
-
-    generator = None
-    if seed >= 0:
-        generator = torch.Generator(device="cuda").manual_seed(seed)
-
-    output = wan_pipe(
-        image=resized_image,
-        prompt=None,    # Using pre-computed prompt_embeds
-        negative_prompt=None,  # Using pre-computed negative_prompt_embeds
-        prompt_embeds=prompt_embeds,
-        negative_prompt_embeds=negative_prompt_embeds,
-        image_embeds=image_embeds,
-        height=height,
-        width=width,
-        num_frames=num_frames,
-        guidance_scale=float(guidance_scale),
-        num_inference_steps=int(num_inference_steps),
-        generator=generator,
-    )
-
-    frames = output.frames[0]
-    out_dir = os.path.join(DATA_DIR, "output") if HAS_PERSISTENT_STORAGE else "/tmp"
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"wan_{os.getpid()}_{seed}.mp4")
-    export_to_video(frames, out_path, fps=FIXED_FPS)
-    return out_path
-
-
-def infer_video(
-    image,
-    prompt,
-    negative_prompt=DEFAULT_NEGATIVE_PROMPT,
-    width=832,
-    height=480,
-    num_frames=81,
-    guidance_scale=3.5,
-    num_inference_steps=40,
-    seed=-1,
-    progress=gr.Progress(track_tqdm=True),
-):
-    """Orchestrate video generation: CPU text/image encoding → GPU inference.
-    Text encoding (T5) and image encoding (CLIP) run on CPU — 0 GPU seconds.
-    Only transformer denoising + VAE decode run on GPU.
-    """
-    if image is None:
-        raise gr.Error("Please upload an input image.")
-
-    # Resize image to valid dimensions
-    target_w = max(MOD_VALUE, (width // MOD_VALUE) * MOD_VALUE)
-    target_h = max(MOD_VALUE, (height // MOD_VALUE) * MOD_VALUE)
-    num_frames = int(np.clip(num_frames, MIN_FRAMES, MAX_FRAMES))
-    resized = image.convert("RGB").resize((target_w, target_h), Image.LANCZOS)
-
-    neg_prompt = negative_prompt or DEFAULT_NEGATIVE_PROMPT
-
-    # Step 1: Encode text on CPU (T5 text encoder) — 0 GPU seconds
-    progress(0.05, desc="Encoding text...")
-    prompt_embeds, negative_prompt_embeds = wan_pipe.encode_prompt(
+    image = pipe(
         prompt=prompt,
-        negative_prompt=neg_prompt,
-        do_classifier_free_guidance=True,
-        num_videos_per_prompt=1,
-        device=torch.device("cpu"),  # Run on CPU — not charged to ZeroGPU
-        dtype=torch.bfloat16,
-    )
-
-    # Step 2: Encode image on CPU (CLIP vision) — 0 GPU seconds
-    progress(0.10, desc="Encoding image...")
-    image_embeds = wan_pipe.encode_image(
-        image=resized,
-        device=torch.device("cpu"),  # Run on CPU — not charged to ZeroGPU
-    )
-
-    # Step 3: GPU inference only (transformer denoising + VAE decode)
-    progress(0.15, desc="Generating video...")
-    video_path = generate_video_gpu(
-        prompt_embeds=prompt_embeds,
-        negative_prompt_embeds=negative_prompt_embeds,
-        image_embeds=image_embeds,
-        resized_image=resized,
-        height=target_h,
-        width=target_w,
-        num_frames=num_frames,
+        height=height,
+        width=width,
         guidance_scale=guidance_scale,
         num_inference_steps=num_inference_steps,
-        seed=int(seed),
-        progress=progress,
+        generator=generator,
+        max_sequence_length=max_sequence_length,
+    ).images[0]
+
+    return image
+
+
+def warmup_model(pipe, resolutions):
+    # On ZeroGPU Spaces, CUDA is only available inside @spaces.GPU functions.
+    # Skip warmup if no CUDA device is available at module level.
+    if not torch.cuda.is_available():
+        print("CUDA not available at module level (ZeroGPU) — skipping warmup.")
+        return
+
+    print("Starting warmup phase...")
+
+    dummy_prompt = "warmup"
+
+    for res_str in resolutions:
+        print(f"Warming up for resolution: {res_str}")
+        try:
+            for i in range(3):
+                generate_image(
+                    pipe,
+                    prompt=dummy_prompt,
+                    resolution=res_str,
+                    num_inference_steps=9,
+                    guidance_scale=0.0,
+                    seed=42 + i,
+                )
+        except Exception as e:
+            print(f"Warmup failed for {res_str}: {e}")
+            break  # Stop warmup after first CUDA error to avoid spam
+
+    print("Warmup completed.")
+
+
+# ==================== Prompt Expander ==================== #
+@dataclass
+class PromptOutput:
+    status: bool
+    prompt: str
+    seed: int
+    system_prompt: str
+    message: str
+
+
+class PromptExpander:
+    def __init__(self, backend="api", **kwargs):
+        self.backend = backend
+
+    def decide_system_prompt(self, template_name=None):
+        return prompt_template
+
+
+class APIPromptExpander(PromptExpander):
+    def __init__(self, api_config=None, **kwargs):
+        super().__init__(backend="api", **kwargs)
+        self.api_config = api_config or {}
+        self.client = self._init_api_client()
+
+    def _init_api_client(self):
+        try:
+            from openai import OpenAI
+
+            api_key = self.api_config.get("api_key") or DASHSCOPE_API_KEY
+            base_url = self.api_config.get("base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+
+            if not api_key:
+                print("Warning: DASHSCOPE_API_KEY not found.")
+                return None
+
+            return OpenAI(api_key=api_key, base_url=base_url)
+        except ImportError:
+            print("Please install openai: pip install openai")
+            return None
+        except Exception as e:
+            print(f"Failed to initialize API client: {e}")
+            return None
+
+    def __call__(self, prompt, system_prompt=None, seed=-1, **kwargs):
+        return self.extend(prompt, system_prompt, seed, **kwargs)
+
+    def extend(self, prompt, system_prompt=None, seed=-1, **kwargs):
+        if self.client is None:
+            return PromptOutput(False, "", seed, system_prompt, "API client not initialized")
+
+        if system_prompt is None:
+            system_prompt = self.decide_system_prompt()
+
+        if "{prompt}" in system_prompt:
+            system_prompt = system_prompt.format(prompt=prompt)
+            prompt = " "
+
+        try:
+            model = self.api_config.get("model", "qwen3-max-preview")
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+                temperature=0.7,
+                top_p=0.8,
+            )
+
+            content = response.choices[0].message.content
+            json_start = content.find("```json")
+            if json_start != -1:
+                json_end = content.find("```", json_start + 7)
+                try:
+                    json_str = content[json_start + 7 : json_end].strip()
+                    data = json.loads(json_str)
+                    expanded_prompt = data.get("revised_prompt", content)
+                except:
+                    expanded_prompt = content
+            else:
+                expanded_prompt = content
+
+            return PromptOutput(
+                status=True, prompt=expanded_prompt, seed=seed, system_prompt=system_prompt, message=content
+            )
+        except Exception as e:
+            return PromptOutput(False, "", seed, system_prompt, str(e))
+
+
+def create_prompt_expander(backend="api", **kwargs):
+    if backend == "api":
+        return APIPromptExpander(**kwargs)
+    raise ValueError("Only 'api' backend is supported.")
+
+
+pipe = None
+prompt_expander = None
+effective_backend = None
+
+
+def init_app():
+    global pipe, prompt_expander, effective_backend
+
+    try:
+        pipe, effective_backend = load_models(MODEL_PATH, enable_compile=ENABLE_COMPILE, attention_backend=ATTENTION_BACKEND)
+        print(f"Model loaded. Compile: {ENABLE_COMPILE}, Backend: {effective_backend}")
+
+        if ENABLE_WARMUP:
+            all_resolutions = []
+            for cat in RES_CHOICES.values():
+                all_resolutions.extend(cat)
+            warmup_model(pipe, all_resolutions)
+
+    except Exception as e:
+        if _is_corrupt_safetensors_error(e):
+            print(f"Detected corrupted model cache during load: {e}")
+            cleared = _clear_remote_model_cache(MODEL_PATH)
+            if cleared:
+                try:
+                    print("Retrying model load after cache cleanup...")
+                    pipe, effective_backend = load_models(
+                        MODEL_PATH, enable_compile=ENABLE_COMPILE, attention_backend=ATTENTION_BACKEND
+                    )
+                    print(f"Model loaded on retry. Compile: {ENABLE_COMPILE}, Backend: {effective_backend}")
+                except Exception as retry_err:
+                    print(f"Retry failed after cache cleanup: {retry_err}")
+                    pipe = None
+            else:
+                print("Corrupted safetensors detected, but no removable remote cache directory was found.")
+                pipe = None
+        else:
+            print(f"Error loading model: {e}")
+            pipe = None
+
+    try:
+        prompt_expander = create_prompt_expander(backend="api", api_config={"model": "qwen3-max-preview"})
+        print("Prompt expander initialized.")
+    except Exception as e:
+        print(f"Error initializing prompt expander: {e}")
+        prompt_expander = None
+
+
+def prompt_enhance(prompt, enable_enhance):
+    if not enable_enhance or not prompt_expander:
+        return prompt, "Enhancement disabled or not available."
+
+    if not prompt.strip():
+        return "", "Please enter a prompt."
+
+    try:
+        result = prompt_expander(prompt)
+        if result.status:
+            return result.prompt, result.message
+        else:
+            return prompt, f"Enhancement failed: {result.message}"
+    except Exception as e:
+        return prompt, f"Error: {str(e)}"
+
+
+@spaces.GPU
+def generate(
+    prompt,
+    resolution="1024x1024 ( 1:1 )",
+    seed=42,
+    steps=9,
+    shift=3.0,
+    random_seed=True,
+    gallery_images=None,
+    enhance=False,
+    progress=gr.Progress(track_tqdm=True),
+):
+    if random_seed:
+        new_seed = random.randint(1, 1000000)
+    else:
+        new_seed = seed if seed != -1 else random.randint(1, 1000000)
+
+    class UnsafeContentError(Exception):
+        pass
+
+    try:
+        if pipe is None:
+            raise gr.Error("Model not loaded.")
+
+        has_unsafe_concept = is_unsafe_prompt(
+            pipe.text_encoder,
+            pipe.tokenizer,
+            system_prompt=UNSAFE_PROMPT_CHECK,
+            user_prompt=prompt,
+            max_new_token=UNSAFE_MAX_NEW_TOKEN,
+        )
+        if has_unsafe_concept:
+            raise UnsafeContentError("Input unsafe")
+
+        final_prompt = prompt
+
+        if enhance:
+            final_prompt, _ = prompt_enhance(prompt, True)
+            print(f"Enhanced prompt: {final_prompt}")
+
+        try:
+            resolution_str = resolution.split(" ")[0]
+        except:
+            resolution_str = "1024x1024"
+
+        image = generate_image(
+            pipe=pipe,
+            prompt=final_prompt,
+            resolution=resolution_str,
+            seed=new_seed,
+            guidance_scale=0.0,
+            num_inference_steps=int(steps + 1),
+            shift=shift,
+        )
+
+        safety_checker_input = pipe.safety_feature_extractor([image], return_tensors="pt").pixel_values.cuda()
+        _, has_nsfw_concept = pipe.safety_checker(images=[torch.zeros(1)], clip_input=safety_checker_input)
+        has_nsfw_concept = has_nsfw_concept[0]
+        if has_nsfw_concept:
+            raise UnsafeContentError("input unsafe")
+
+    except UnsafeContentError:
+        image = Image.open("nsfw.png")
+
+    if gallery_images is None:
+        gallery_images = []
+    gallery_images = [image] + gallery_images
+
+    return gallery_images, str(new_seed), int(new_seed)
+
+
+init_app()
+
+# ==================== AoTI (Ahead of Time Inductor compilation) ==================== #
+# Only load FA3 AoTI blocks when the flash_3/_flash_3 backend is actually available
+if pipe is not None and effective_backend in ("flash_3", "_flash_3"):
+    try:
+        pipe.transformer.layers._repeated_blocks = ["ZImageTransformerBlock"]
+        spaces.aoti_blocks_load(pipe.transformer.layers, "zerogpu-aoti/Z-Image", variant="fa3")
+    except Exception as e:
+        print(f"AoTI blocks load skipped: {e}")
+
+with gr.Blocks(title="Z-Image Demo") as demo:
+    gr.Markdown(
+        """<div align="center">
+
+# Z-Image Generation Demo
+
+[![GitHub](https://img.shields.io/badge/GitHub-Z--Image-181717?logo=github&logoColor=white)](https://github.com/Tongyi-MAI/Z-Image)
+
+*An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer*
+
+</div>"""
     )
 
-    return video_path
+    with gr.Row():
+        with gr.Column(scale=1):
+            prompt_input = gr.Textbox(label="Prompt", lines=3, placeholder="Enter your prompt here...")
 
+            with gr.Row():
+                choices = [int(k) for k in RES_CHOICES.keys()]
+                res_cat = gr.Dropdown(value=1024, choices=choices, label="Resolution Category")
 
-# ---------------------------------------------------------------------------
-# Gradio UI — also exposes API endpoints for programmatic access
-# ---------------------------------------------------------------------------
+                initial_res_choices = RES_CHOICES["1024"]
+                resolution = gr.Dropdown(
+                    value=initial_res_choices[0], choices=RESOLUTION_SET, label="Width x Height (Ratio)"
+                )
 
-with gr.Blocks(title="AI Studio – Image & Video") as demo:
-    gr.Markdown("# AI Studio – FLUX.2-dev Image + Wan 2.2 Video Generation")
+            with gr.Row():
+                seed = gr.Number(label="Seed", value=42, precision=0)
+                random_seed = gr.Checkbox(label="Random Seed", value=True)
 
-    # ── Image Generation Tab ────────────────────────────────────────────
-    with gr.Tab("Image Generation"):
-        with gr.Row():
-            with gr.Column():
-                img_prompt = gr.Textbox(label="Prompt", lines=3)
-                with gr.Accordion("Input image(s) — optional editing", open=False):
-                    img_input_images = gr.Gallery(
-                        label="Reference Images (optional, for editing)",
-                        type="pil",
-                        columns=3,
-                        rows=1,
-                    )
-                img_width = gr.Slider(256, 2048, value=1024, step=8, label="Width")
-                img_height = gr.Slider(256, 2048, value=1024, step=8, label="Height")
-                img_steps = gr.Slider(1, 50, value=30, step=1, label="Steps")
-                img_guidance = gr.Slider(0.0, 10.0, value=4.0, step=0.5, label="Guidance Scale")
-                img_seed = gr.Number(value=-1, label="Seed (-1 = random)", precision=0)
-                img_randomize = gr.Checkbox(label="Randomize seed", value=True)
-                img_btn = gr.Button("Generate Image", variant="primary")
-            with gr.Column():
-                img_output = gr.Image(label="Result", type="pil")
+            with gr.Row():
+                steps = gr.Slider(label="Steps", minimum=1, maximum=100, value=8, step=1, interactive=False)
+                shift = gr.Slider(label="Time Shift", minimum=1.0, maximum=10.0, value=3.0, step=0.1)
 
-        img_btn.click(
-            fn=infer_image,
-            inputs=[
-                img_prompt,
-                img_input_images,
-                img_seed,
-                img_randomize,
-                img_width,
-                img_height,
-                img_steps,
-                img_guidance,
-            ],
-            outputs=[img_output, img_seed],
-            api_name="infer",
-        )
+            generate_btn = gr.Button("Generate", variant="primary")
 
-    # ── Video Generation Tab ────────────────────────────────────────────
-    with gr.Tab("Video Generation (I2V)"):
-        with gr.Row():
-            with gr.Column():
-                vid_image = gr.Image(label="Input Image", type="pil")
-                vid_prompt = gr.Textbox(label="Prompt", lines=3)
-                vid_neg = gr.Textbox(label="Negative Prompt", value=DEFAULT_NEGATIVE_PROMPT, lines=2)
-                vid_width = gr.Slider(256, 1280, value=832, step=16, label="Width")
-                vid_height = gr.Slider(256, 720, value=480, step=16, label="Height")
-                vid_frames = gr.Slider(17, 81, value=81, step=4, label="Frames")
-                vid_guidance = gr.Slider(0.0, 10.0, value=3.5, step=0.5, label="Guidance Scale")
-                vid_steps = gr.Slider(1, 50, value=40, step=1, label="Steps")
-                vid_seed = gr.Number(value=-1, label="Seed (-1 = random)", precision=0)
-                vid_btn = gr.Button("Generate Video", variant="primary")
-            with gr.Column():
-                vid_output = gr.Video(label="Result")
+            gr.Markdown("### 📝 Example Prompts")
+            gr.Examples(examples=EXAMPLE_PROMPTS, inputs=prompt_input, label=None)
 
-        vid_btn.click(
-            fn=infer_video,
-            inputs=[
-                vid_image,
-                vid_prompt,
-                vid_neg,
-                vid_width,
-                vid_height,
-                vid_frames,
-                vid_guidance,
-                vid_steps,
-                vid_seed,
-            ],
-            outputs=vid_output,
-            api_name="generate_video",
-        )
+        with gr.Column(scale=1):
+            output_gallery = gr.Gallery(
+                label="Generated Images",
+                columns=2,
+                rows=2,
+                height=600,
+                object_fit="contain",
+                format="png",
+                interactive=False,
+            )
+            used_seed = gr.Textbox(label="Seed Used", interactive=False)
 
-demo.launch()
+    def update_res_choices(_res_cat):
+        if str(_res_cat) in RES_CHOICES:
+            res_choices = RES_CHOICES[str(_res_cat)]
+        else:
+            res_choices = RES_CHOICES["1024"]
+        return gr.update(value=res_choices[0], choices=res_choices)
+
+    res_cat.change(update_res_choices, inputs=res_cat, outputs=resolution, api_visibility="private")
+
+    generate_btn.click(
+        generate,
+        inputs=[prompt_input, resolution, seed, steps, shift, random_seed, output_gallery],
+        outputs=[output_gallery, used_seed, seed],
+        api_visibility="public",
+    )
+
+    css = """
+    .fillable{max-width: 1230px !important}
+    """
+    if __name__ == "__main__":
+        demo.launch(css=css)

@@ -31,6 +31,48 @@ const generateImageId = () =>
 // LocalStorage keys for image page model persistence
 const IMAGE_SELECTED_MODEL_KEY = "blackbox_ai_image_selected_model";
 const IMAGE_SELECTED_PROVIDER_KEY = "blackbox_ai_image_selected_provider";
+const IMAGE_HF_MODE_KEY = "blackbox_ai_image_hf_mode";
+const IMAGE_HF_SPACE_TARGET_KEY = "blackbox_ai_image_hf_space_target";
+const IMAGE_HF_CUSTOM_SPACE_KEY = "blackbox_ai_image_hf_custom_space";
+const PUBLIC_TONGYI_SPACE_ID = "mrfakename/Z-Image-Turbo";
+
+const toHuggingFaceSpacePageUrl = (spaceValue) => {
+  const raw = String(spaceValue || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://huggingface.co/spaces/${raw}`;
+};
+
+const parseSizeToDimensions = (rawSize, fallbackWidth = 1024, fallbackHeight = 1024) => {
+  const match = String(rawSize || "").match(/(\d+)\s*x\s*(\d+)/i);
+  if (!match) {
+    return { width: fallbackWidth, height: fallbackHeight };
+  }
+
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  return {
+    width: Number.isFinite(width) ? width : fallbackWidth,
+    height: Number.isFinite(height) ? height : fallbackHeight,
+  };
+};
+
+const reduceRatio = (w, h) => {
+  const a = Math.max(1, Math.round(Number(w) || 1));
+  const b = Math.max(1, Math.round(Number(h) || 1));
+  const gcd = (x, y) => (y === 0 ? x : gcd(y, x % y));
+  const d = gcd(a, b);
+  return `${Math.round(a / d)}:${Math.round(b / d)}`;
+};
+
+const buildWxHSize = (width, height) =>
+  `${Math.round(Number(width) || 1024)}x${Math.round(Number(height) || 1024)}`;
+
+const buildTongyiResolution = (width, height) => {
+  const w = Math.round(Number(width) || 1024);
+  const h = Math.round(Number(height) || 1024);
+  return `${w}x${h} ( ${reduceRatio(w, h)} )`;
+};
 
 export default function ImageGenerator() {
   const navigate = useNavigate();
@@ -116,6 +158,8 @@ export default function ImageGenerator() {
   const [hunyuanParams, setHunyuanParams] = useState({
     seed: "",
     size: "1024x1024",
+    width: 1024,
+    height: 1024,
     steps: 20,
   });
   const [qwenImageParams, setQwenImageParams] = useState({
@@ -135,6 +179,15 @@ export default function ImageGenerator() {
     width: 1024,
     height: 1024,
   });
+  const [tongyiParams, setTongyiParams] = useState({
+    size: "1024x1024 ( 1:1 )",
+    width: 1024,
+    height: 1024,
+    seed: 42,
+    randomSeed: true,
+    steps: 8,
+    shift: 3,
+  });
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [cloudFilter, setCloudFilter] = useState("all");
@@ -142,6 +195,16 @@ export default function ImageGenerator() {
     () => localStorage.getItem(IMAGE_SELECTED_PROVIDER_KEY) || "",
   );
   const [isLocalModelSelected, setIsLocalModelSelected] = useState(false);
+  const [hfMode, setHfMode] = useState(
+    () => localStorage.getItem(IMAGE_HF_MODE_KEY) || "inference",
+  );
+  const [hfSpaceTarget, setHfSpaceTarget] = useState(
+    () => localStorage.getItem(IMAGE_HF_SPACE_TARGET_KEY) || "public",
+  );
+  const [hfCustomSpace, setHfCustomSpace] = useState(
+    () => localStorage.getItem(IMAGE_HF_CUSTOM_SPACE_KEY) || "",
+  );
+  const [spaceUrlCopied, setSpaceUrlCopied] = useState(false);
   const searchInputRef = useRef(null);
   const abortControllerRef = useRef(null);
 
@@ -352,6 +415,18 @@ export default function ImageGenerator() {
     }
   }, [configuredProviderFilter]);
 
+  useEffect(() => {
+    localStorage.setItem(IMAGE_HF_MODE_KEY, hfMode);
+  }, [hfMode]);
+
+  useEffect(() => {
+    localStorage.setItem(IMAGE_HF_SPACE_TARGET_KEY, hfSpaceTarget);
+  }, [hfSpaceTarget]);
+
+  useEffect(() => {
+    localStorage.setItem(IMAGE_HF_CUSTOM_SPACE_KEY, hfCustomSpace);
+  }, [hfCustomSpace]);
+
   // Load prompt data from selected job
   useEffect(() => {
     if (selectedJob && selectedJob.type === "image") {
@@ -418,9 +493,16 @@ export default function ImageGenerator() {
             metadata.hunyuanParams &&
             typeof metadata.hunyuanParams === "object"
           ) {
+            const sizeFromMeta =
+              metadata.hunyuanParams.size ||
+              buildWxHSize(metadata.hunyuanParams.width, metadata.hunyuanParams.height);
+            const dims = parseSizeToDimensions(sizeFromMeta, 1024, 1024);
             setHunyuanParams((prev) => ({
               ...prev,
               ...metadata.hunyuanParams,
+              size: sizeFromMeta,
+              width: Number(metadata.hunyuanParams.width) || dims.width,
+              height: Number(metadata.hunyuanParams.height) || dims.height,
             }));
           }
 
@@ -443,6 +525,42 @@ export default function ImageGenerator() {
 
           if (typeof metadata.customParamsText === "string") {
             setCustomParamsText(metadata.customParamsText);
+          }
+
+          if (
+            metadata.tongyiParams &&
+            typeof metadata.tongyiParams === "object"
+          ) {
+            const sizeFromMeta =
+              metadata.tongyiParams.size ||
+              metadata.tongyiParams.resolution ||
+              buildTongyiResolution(metadata.tongyiParams.width, metadata.tongyiParams.height);
+            const dims = parseSizeToDimensions(sizeFromMeta, 1024, 1024);
+            setTongyiParams((prev) => ({
+              ...prev,
+              ...metadata.tongyiParams,
+              size: sizeFromMeta,
+              width: Number(metadata.tongyiParams.width) || dims.width,
+              height: Number(metadata.tongyiParams.height) || dims.height,
+            }));
+          }
+
+          if (
+            typeof metadata.hfMode === "string" &&
+            ["inference", "space"].includes(metadata.hfMode)
+          ) {
+            setHfMode(metadata.hfMode);
+          }
+
+          if (
+            typeof metadata.hfSpaceTarget === "string" &&
+            ["public", "custom"].includes(metadata.hfSpaceTarget)
+          ) {
+            setHfSpaceTarget(metadata.hfSpaceTarget);
+          }
+
+          if (typeof metadata.hfCustomSpace === "string") {
+            setHfCustomSpace(metadata.hfCustomSpace);
           }
         }
       } else {
@@ -496,9 +614,16 @@ export default function ImageGenerator() {
             metadata.hunyuanParams &&
             typeof metadata.hunyuanParams === "object"
           ) {
+            const sizeFromMeta =
+              metadata.hunyuanParams.size ||
+              buildWxHSize(metadata.hunyuanParams.width, metadata.hunyuanParams.height);
+            const dims = parseSizeToDimensions(sizeFromMeta, 1024, 1024);
             setHunyuanParams((prev) => ({
               ...prev,
               ...metadata.hunyuanParams,
+              size: sizeFromMeta,
+              width: Number(metadata.hunyuanParams.width) || dims.width,
+              height: Number(metadata.hunyuanParams.height) || dims.height,
             }));
           }
 
@@ -521,6 +646,42 @@ export default function ImageGenerator() {
 
           if (typeof metadata.customParamsText === "string") {
             setCustomParamsText(metadata.customParamsText);
+          }
+
+          if (
+            metadata.tongyiParams &&
+            typeof metadata.tongyiParams === "object"
+          ) {
+            const sizeFromMeta =
+              metadata.tongyiParams.size ||
+              metadata.tongyiParams.resolution ||
+              buildTongyiResolution(metadata.tongyiParams.width, metadata.tongyiParams.height);
+            const dims = parseSizeToDimensions(sizeFromMeta, 1024, 1024);
+            setTongyiParams((prev) => ({
+              ...prev,
+              ...metadata.tongyiParams,
+              size: sizeFromMeta,
+              width: Number(metadata.tongyiParams.width) || dims.width,
+              height: Number(metadata.tongyiParams.height) || dims.height,
+            }));
+          }
+
+          if (
+            typeof metadata.hfMode === "string" &&
+            ["inference", "space"].includes(metadata.hfMode)
+          ) {
+            setHfMode(metadata.hfMode);
+          }
+
+          if (
+            typeof metadata.hfSpaceTarget === "string" &&
+            ["public", "custom"].includes(metadata.hfSpaceTarget)
+          ) {
+            setHfSpaceTarget(metadata.hfSpaceTarget);
+          }
+
+          if (typeof metadata.hfCustomSpace === "string") {
+            setHfCustomSpace(metadata.hfCustomSpace);
           }
         }
 
@@ -595,6 +756,8 @@ export default function ImageGenerator() {
     const effectiveProvider = isLocalModelSelected
       ? "ollama"
       : configuredProviderFilter || selectedModelInfo?.provider;
+    const isHuggingFaceSelection =
+      !isLocalModelSelected && effectiveProvider === "huggingface";
 
     if ((!selectedModelInfo && !isLocalModelSelected) || !effectiveProvider) {
       setLocalError("Please select a gateway and model first");
@@ -673,7 +836,8 @@ export default function ImageGenerator() {
       }
 
       const normalizedSize =
-        String(hunyuanParams.size || "").trim() || "1024x1024";
+        String(hunyuanParams.size || "").trim() ||
+        buildWxHSize(hunyuanParams.width, hunyuanParams.height);
 
       const sizePattern = /^(auto|\d+x\d+|\d+:\d+|\d+)$/i;
       if (!sizePattern.test(normalizedSize)) {
@@ -690,7 +854,9 @@ export default function ImageGenerator() {
     const hunyuanInputArgs = isHunyuanImage3
       ? {
           prompt,
-          size: String(hunyuanParams.size || "").trim() || "1024x1024",
+          size:
+            String(hunyuanParams.size || "").trim() ||
+            buildWxHSize(hunyuanParams.width, hunyuanParams.height),
           steps: Number(hunyuanParams.steps),
           seed:
             hunyuanParams.seed === "" || hunyuanParams.seed == null
@@ -791,6 +957,10 @@ export default function ImageGenerator() {
 
     // Prepare job parameters
     const imageId = generateImageId();
+    const normalizedHfModelId = String(selectedModelInfo?.id || "").replace(
+      /^huggingface\//i,
+      "",
+    );
     const jobParams = {
       prompt,
       model: modelIdToSend,
@@ -839,6 +1009,37 @@ export default function ImageGenerator() {
           ...zImageExtraParams,
           ...parsedCustomParams,
         },
+        hfModel: isHuggingFaceSelection ? normalizedHfModelId : undefined,
+        resolution: isTongyiZImageTurbo
+          ? buildTongyiResolution(tongyiParams.width, tongyiParams.height)
+          : undefined,
+        seed: isTongyiZImageTurbo ? Number(tongyiParams.seed) : undefined,
+        steps: isTongyiZImageTurbo ? Number(tongyiParams.steps) : undefined,
+        shift: isTongyiZImageTurbo ? Number(tongyiParams.shift) : undefined,
+        random_seed: isTongyiZImageTurbo ? Boolean(tongyiParams.randomSeed) : undefined,
+        tongyiParams: isTongyiZImageTurbo
+          ? {
+              size: buildTongyiResolution(tongyiParams.width, tongyiParams.height),
+              width: Number(tongyiParams.width),
+              height: Number(tongyiParams.height),
+              seed: Number(tongyiParams.seed),
+              steps: Number(tongyiParams.steps),
+              shift: Number(tongyiParams.shift),
+              random_seed: Boolean(tongyiParams.randomSeed),
+            }
+          : undefined,
+        hfMode: isHuggingFaceSelection ? hfMode : undefined,
+        hfSpaceTarget:
+          isTongyiZImageTurbo && isHuggingFaceSelection && hfMode === "space"
+            ? hfSpaceTarget
+            : undefined,
+        hfCustomSpace:
+          isTongyiZImageTurbo &&
+          isHuggingFaceSelection &&
+          hfMode === "space" &&
+          hfSpaceTarget === "custom"
+            ? hfCustomSpace.trim()
+            : undefined,
       },
       metadata: {
         modelKey: selectedModelInfo?.modelKey || selectedModel,
@@ -848,7 +1049,14 @@ export default function ImageGenerator() {
         height,
         hunyuanParams:
           selectedModelInfo?.id === "chutes/hunyuan-image-3"
-            ? { ...hunyuanParams }
+            ? {
+                ...hunyuanParams,
+                size:
+                  String(hunyuanParams.size || "").trim() ||
+                  buildWxHSize(hunyuanParams.width, hunyuanParams.height),
+                width: Number(hunyuanParams.width),
+                height: Number(hunyuanParams.height),
+              }
             : undefined,
         qwenImageParams:
           selectedModelInfo?.id === "chutes/Qwen-Image-2512"
@@ -857,6 +1065,29 @@ export default function ImageGenerator() {
         zImageParams:
           selectedModelInfo?.id === "chutes/z-image-turbo"
             ? { ...zImageParams }
+            : undefined,
+        tongyiParams: isTongyiZImageTurbo
+          ? {
+              size: buildTongyiResolution(tongyiParams.width, tongyiParams.height),
+              width: Number(tongyiParams.width),
+              height: Number(tongyiParams.height),
+              seed: Number(tongyiParams.seed),
+              steps: Number(tongyiParams.steps),
+              shift: Number(tongyiParams.shift),
+              randomSeed: Boolean(tongyiParams.randomSeed),
+            }
+          : undefined,
+        hfMode: isHuggingFaceSelection ? hfMode : undefined,
+        hfSpaceTarget:
+          isTongyiZImageTurbo && isHuggingFaceSelection && hfMode === "space"
+            ? hfSpaceTarget
+            : undefined,
+        hfCustomSpace:
+          isTongyiZImageTurbo &&
+          isHuggingFaceSelection &&
+          hfMode === "space" &&
+          hfSpaceTarget === "custom"
+            ? hfCustomSpace.trim()
             : undefined,
         customParamsText: customParamsText || "",
       },
@@ -972,9 +1203,16 @@ export default function ImageGenerator() {
           metadata.hunyuanParams &&
           typeof metadata.hunyuanParams === "object"
         ) {
+          const sizeFromMeta =
+            metadata.hunyuanParams.size ||
+            buildWxHSize(metadata.hunyuanParams.width, metadata.hunyuanParams.height);
+          const dims = parseSizeToDimensions(sizeFromMeta, 1024, 1024);
           setHunyuanParams((prev) => ({
             ...prev,
             ...metadata.hunyuanParams,
+            size: sizeFromMeta,
+            width: Number(metadata.hunyuanParams.width) || dims.width,
+            height: Number(metadata.hunyuanParams.height) || dims.height,
           }));
         }
 
@@ -1001,6 +1239,42 @@ export default function ImageGenerator() {
         if (typeof metadata.customParamsText === "string") {
           setCustomParamsText(metadata.customParamsText);
         }
+
+        if (
+          metadata.tongyiParams &&
+          typeof metadata.tongyiParams === "object"
+        ) {
+          const sizeFromMeta =
+            metadata.tongyiParams.size ||
+            metadata.tongyiParams.resolution ||
+            buildTongyiResolution(metadata.tongyiParams.width, metadata.tongyiParams.height);
+          const dims = parseSizeToDimensions(sizeFromMeta, 1024, 1024);
+          setTongyiParams((prev) => ({
+            ...prev,
+            ...metadata.tongyiParams,
+            size: sizeFromMeta,
+            width: Number(metadata.tongyiParams.width) || dims.width,
+            height: Number(metadata.tongyiParams.height) || dims.height,
+          }));
+        }
+
+        if (
+          typeof metadata.hfMode === "string" &&
+          ["inference", "space"].includes(metadata.hfMode)
+        ) {
+          setHfMode(metadata.hfMode);
+        }
+
+        if (
+          typeof metadata.hfSpaceTarget === "string" &&
+          ["public", "custom"].includes(metadata.hfSpaceTarget)
+        ) {
+          setHfSpaceTarget(metadata.hfSpaceTarget);
+        }
+
+        if (typeof metadata.hfCustomSpace === "string") {
+          setHfCustomSpace(metadata.hfCustomSpace);
+        }
       } else {
         setNegativePrompt("");
         setWidth(1024);
@@ -1009,6 +1283,8 @@ export default function ImageGenerator() {
         setHunyuanParams({
           seed: "",
           size: "1024x1024",
+          width: 1024,
+          height: 1024,
           steps: 20,
         });
         setQwenImageParams({
@@ -1026,6 +1302,16 @@ export default function ImageGenerator() {
           maxSequenceLength: 512,
           numInferenceSteps: 50,
         });
+        setTongyiParams({
+          size: "1024x1024 ( 1:1 )",
+          width: 1024,
+          height: 1024,
+          seed: 42,
+          randomSeed: true,
+          steps: 8,
+          shift: 3,
+        });
+        // Keep persisted HuggingFace mode/Space target preferences.
 
         if (
           resolvedModelKey === "chutes/hunyuan-image-3" ||
@@ -1034,6 +1320,8 @@ export default function ImageGenerator() {
           setHunyuanParams((prev) => ({
             ...prev,
             size: "1024x1024",
+            width: 1024,
+            height: 1024,
             steps: 20,
           }));
         }
@@ -1135,9 +1423,34 @@ export default function ImageGenerator() {
   const selectedModelInfo = availableModels.find(
     (m) => m.modelKey === selectedModel,
   );
+  const isTongyiZImageTurbo =
+    selectedModelInfo?.id === "huggingface/Tongyi-MAI/Z-Image-Turbo";
+  const selectedProviderForModel =
+    selectedModelInfo?.configuredProvider ||
+    selectedModelInfo?.provider ||
+    configuredProviderFilter ||
+    "";
+  const isHuggingFaceSelection =
+    !isLocalModelSelected && selectedProviderForModel === "huggingface";
   const selectedModelHints = selectedModelInfo
     ? modelParameterHints[selectedModelInfo.id]
     : null;
+  const activeTongyiSpaceValue =
+    hfSpaceTarget === "custom" && hfCustomSpace.trim()
+      ? hfCustomSpace.trim()
+      : PUBLIC_TONGYI_SPACE_ID;
+  const activeTongyiSpaceUrl = toHuggingFaceSpacePageUrl(activeTongyiSpaceValue);
+
+  const handleCopyTongyiSpaceUrl = useCallback(async () => {
+    if (!activeTongyiSpaceUrl) return;
+    try {
+      await navigator.clipboard.writeText(activeTongyiSpaceUrl);
+      setSpaceUrlCopied(true);
+      setTimeout(() => setSpaceUrlCopied(false), 1200);
+    } catch {
+      setSpaceUrlCopied(false);
+    }
+  }, [activeTongyiSpaceUrl]);
 
   // Unified params for ImagePresetPanel
   const imageParams = useMemo(() => {
@@ -1145,12 +1458,14 @@ export default function ImageGenerator() {
     if (modelId === "chutes/z-image-turbo") return zImageParams;
     if (modelId === "chutes/hunyuan-image-3") return hunyuanParams;
     if (modelId === "chutes/Qwen-Image-2512") return qwenImageParams;
+    if (modelId === "huggingface/Tongyi-MAI/Z-Image-Turbo") return tongyiParams;
     return { width, height, steps, guidanceScale, negativePrompt };
   }, [
     selectedModelInfo?.id,
     zImageParams,
     hunyuanParams,
     qwenImageParams,
+    tongyiParams,
     width,
     height,
     steps,
@@ -1167,9 +1482,19 @@ export default function ImageGenerator() {
       if (modelId === "chutes/z-image-turbo") {
         setZImageParams(newParams);
       } else if (modelId === "chutes/hunyuan-image-3") {
-        setHunyuanParams(newParams);
+        setHunyuanParams({
+          ...newParams,
+          size:
+            String(newParams.size || "").trim() ||
+            buildWxHSize(newParams.width, newParams.height),
+        });
       } else if (modelId === "chutes/Qwen-Image-2512") {
         setQwenImageParams(newParams);
+      } else if (modelId === "huggingface/Tongyi-MAI/Z-Image-Turbo") {
+        setTongyiParams({
+          ...newParams,
+          size: buildTongyiResolution(newParams.width, newParams.height),
+        });
       } else {
         if (newParams.width !== undefined) setWidth(newParams.width);
         if (newParams.height !== undefined) setHeight(newParams.height);
@@ -1399,6 +1724,111 @@ export default function ImageGenerator() {
         <div className="w-full lg:w-[45%] flex flex-col border-r border-gray-700">
           <div className="flex-1 overflow-y-auto p-4">
             <div className="space-y-4">
+              {isHuggingFaceSelection && (
+                <div className="p-3 bg-gray-800 rounded-lg space-y-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    HuggingFace Mode
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setHfMode("inference")}
+                      className={`px-3 py-1.5 rounded text-xs border transition-colors ${
+                        hfMode === "inference"
+                          ? "bg-indigo-600/30 text-indigo-100 border-indigo-400/50"
+                          : "bg-gray-700 text-gray-300 border-gray-600"
+                      }`}
+                    >
+                      Inference API
+                    </button>
+                    <button
+                      onClick={() => setHfMode("space")}
+                      className={`px-3 py-1.5 rounded text-xs border transition-colors ${
+                        hfMode === "space"
+                          ? "bg-indigo-600/30 text-indigo-100 border-indigo-400/50"
+                          : "bg-gray-700 text-gray-300 border-gray-600"
+                      }`}
+                    >
+                      Space API
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Manual selection only. No automatic fallback.
+                  </p>
+
+                  {isTongyiZImageTurbo && hfMode === "space" && (
+                    <div className="pt-2 border-t border-gray-700 space-y-2">
+                      <label className="block text-xs font-medium text-gray-300">
+                        Tongyi Space Target
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setHfSpaceTarget("public")}
+                          className={`px-3 py-1.5 rounded text-xs border transition-colors ${
+                            hfSpaceTarget === "public"
+                              ? "bg-emerald-600/30 text-emerald-100 border-emerald-400/50"
+                              : "bg-gray-700 text-gray-300 border-gray-600"
+                          }`}
+                        >
+                          Public Space
+                        </button>
+                        <button
+                          onClick={() => setHfSpaceTarget("custom")}
+                          className={`px-3 py-1.5 rounded text-xs border transition-colors ${
+                            hfSpaceTarget === "custom"
+                              ? "bg-emerald-600/30 text-emerald-100 border-emerald-400/50"
+                              : "bg-gray-700 text-gray-300 border-gray-600"
+                          }`}
+                        >
+                          My Space
+                        </button>
+                      </div>
+
+                      {hfSpaceTarget === "custom" && (
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Space ID or URL
+                          </label>
+                          <input
+                            type="text"
+                            value={hfCustomSpace}
+                            onChange={(e) => setHfCustomSpace(e.target.value)}
+                            placeholder="username/your-z-image-space or https://...hf.space"
+                            className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+                      )}
+
+                      <div className="text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5 space-y-1">
+                        <div>
+                          {hfSpaceTarget === "custom"
+                            ? `Using custom space: ${hfCustomSpace || "(not set)"}`
+                            : `Using public space: ${PUBLIC_TONGYI_SPACE_ID}`}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={activeTongyiSpaceUrl || "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 truncate text-cyan-300 hover:text-cyan-200 underline"
+                            title={activeTongyiSpaceUrl}
+                          >
+                            {activeTongyiSpaceUrl || "No Space URL set"}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={handleCopyTongyiSpaceUrl}
+                            disabled={!activeTongyiSpaceUrl}
+                            className="px-2 py-1 rounded border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {spaceUrlCopied ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Prompt */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -1413,7 +1843,6 @@ export default function ImageGenerator() {
                 />
               </div>
 
-              {/* Image Preset Panel */}
               <ImagePresetPanel
                 modelId={selectedModelInfo?.id || "default"}
                 params={imageParams}

@@ -389,7 +389,7 @@ export default function MusicGenerator() {
     syncServerJobs();
 
     if (!shouldPollServerJobs) return;
-    const pollInterval = setInterval(syncServerJobs, 10000);
+    const pollInterval = setInterval(syncServerJobs, 3000);
     return () => clearInterval(pollInterval);
   }, [shouldPollServerJobs, selectedRunningJobId]);
 
@@ -694,6 +694,12 @@ export default function MusicGenerator() {
       });
 
       if (serverResult.success && serverResult.job) {
+        // Optimistically add job to local state so it appears instantly
+        setServerJobs((prev) => {
+          const exists = prev.some((j) => j.id === serverResult.job.id);
+          if (exists) return prev;
+          return [...prev, { ...serverResult.job, status: mapServerStatus(serverResult.job.status) }];
+        });
         setSelectedRunningJobId(serverResult.job.id);
       } else {
         throw new Error(serverResult.error || "Failed to enqueue job");

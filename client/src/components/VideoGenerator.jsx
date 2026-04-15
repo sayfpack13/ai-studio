@@ -357,7 +357,7 @@ export default function VideoGenerator() {
     // Keep polling only when there is an active/selected video job
     if (!shouldPollServerJobs) return;
 
-    const pollInterval = setInterval(syncServerJobs, 10000);
+    const pollInterval = setInterval(syncServerJobs, 3000);
 
     return () => clearInterval(pollInterval);
   }, [shouldPollServerJobs, selectedRunningJobId]);
@@ -1138,8 +1138,12 @@ export default function VideoGenerator() {
       });
 
       if (serverResult.success && serverResult.job) {
-        // Don't create client-side job - just track the server job ID directly
-        // The polling will sync the server job status
+        // Optimistically add job to local state so it appears instantly
+        setServerJobs((prev) => {
+          const exists = prev.some((j) => j.id === serverResult.job.id);
+          if (exists) return prev;
+          return [...prev, { ...serverResult.job, status: mapServerStatus(serverResult.job.status) }];
+        });
         setSelectedRunningJobId(serverResult.job.id);
       } else {
         throw new Error(serverResult.error || "Failed to enqueue job");

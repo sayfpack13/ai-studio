@@ -1,6 +1,111 @@
 {
-  "updatedAt": "2026-04-15T21:16:06.732Z",
+  "updatedAt": "2026-04-15T21:26:27.341Z",
   "jobs": [
+    {
+      "id": "audio_1776288375495_d268ec1fabb9",
+      "type": "audio",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "mode": "text_to_audio",
+        "prompt": "fart sound",
+        "negativePrompt": "music",
+        "seed": -1,
+        "numSteps": 25,
+        "cfgStrength": 4.5,
+        "duration": 4,
+        "provider": "huggingface",
+        "modelKey": "huggingface/hkchengrex/MMAudio",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": ""
+      },
+      "metadata": {
+        "audioId": "aud_1776288375481_1vats7nc1",
+        "modelKey": "huggingface/hkchengrex/MMAudio",
+        "provider": "huggingface",
+        "mode": "text_to_audio",
+        "providerId": "huggingface",
+        "model": null,
+        "promptPreview": "fart sound",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": {
+          "url": "/uploads/audio_text_1776288387329_3c6491a9cae3.wav",
+          "mode": "text_to_audio",
+          "prompt": "fart sound",
+          "seed": -1
+        }
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T21:26:15.495Z",
+      "updatedAt": "2026-04-15T21:26:27.334Z",
+      "startedAt": "2026-04-15T21:26:15.500Z",
+      "completedAt": "2026-04-15T21:26:27.334Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T21:26:15.495Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T21:26:15.500Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T21:26:15.504Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T21:26:15.512Z",
+          "event": "progress",
+          "details": {
+            "stage": "generating_audio"
+          }
+        },
+        {
+          "at": "2026-04-15T21:26:24.225Z",
+          "event": "progress",
+          "details": {
+            "stage": "downloading_result"
+          }
+        },
+        {
+          "at": "2026-04-15T21:26:27.330Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T21:26:27.334Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "audio_1776287690063_61998d19450b",
       "type": "audio",

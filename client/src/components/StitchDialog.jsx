@@ -265,7 +265,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search videos..."
-                  className="w-full bg-gray-800 text-white pl-3 pr-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-gray-800 text-white pl-3 pr-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
 
@@ -283,7 +283,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                         key={video.id}
                         className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${
                           isPreviewing
-                            ? "bg-indigo-900/40 ring-1 ring-indigo-500/50"
+                            ? "bg-purple-900/40 ring-1 ring-purple-500/50"
                             : isSelected
                               ? "bg-gray-800/50 opacity-50"
                               : "bg-gray-800 hover:bg-gray-700"
@@ -307,7 +307,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                             className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ${isPreviewing ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}
                           >
                             <Play
-                              className={`w-4 h-4 ${isPreviewing ? "text-indigo-400" : "text-white"}`}
+                              className={`w-4 h-4 ${isPreviewing ? "text-purple-400" : "text-white"}`}
                             />
                           </div>
                         </button>
@@ -332,7 +332,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                           }
                         >
                           {isSelected ? (
-                            <Check className="w-4 h-4 text-indigo-400" />
+                            <Check className="w-4 h-4 text-purple-400" />
                           ) : (
                             <Plus className="w-4 h-4 text-gray-500 hover:text-white" />
                           )}
@@ -381,7 +381,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                         key={`${clip.id}-${index}`}
                         className={`flex items-center gap-2 p-2 rounded-lg group ${
                           isPreviewing
-                            ? "bg-indigo-900/40 ring-1 ring-indigo-500/50"
+                            ? "bg-purple-900/40 ring-1 ring-purple-500/50"
                             : "bg-gray-800"
                         }`}
                       >
@@ -405,7 +405,7 @@ export default function StitchDialog({ open, onClose, onStitchComplete }) {
                             className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ${isPreviewing ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}
                           >
                             <Play
-                              className={`w-3 h-3 ${isPreviewing ? "text-indigo-400" : "text-white"}`}
+                              className={`w-3 h-3 ${isPreviewing ? "text-purple-400" : "text-white"}`}
                             />
                           </div>
                         </button>

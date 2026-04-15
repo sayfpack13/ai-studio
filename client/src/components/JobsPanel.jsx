@@ -20,12 +20,14 @@ const TYPE_ROUTES = {
   image: "/image",
   video: "/video",
   music: "/music",
+  audio: "/music",
 };
 
 const TYPE_ICONS = {
   image: Image,
   video: Video,
   music: Music,
+  audio: Music,
 };
 
 const STATUS_CONFIG = {

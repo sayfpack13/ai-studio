@@ -65,7 +65,7 @@ export default function LibraryLinkPanel() {
         >
           <span className="flex items-center gap-2">
             <svg
-              className="w-4 h-4 text-indigo-400"
+              className="w-4 h-4 text-purple-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -84,7 +84,7 @@ export default function LibraryLinkPanel() {
       </div>
 
       <div className="pt-2 border-t border-gray-800">
-        <label className="flex items-center justify-center w-full px-3 py-2 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-lg text-sm cursor-pointer transition-colors">
+        <label className="flex items-center justify-center w-full px-3 py-2 bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 hover:text-purple-300 border border-purple-500/30 rounded-lg text-sm cursor-pointer transition-colors">
           <svg
             className="w-4 h-4 mr-2"
             fill="none"

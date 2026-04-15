@@ -6,7 +6,7 @@ import { listMyChutes } from "./chutes-bridge.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const CATEGORIES = new Set(["chat", "image", "video", "vision", "music"]);
+const CATEGORIES = new Set(["chat", "image", "video", "vision", "music", "audio"]);
 
 const GATEWAY_PREFIXES = new Set([
   "blackboxai",
@@ -94,6 +94,13 @@ function inferAdditionalCategories(modelId) {
 
   if (
     normalized.includes("audio") ||
+    normalized.includes("mmaudio") ||
+    normalized.includes("sound")
+  ) {
+    inferred.add("audio");
+  }
+
+  if (
     normalized.includes("music") ||
     normalized.includes("tts") ||
     normalized.includes("speech")

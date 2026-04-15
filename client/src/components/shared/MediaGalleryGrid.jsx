@@ -283,7 +283,7 @@ export default function MediaGalleryGrid({
                 <div className="absolute top-2 right-2 flex gap-1.5">
                   <button
                     onClick={(e) => handleDownload(e, item)}
-                    className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-indigo-200 hover:border-indigo-500/60 hover:bg-indigo-600/20 transition-colors"
+                    className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
                     title="Download"
                   >
                     <Download className="w-3.5 h-3.5" />

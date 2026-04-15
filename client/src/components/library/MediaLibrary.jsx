@@ -524,8 +524,8 @@ export default function MediaLibrary() {
         <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 shadow-lg shadow-black/20">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-indigo-500/15 border border-indigo-500/20">
-                <Library className="w-6 h-6 text-indigo-400" />
+              <div className="p-2.5 rounded-xl bg-purple-500/15 border border-purple-500/20">
+                <Library className="w-6 h-6 text-purple-400" />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-50 tracking-tight">
@@ -564,7 +564,7 @@ export default function MediaLibrary() {
                 }))
               }
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
-              className="w-full bg-gray-800/70 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
+              className="w-full bg-gray-800/70 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all"
               placeholder="Search assets…"
             />
           </div>
@@ -575,7 +575,7 @@ export default function MediaLibrary() {
               onChange={(e) =>
                 setLibraryFilters((prev) => ({ ...prev, type: e.target.value }))
               }
-              className="appearance-none bg-gray-800/70 border border-gray-700 rounded-lg pl-9 pr-8 py-2 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all cursor-pointer"
+              className="appearance-none bg-gray-800/70 border border-gray-700 rounded-lg pl-9 pr-8 py-2 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all cursor-pointer"
             >
               <option value="">All types</option>
               <option value="image">Images</option>
@@ -587,7 +587,7 @@ export default function MediaLibrary() {
           </div>
           <button
             onClick={onSearch}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white transition-all duration-150 shrink-0"
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm font-medium text-white transition-all duration-150 shrink-0"
           >
             <Search className="w-4 h-4" />
             Search
@@ -626,7 +626,7 @@ export default function MediaLibrary() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gray-800 border border-dashed border-gray-600 hover:border-indigo-500/50 cursor-pointer text-sm text-gray-400 hover:text-gray-200 transition-all">
+                  <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gray-800 border border-dashed border-gray-600 hover:border-purple-500/50 cursor-pointer text-sm text-gray-400 hover:text-gray-200 transition-all">
                     <Upload className="w-4 h-4" />
                     {uploadFile ? uploadFile.name : "Choose file…"}
                     <input
@@ -639,7 +639,7 @@ export default function MediaLibrary() {
                     value={uploadTitle}
                     onChange={(e) => setUploadTitle(e.target.value)}
                     placeholder="Asset title"
-                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all"
                   />
                 </div>
 
@@ -834,7 +834,7 @@ export default function MediaLibrary() {
                         e.stopPropagation();
                         setPreviewAsset(asset);
                       }}
-                      className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-indigo-500 hover:bg-indigo-600/20 text-gray-300 hover:text-indigo-300 transition-all"
+                      className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-purple-500 hover:bg-purple-600/20 text-gray-300 hover:text-purple-300 transition-all"
                       title="Preview"
                     >
                       <Maximize2 className="w-4 h-4" />
@@ -850,7 +850,7 @@ export default function MediaLibrary() {
                             asset.metadata,
                           );
                         }}
-                        className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-indigo-500 hover:bg-indigo-600/20 text-gray-300 hover:text-indigo-300 transition-all"
+                        className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-purple-500 hover:bg-purple-600/20 text-gray-300 hover:text-purple-300 transition-all"
                         title="Download"
                       >
                         <Download className="w-4 h-4" />

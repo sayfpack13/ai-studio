@@ -502,6 +502,31 @@ export const generateVideo = async (prompt, model, options = {}) => {
   return data;
 };
 
+export const generateAudio = async (options = {}) => {
+  const { provider, modelKey, signal, ...restOptions } = options;
+
+  const response = await fetch(`${API_BASE_URL}/audio/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      provider: provider || "huggingface",
+      modelKey,
+      ...restOptions,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    return {
+      error: data.error || `Request failed with status ${response.status}`,
+    };
+  }
+
+  return data;
+};
+
 export const stitchVideos = async (videoUrls) => {
   const response = await authFetch(`${API_BASE_URL}/video/stitch`, {
     method: "POST",

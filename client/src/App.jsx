@@ -9,6 +9,7 @@ import Chat from "./components/Chat";
 import ImageGenerator from "./components/ImageGenerator";
 import VideoGenerator from "./components/VideoGenerator";
 import MusicGenerator from "./components/MusicGenerator";
+
 import MusicRemix from "./components/MusicRemix";
 import VideoEditor from "./components/VideoEditor";
 import Dashboard from "./components/Dashboard";
@@ -138,6 +139,7 @@ function AppContent() {
             <Route path="/image" element={<ImageGenerator />} />
             <Route path="/video" element={<VideoGenerator />} />
             <Route path="/music" element={<MusicGenerator />} />
+
             <Route path="/remix" element={<MusicRemix />} />
             <Route path="/editor" element={<VideoEditor />} />
             <Route path="/library" element={<MediaLibrary />} />

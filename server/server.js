@@ -17,6 +17,7 @@ import libraryRoutes from "./routes/library.js";
 import pipelinesRoutes from "./routes/pipelines.js";
 import editorRoutes from "./routes/editor.js";
 import chutesRoutes from "./routes/chutes.js";
+import audioRoutes from "./routes/audio.js";
 import jobQueue from "./services/jobQueue.js";
 import { normalizeConfig } from "./utils/config.js";
 import { resolveProviderContext } from "./utils/provider-routing.js";
@@ -38,6 +39,8 @@ import {
   generateImage as hfGenerateImage,
   generateTongyiZImage,
   generateVideo as hfGenerateVideo,
+  generateVideoToAudio as hfGenerateVideoToAudio,
+  generateTextToAudio as hfGenerateTextToAudio,
   downloadGradioFile,
 } from "./utils/gradio-client.js";
 
@@ -1647,6 +1650,136 @@ async function processMusicJob({ payload, setProgress, isCanceled }) {
   }
 }
 
+async function processAudioJob({ payload, setProgress, isCanceled }) {
+  const mode = payload?.mode || "video_to_audio";
+  const prompt = payload?.prompt || "";
+  const isVideoToAudio = mode === "video_to_audio";
+
+  await setProgress(5, { stage: "validating" });
+
+  if (isVideoToAudio && !payload?.videoUrl && !payload?.videoBase64) {
+    throw new Error("videoUrl or videoBase64 is required for video-to-audio mode");
+  }
+  if (!isVideoToAudio && !prompt.trim()) {
+    throw new Error("Prompt is required for text-to-audio mode");
+  }
+
+  const providerContext = await resolveProviderContext(config, {
+    requestedProvider: payload?.provider || "huggingface",
+    modelId: payload?.model,
+    modelKey: payload?.modelKey,
+  });
+
+  const modelId = payload?.model || "huggingface/hkchengrex/MMAudio";
+  const modelInfo = await findModel(
+    config,
+    modelId,
+    providerContext.providerId,
+    payload?.modelKey,
+  );
+  if (!modelInfo || !modelInfo.categories.includes("audio")) {
+    throw new Error(
+      `Model ${modelId || payload?.modelKey} is not available for audio generation on gateway ${providerContext.providerId}`,
+    );
+  }
+
+  if (isCanceled()) throw new Error("Canceled");
+
+  await setProgress(20, { stage: "generating_audio" });
+
+  const hfToken = providerContext.provider.apiKey || process.env.HF_TOKEN || undefined;
+  const DEFAULT_MMAUDIO_SPACE = "hkchengrex/MMAudio";
+  const spaceTarget = String(payload?.hfSpaceTarget || "").toLowerCase();
+  const customSpace = String(payload?.hfCustomSpace || "").trim();
+  let spaceUrl;
+  if (spaceTarget === "custom") {
+    spaceUrl = customSpace || process.env.HF_MMAUDIO_SPACE_URL || DEFAULT_MMAUDIO_SPACE;
+  } else {
+    spaceUrl = DEFAULT_MMAUDIO_SPACE;
+  }
+
+  let result;
+  if (isVideoToAudio) {
+    let videoInput;
+    if (payload.videoUrl && payload.videoUrl.startsWith("/uploads/")) {
+      const localPath = join(__dirname, "data", payload.videoUrl);
+      const buffer = await fs.readFile(localPath);
+      videoInput = buffer;
+    } else if (payload.videoUrl && payload.videoUrl.startsWith("http")) {
+      videoInput = payload.videoUrl;
+    } else if (payload.videoBase64) {
+      const cleanBase64 = payload.videoBase64.replace(/^data:[^;]+;base64,/, "");
+      videoInput = Buffer.from(cleanBase64, "base64");
+    }
+
+    result = await hfGenerateVideoToAudio(spaceUrl, hfToken, {
+      video: videoInput,
+      prompt: String(prompt ?? ""),
+      negative_prompt: String(payload?.negativePrompt ?? "music"),
+      seed: Number(payload?.seed) || -1,
+      num_steps: Number(payload?.numSteps) || 25,
+      cfg_strength: Number(payload?.cfgStrength) || 4.5,
+      duration: Number(payload?.duration) || 8,
+    });
+  } else {
+    result = await hfGenerateTextToAudio(spaceUrl, hfToken, {
+      prompt: String(prompt ?? ""),
+      negative_prompt: String(payload?.negativePrompt ?? "music"),
+      seed: Number(payload?.seed) || -1,
+      num_steps: Number(payload?.numSteps) || 25,
+      cfg_strength: Number(payload?.cfgStrength) || 4.5,
+      duration: Number(payload?.duration) || 8,
+    });
+  }
+
+  if (isCanceled()) throw new Error("Canceled");
+
+  await setProgress(70, { stage: "downloading_result" });
+
+  const resultUrl = result.url;
+  const resultBuffer = await downloadGradioFile(resultUrl, hfToken);
+
+  const mimeType = isVideoToAudio ? "video/mp4" : "audio/wav";
+  const prefix = isVideoToAudio ? "audio_video" : "audio_text";
+  const saved = await saveBuffer(resultBuffer, mimeType, prefix);
+
+  await libraryService.createAsset({
+    type: isVideoToAudio ? "video" : "audio",
+    source: "audio",
+    title: prompt
+      ? String(prompt).slice(0, 80)
+      : isVideoToAudio
+        ? "Video with generated audio"
+        : "Generated audio",
+    url: saved.url,
+    filePath: saved.filepath,
+    metadata: {
+      model: modelId,
+      provider: "huggingface",
+      mode,
+      prompt: String(prompt ?? ""),
+      negativePrompt: String(payload?.negativePrompt ?? "music"),
+      seed: Number(payload?.seed) || -1,
+      numSteps: Number(payload?.numSteps) || 25,
+      cfgStrength: Number(payload?.cfgStrength) || 4.5,
+      duration: Number(payload?.duration) || 8,
+      sizeBytes: saved.size,
+    },
+  });
+
+  await setProgress(100, { stage: "completed" });
+
+  return {
+    success: true,
+    data: {
+      url: saved.url,
+      mode,
+      prompt: String(prompt ?? ""),
+      seed: Number(payload?.seed) || -1,
+    },
+  };
+}
+
 async function processPipelineJob({ payload, setProgress }) {
   await setProgress(20, { stage: "pipeline_enqueued" });
   await setProgress(100, {
@@ -1665,6 +1798,7 @@ jobQueue.registerProcessor("image", processImageJob);
 jobQueue.registerProcessor("video", processVideoJob);
 jobQueue.registerProcessor("music", processMusicJob);
 jobQueue.registerProcessor("pipeline", processPipelineJob);
+jobQueue.registerProcessor("audio", processAudioJob);
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -1679,6 +1813,7 @@ app.use("/api/library", libraryRoutes);
 app.use("/api/pipelines", pipelinesRoutes);
 app.use("/api/editor", editorRoutes);
 app.use("/api/chutes", chutesRoutes);
+app.use("/api/audio", audioRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

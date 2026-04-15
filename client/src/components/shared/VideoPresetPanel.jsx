@@ -63,7 +63,7 @@ export default function VideoPresetPanel({
         className="w-full flex items-center justify-between p-3 text-gray-300 hover:text-white transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Video className="w-4 h-4 text-indigo-400" />
+          <Video className="w-4 h-4 text-purple-400" />
           <span className="text-sm font-medium">Video Settings</span>
         </div>
         <div className="flex items-center gap-2">
@@ -95,8 +95,8 @@ export default function VideoPresetPanel({
                 label={preset.label}
                 isSelected={duration === preset.value}
                 onClick={() => onDurationChange?.(preset.value)}
-                bgColor="bg-indigo-600/20"
-                borderColor="ring-indigo-500"
+                bgColor="bg-purple-600/20"
+                borderColor="ring-purple-500"
               />
             ))}
           </div>

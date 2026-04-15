@@ -11,6 +11,7 @@ import {
   GenerationProgress,
   ImagePresetPanel,
   MediaOutputPanel,
+  CollapsiblePanel,
   getModelConfig,
 } from "./shared";
 import {
@@ -1543,7 +1544,7 @@ export default function ImageGenerator() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center">
             <Image className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -1764,7 +1765,7 @@ export default function ImageGenerator() {
                       onClick={() => setHfMode("inference")}
                       className={`px-3 py-1.5 rounded text-xs border transition-colors ${
                         hfMode === "inference"
-                          ? "bg-indigo-600/30 text-indigo-100 border-indigo-400/50"
+                          ? "bg-purple-600/30 text-purple-100 border-purple-400/50"
                           : "bg-gray-700 text-gray-300 border-gray-600"
                       }`}
                     >
@@ -1774,7 +1775,7 @@ export default function ImageGenerator() {
                       onClick={() => setHfMode("space")}
                       className={`px-3 py-1.5 rounded text-xs border transition-colors ${
                         hfMode === "space"
-                          ? "bg-indigo-600/30 text-indigo-100 border-indigo-400/50"
+                          ? "bg-purple-600/30 text-purple-100 border-purple-400/50"
                           : "bg-gray-700 text-gray-300 border-gray-600"
                       }`}
                     >
@@ -1860,8 +1861,8 @@ export default function ImageGenerator() {
               )}
 
               {/* Prompt */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">
                   Prompt
                 </label>
                 <textarea
@@ -1869,7 +1870,8 @@ export default function ImageGenerator() {
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe the image you want to generate..."
                   disabled={!isConfigured}
-                  className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[120px]"
+                  rows={3}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                 />
               </div>
 
@@ -1880,22 +1882,26 @@ export default function ImageGenerator() {
               />
 
               {/* Debug & Custom JSON */}
-              <div className="p-3 bg-gray-800 rounded-lg space-y-3">
+              <CollapsiblePanel
+                title="Debug & Custom JSON"
+                defaultExpanded={false}
+                icon={Settings}
+              >
                 {selectedModelHints && selectedModelHints.length > 0 && (
                   <div className="text-xs text-gray-300 bg-gray-700/60 rounded p-2">
                     Suggested params: {selectedModelHints.join(", ")}
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-300">
                     Custom JSON Parameters
                   </label>
                   <textarea
                     value={customParamsText}
                     onChange={(e) => setCustomParamsText(e.target.value)}
                     placeholder='{"seed": 42}'
-                    className="w-full bg-gray-700 text-white p-2 rounded resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none font-mono text-xs"
                     rows={3}
                   />
                 </div>
@@ -1909,7 +1915,7 @@ export default function ImageGenerator() {
                   />
                   Debug mode
                 </label>
-              </div>
+              </CollapsiblePanel>
 
               {/* Error */}
               {error && (

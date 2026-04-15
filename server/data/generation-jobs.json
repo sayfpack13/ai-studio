@@ -1,6 +1,905 @@
 {
-  "updatedAt": "2026-04-14T20:19:27.896Z",
+  "updatedAt": "2026-04-15T21:16:06.732Z",
   "jobs": [
+    {
+      "id": "audio_1776287690063_61998d19450b",
+      "type": "audio",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "mode": "video_to_audio",
+        "prompt": "realistic terminator t-800 endoskeleton catching camera with hand and goes black",
+        "negativePrompt": "music",
+        "seed": -1,
+        "numSteps": 25,
+        "cfgStrength": 4.5,
+        "duration": 5,
+        "provider": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "videoUrl": "/uploads/videos/wan_i2v_realistic_terminator_t_800_endoskeleton_catching_1776285168755_16feeb5e.mp4"
+      },
+      "metadata": {
+        "audioId": "aud_1776287690056_jwhj3zdba",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "provider": "huggingface",
+        "mode": "video_to_audio",
+        "providerId": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "promptPreview": "realistic terminator t-800 endoskeleton catching camera with hand and goes black",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": {
+          "url": "/uploads/audio_video_1776287766711_0bb24d65963f.mp4",
+          "mode": "video_to_audio",
+          "prompt": "realistic terminator t-800 endoskeleton catching camera with hand and goes black",
+          "seed": -1
+        }
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T21:14:50.062Z",
+      "updatedAt": "2026-04-15T21:16:06.723Z",
+      "startedAt": "2026-04-15T21:14:50.066Z",
+      "completedAt": "2026-04-15T21:16:06.723Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T21:14:50.062Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T21:14:50.066Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T21:14:50.072Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T21:14:50.079Z",
+          "event": "progress",
+          "details": {
+            "stage": "generating_audio"
+          }
+        },
+        {
+          "at": "2026-04-15T21:14:59.950Z",
+          "event": "progress",
+          "details": {
+            "stage": "downloading_result"
+          }
+        },
+        {
+          "at": "2026-04-15T21:16:06.716Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T21:16:06.723Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "audio_1776286603645_1c24f14f1efa",
+      "type": "audio",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "mode": "video_to_audio",
+        "prompt": "realistic head movement toward  camera with red glowing eyes and fire and smoke ",
+        "negativePrompt": "music",
+        "seed": -1,
+        "numSteps": 25,
+        "cfgStrength": 4.5,
+        "duration": 5,
+        "provider": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "videoUrl": "/uploads/videos/wan_i2v_1775726428455_8595cb43.mp4"
+      },
+      "metadata": {
+        "audioId": "aud_1776286603640_0bw8s4q9g",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "provider": "huggingface",
+        "mode": "video_to_audio",
+        "providerId": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "promptPreview": "realistic head movement toward  camera with red glowing eyes and fire and smoke ",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": {
+          "url": "/uploads/audio_video_1776286672655_716fa36492b1.mp4",
+          "mode": "video_to_audio",
+          "prompt": "realistic head movement toward  camera with red glowing eyes and fire and smoke ",
+          "seed": -1
+        }
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T20:56:43.645Z",
+      "updatedAt": "2026-04-15T20:57:52.670Z",
+      "startedAt": "2026-04-15T20:56:43.651Z",
+      "completedAt": "2026-04-15T20:57:52.670Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T20:56:43.645Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T20:56:43.651Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T20:56:43.657Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T20:56:43.665Z",
+          "event": "progress",
+          "details": {
+            "stage": "generating_audio"
+          }
+        },
+        {
+          "at": "2026-04-15T20:56:54.160Z",
+          "event": "progress",
+          "details": {
+            "stage": "downloading_result"
+          }
+        },
+        {
+          "at": "2026-04-15T20:57:52.666Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T20:57:52.670Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "audio_1776286480662_5f99dc018856",
+      "type": "audio",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "mode": "video_to_audio",
+        "prompt": "machine movement",
+        "negativePrompt": "music",
+        "seed": -1,
+        "numSteps": 25,
+        "cfgStrength": 4.5,
+        "duration": 5,
+        "provider": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "videoUrl": "/uploads/videos/wan_i2v_realistic_terminator_t_800_endoskeleton_catching_1776285356614_2e81ad1f.mp4"
+      },
+      "metadata": {
+        "audioId": "aud_1776286480640_vx1ov5794",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "provider": "huggingface",
+        "mode": "video_to_audio",
+        "providerId": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "promptPreview": "machine movement",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": {
+          "url": "/uploads/audio_video_1776286559081_d2223ffb03a6.mp4",
+          "mode": "video_to_audio",
+          "prompt": "machine movement",
+          "seed": -1
+        }
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T20:54:40.662Z",
+      "updatedAt": "2026-04-15T20:55:59.096Z",
+      "startedAt": "2026-04-15T20:54:40.668Z",
+      "completedAt": "2026-04-15T20:55:59.096Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T20:54:40.662Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T20:54:40.668Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T20:54:40.674Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T20:54:40.682Z",
+          "event": "progress",
+          "details": {
+            "stage": "generating_audio"
+          }
+        },
+        {
+          "at": "2026-04-15T20:54:56.164Z",
+          "event": "progress",
+          "details": {
+            "stage": "downloading_result"
+          }
+        },
+        {
+          "at": "2026-04-15T20:55:59.093Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T20:55:59.096Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776286341699_ab397bbd356b",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "moving head to camera",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1776286276947_699b4705865a.webp",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1776286341696_214yyde7w",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "moving head to camera",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "Server restarted while job was active"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T20:52:21.699Z",
+      "updatedAt": "2026-04-15T20:52:53.658Z",
+      "startedAt": "2026-04-15T20:52:21.706Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T20:52:21.699Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T20:52:21.706Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T20:52:21.712Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T20:52:21.718Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-15T20:52:53.658Z",
+          "event": "failed",
+          "details": {
+            "reason": "Server restarted"
+          }
+        }
+      ]
+    },
+    {
+      "id": "video_1776285243506_f4ea4f9e46eb",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic terminator t-800 endoskeleton catching camera with hand and goes black",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1776285119278_b255bb041ad2.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776285243504_xp51xxf8w",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "video"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic terminator t-800 endoskeleton catching camera with hand and goes black",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_realistic_terminator_t_800_endoskeleton_catching_1776285356614_2e81ad1f.mp4",
+            "thumbnail": null,
+            "revised_prompt": "realistic terminator t-800 endoskeleton catching camera with hand and goes black"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T20:34:03.506Z",
+      "updatedAt": "2026-04-15T20:35:56.635Z",
+      "startedAt": "2026-04-15T20:34:03.510Z",
+      "completedAt": "2026-04-15T20:35:56.635Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T20:34:03.506Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T20:34:03.510Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T20:34:03.515Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T20:34:03.520Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-15T20:35:56.609Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-15T20:35:56.632Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T20:35:56.635Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776285133517_b423ef94c577",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic terminator t-800 endoskeleton catching camera with hand and goes black",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1776285119278_b255bb041ad2.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776285133512_f5fhwobc0",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "video"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic terminator t-800 endoskeleton catching camera with hand and goes black",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_realistic_terminator_t_800_endoskeleton_catching_1776285168755_16feeb5e.mp4",
+            "thumbnail": null,
+            "revised_prompt": "realistic terminator t-800 endoskeleton catching camera with hand and goes black"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T20:32:13.517Z",
+      "updatedAt": "2026-04-15T20:32:48.776Z",
+      "startedAt": "2026-04-15T20:32:13.521Z",
+      "completedAt": "2026-04-15T20:32:48.776Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T20:32:13.517Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T20:32:13.521Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T20:32:13.525Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T20:32:13.529Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-15T20:32:48.748Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-15T20:32:48.773Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T20:32:48.776Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776285045731_87ef0bdaf9e7",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "realistic terminator t-800 glowing red eyes while scanning for enemies",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1776284949314_915723611d4a.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776285045728_ngxze2dvm",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "video"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "realistic terminator t-800 glowing red eyes while scanning for enemies",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_realistic_terminator_t_800_glowing_red_eyes_whil_1776285080551_7ef7dbcb.mp4",
+            "thumbnail": null,
+            "revised_prompt": "realistic terminator t-800 glowing red eyes while scanning for enemies"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T20:30:45.731Z",
+      "updatedAt": "2026-04-15T20:31:20.576Z",
+      "startedAt": "2026-04-15T20:30:45.735Z",
+      "completedAt": "2026-04-15T20:31:20.576Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T20:30:45.731Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T20:30:45.735Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T20:30:45.739Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T20:30:45.744Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-15T20:31:20.546Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-15T20:31:20.572Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T20:31:20.576Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776284969590_7cf56bbabdbf",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "terminator glowing red eyes while scanning for enemies",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "image": "/uploads/asset_1776284949314_915723611d4a.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": ""
+      },
+      "metadata": {
+        "videoId": "vid_1776284969584_asr748myv",
+        "modelKey": "chutes:chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "provider": "chutes",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "video"
+        },
+        "providerId": "chutes",
+        "model": "chutes/Wan-AI/Wan2.2-I2V-14B-Fast",
+        "promptPreview": "terminator glowing red eyes while scanning for enemies",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/wan_i2v_terminator_glowing_red_eyes_while_scanning_for_e_1776285006391_9ddfef18.mp4",
+            "thumbnail": null,
+            "revised_prompt": "terminator glowing red eyes while scanning for enemies"
+          }
+        ],
+        "id": null
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-15T20:29:29.590Z",
+      "updatedAt": "2026-04-15T20:30:06.417Z",
+      "startedAt": "2026-04-15T20:29:29.595Z",
+      "completedAt": "2026-04-15T20:30:06.417Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-15T20:29:29.590Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-15T20:29:29.595Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-15T20:29:29.600Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-15T20:29:29.610Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-15T20:30:06.384Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-15T20:30:06.414Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-15T20:30:06.417Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1776197910063_951c591b74ac",
       "type": "video",

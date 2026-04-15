@@ -4,7 +4,7 @@ import jobQueue, { JOB_STATUS } from "../services/jobQueue.js";
 
 const router = express.Router();
 
-const ALLOWED_TYPES = new Set(["chat", "image", "video", "music", "pipeline"]);
+const ALLOWED_TYPES = new Set(["chat", "image", "video", "music", "audio", "pipeline"]);
 
 function normalizeType(value) {
   const type = String(value || "")

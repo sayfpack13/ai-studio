@@ -14,7 +14,13 @@ import StitchDialog from "./StitchDialog";
 import useOllamaLocal from "../hooks/useOllamaLocal";
 import LocalOllamaPanel from "./LocalOllamaPanel";
 import { Button } from "./ui";
-import { LoadingSpinner, VideoPresetPanel, MediaOutputPanel } from "./shared";
+import {
+  LoadingSpinner,
+  VideoPresetPanel,
+  MediaOutputPanel,
+  CollapsiblePanel,
+  SliderControl,
+} from "./shared";
 import {
   Film,
   Sparkles,
@@ -22,7 +28,8 @@ import {
   Music,
   Settings,
   X,
-  ChevronDown,
+  Upload,
+  FolderOpen,
   Scissors,
 } from "lucide-react";
 
@@ -393,7 +400,7 @@ export default function VideoGenerator() {
   const [wanUploadingImage, setWanUploadingImage] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [showVideoAssetPicker, setShowVideoAssetPicker] = useState(false);
-  const [wanShowAdvanced, setWanShowAdvanced] = useState(false);
+
   const [wanExtractingFrame, setWanExtractingFrame] = useState(false);
   const [wanSourceVideoTitle, setWanSourceVideoTitle] = useState("");
   const [showStitchDialog, setShowStitchDialog] = useState(false);
@@ -1265,7 +1272,7 @@ export default function VideoGenerator() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center">
             <Film className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -1278,7 +1285,7 @@ export default function VideoGenerator() {
                 : selectedModelInfo?.name || "Select a model"}
             </p>
             {isWanI2VSelected && (
-              <p className="text-xs text-indigo-400 mt-0.5">
+              <p className="text-xs text-purple-400 mt-0.5">
                 Wan 2.2 I2V mode: image-to-video
               </p>
             )}
@@ -1288,7 +1295,7 @@ export default function VideoGenerator() {
           variant="primary"
           size="sm"
           onClick={() => setShowModelSelector(true)}
-          className="bg-indigo-600 hover:bg-indigo-500"
+          className="bg-purple-600 hover:bg-purple-500"
         >
           Change Model
         </Button>
@@ -1305,7 +1312,7 @@ export default function VideoGenerator() {
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center">
-                  <Film className="w-5 h-5 text-indigo-300" />
+                  <Film className="w-5 h-5 text-purple-300" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-white">
@@ -1345,7 +1352,7 @@ export default function VideoGenerator() {
                   value={modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
                   placeholder="Search models by name, provider, or ID..."
-                  className="w-full bg-gray-900/70 text-white pl-10 pr-10 py-3 rounded-xl border border-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="w-full bg-gray-900/70 text-white pl-10 pr-10 py-3 rounded-xl border border-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
                 />
                 {modelSearch && (
                   <button
@@ -1395,7 +1402,7 @@ export default function VideoGenerator() {
                   }}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
                     configuredProviderFilter === provider
-                      ? "bg-indigo-600/20 text-indigo-200 border-indigo-500/40"
+                      ? "bg-purple-600/20 text-purple-200 border-purple-500/40"
                       : "bg-gray-900/70 text-gray-300 border-gray-800 hover:border-gray-700"
                   }`}
                 >
@@ -1434,7 +1441,7 @@ export default function VideoGenerator() {
                       onClick={() => handleModelSelect(model)}
                       className={`p-3 rounded-xl text-left border transition-all ${
                         selectedModel === model.modelKey
-                          ? "bg-indigo-600/15 border-indigo-500/40 text-white"
+                          ? "bg-purple-600/15 border-purple-500/40 text-white"
                           : "bg-gray-900/70 border-gray-800 text-gray-200 hover:border-gray-700"
                       }`}
                     >
@@ -1468,7 +1475,7 @@ export default function VideoGenerator() {
                     <p>No models found matching "{modelSearch}"</p>
                     <button
                       onClick={() => setModelSearch("")}
-                      className="mt-2 text-indigo-400 hover:text-indigo-300"
+                      className="mt-2 text-purple-400 hover:text-purple-300"
                     >
                       Clear filters
                     </button>
@@ -1574,8 +1581,8 @@ export default function VideoGenerator() {
               )}
 
               {/* Prompt */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">
                   Prompt
                 </label>
                 <textarea
@@ -1587,7 +1594,8 @@ export default function VideoGenerator() {
                       : "Describe the video you want to generate..."
                   }
                   disabled={!isConfigured}
-                  className="w-full bg-gray-800 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[120px]"
+                  rows={3}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                 />
               </div>
 
@@ -1612,7 +1620,7 @@ export default function VideoGenerator() {
                         }}
                         className={`px-3 py-1.5 rounded text-sm ${
                           wanImageSourceType === "upload"
-                            ? "bg-indigo-600 text-white"
+                            ? "bg-purple-600 text-white"
                             : "bg-gray-700 text-gray-200"
                         }`}
                       >
@@ -1625,7 +1633,7 @@ export default function VideoGenerator() {
                         }}
                         className={`px-3 py-1.5 rounded text-sm ${
                           wanImageSourceType === "library"
-                            ? "bg-indigo-600 text-white"
+                            ? "bg-purple-600 text-white"
                             : "bg-gray-700 text-gray-200"
                         }`}
                       >
@@ -1638,7 +1646,7 @@ export default function VideoGenerator() {
                         }}
                         className={`px-3 py-1.5 rounded text-sm ${
                           wanImageSourceType === "video"
-                            ? "bg-indigo-600 text-white"
+                            ? "bg-purple-600 text-white"
                             : "bg-gray-700 text-gray-200"
                         }`}
                       >
@@ -1651,46 +1659,118 @@ export default function VideoGenerator() {
 
                     {wanImageSourceType === "upload" && (
                       <div className="space-y-2">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleWanImageUpload}
-                          className="w-full text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white"
-                        />
+                        {wanImageData ? (
+                          <div className="relative rounded-lg overflow-hidden bg-gray-900 border border-gray-700">
+                            <img
+                              src={wanImageData}
+                              alt="Wan input preview"
+                              className="w-full h-32 object-cover"
+                            />
+                            {wanImageSourceType === "video" && (
+                              <div className="absolute top-1.5 left-1.5 bg-black/70 text-[10px] text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <Film className="w-3 h-3" />
+                                Last frame
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer hover:border-purple-500 hover:bg-gray-800/50 transition-all">
+                            <Upload className="w-8 h-8 text-gray-500 mb-2" />
+                            <span className="text-sm text-gray-400">
+                              Click to upload an image file
+                            </span>
+                            <span className="text-xs text-gray-500 mt-1">
+                              PNG, JPG, WebP supported
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleWanImageUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
                         {wanUploadingImage && (
-                          <p className="text-xs text-gray-400">
+                          <div className="flex items-center gap-2 text-xs text-purple-400">
+                            <LoadingSpinner size="sm" />
                             Processing image...
-                          </p>
+                          </div>
                         )}
                       </div>
                     )}
 
                     {wanImageSourceType === "library" && (
-                      <button
-                        onClick={() => setShowAssetPicker(true)}
-                        className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
-                        {wanLibraryImageId
-                          ? "Change Image from Library"
-                          : "Select Image from Library"}
-                      </button>
+                      <div className="space-y-2">
+                        {wanImageData ? (
+                          <div className="relative rounded-lg overflow-hidden bg-gray-900 border border-gray-700">
+                            <img
+                              src={wanImageData}
+                              alt="Selected library image"
+                              className="w-full h-32 object-cover"
+                            />
+                            <button
+                              onClick={() => {
+                                setWanImageData("");
+                                setWanLibraryImageId("");
+                              }}
+                              className="absolute top-1.5 right-1.5 p-1.5 bg-gray-900/80 hover:bg-red-600 rounded-full transition-colors"
+                              title="Remove image"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setShowAssetPicker(true)}
+                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer hover:border-purple-500 hover:bg-gray-800/50 transition-all"
+                          >
+                            <FolderOpen className="w-8 h-8 text-gray-500 mb-2" />
+                            <span className="text-sm text-gray-400">
+                              Select an image from library
+                            </span>
+                            <span className="text-xs text-gray-500 mt-1">
+                              Browse your uploaded and generated images
+                            </span>
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     {wanImageSourceType === "video" && (
                       <div className="space-y-2">
+                        {wanSourceVideoTitle && !wanExtractingFrame ? (
+                          <div className="relative rounded-lg overflow-hidden bg-gray-900 border border-gray-700 p-3">
+                            <div className="flex items-center gap-2 text-sm text-purple-300">
+                              <Film className="w-4 h-4" />
+                              <span className="truncate">{wanSourceVideoTitle}</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setWanSourceVideoTitle("");
+                                setWanImageData("");
+                              }}
+                              className="absolute top-1.5 right-1.5 p-1.5 bg-gray-900/80 hover:bg-red-600 rounded-full transition-colors"
+                              title="Remove source video"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : !wanSourceVideoTitle && !wanExtractingFrame ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowVideoAssetPicker(true)}
+                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer hover:border-purple-500 hover:bg-gray-800/50 transition-all"
+                          >
+                            <Film className="w-8 h-8 text-gray-500 mb-2" />
+                            <span className="text-sm text-gray-400">
+                              Select a source video
+                            </span>
+                            <span className="text-xs text-gray-500 mt-1">
+                              Uses last frame as image input
+                            </span>
+                          </button>
+                        ) : null}
                         <button
                           onClick={() => setShowVideoAssetPicker(true)}
                           disabled={wanExtractingFrame}
@@ -1702,33 +1782,9 @@ export default function VideoGenerator() {
                             : "Select Video from Library"}
                         </button>
                         {wanExtractingFrame && (
-                          <div className="flex items-center gap-2 text-xs text-indigo-400">
+                          <div className="flex items-center gap-2 text-xs text-purple-400">
                             <LoadingSpinner size="sm" />
                             Extracting last frame...
-                          </div>
-                        )}
-                        {wanSourceVideoTitle && !wanExtractingFrame && (
-                          <p className="text-xs text-gray-400">
-                            Continuing from:{" "}
-                            <span className="text-indigo-400">
-                              {wanSourceVideoTitle}
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {wanImageData && (
-                      <div className="rounded border border-gray-700 overflow-hidden relative">
-                        <img
-                          src={wanImageData}
-                          alt="Wan input preview"
-                          className="w-full h-32 object-cover"
-                        />
-                        {wanImageSourceType === "video" && (
-                          <div className="absolute top-1.5 left-1.5 bg-black/70 text-[10px] text-indigo-300 px-1.5 py-0.5 rounded flex items-center gap-1">
-                            <Film className="w-3 h-3" />
-                            Last frame
                           </div>
                         )}
                       </div>
@@ -1744,7 +1800,7 @@ export default function VideoGenerator() {
                         {!WAN_DURATION_PRESETS.some(
                           (p) => p.frames === wanFrames,
                         ) && (
-                          <span className="ml-1 text-indigo-400">Custom</span>
+                          <span className="ml-1 text-purple-400">Custom</span>
                         )}
                       </span>
                     </div>
@@ -1757,7 +1813,7 @@ export default function VideoGenerator() {
                             onClick={() => setWanFrames(preset.frames)}
                             className={`py-2 px-1 rounded-lg text-center transition-all ${
                               isActive
-                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
                                 : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                             }`}
                           >
@@ -1765,7 +1821,7 @@ export default function VideoGenerator() {
                               {preset.label}
                             </div>
                             <div
-                              className={`text-[10px] ${isActive ? "text-indigo-200" : "text-gray-500"}`}
+                              className={`text-[10px] ${isActive ? "text-purple-200" : "text-gray-500"}`}
                             >
                               {preset.desc}
                             </div>
@@ -1798,7 +1854,7 @@ export default function VideoGenerator() {
                             }}
                             className={`py-2.5 px-2 rounded-lg text-center transition-all ${
                               isActive
-                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
                                 : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                             }`}
                           >
@@ -1806,7 +1862,7 @@ export default function VideoGenerator() {
                               {preset.label}
                             </div>
                             <div
-                              className={`text-[10px] ${isActive ? "text-indigo-200" : "text-gray-500"}`}
+                              className={`text-[10px] ${isActive ? "text-purple-200" : "text-gray-500"}`}
                             >
                               {preset.desc}
                             </div>
@@ -1816,71 +1872,37 @@ export default function VideoGenerator() {
                     </div>
                   </div>
 
-                  {/* Advanced Settings Toggle */}
-                  <button
-                    onClick={() => setWanShowAdvanced((v) => !v)}
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-300 transition-colors w-full"
+                  {/* Advanced Settings */}
+                  <CollapsiblePanel
+                    title="Advanced Settings"
+                    defaultExpanded={false}
+                    icon={Settings}
                   >
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 transition-transform ${wanShowAdvanced ? "rotate-180" : ""}`}
-                    />
-                    Advanced Settings
-                  </button>
-
-                  {wanShowAdvanced && (
-                    <div className="space-y-3 pt-2 border-t border-gray-700">
+                    <div className="space-y-4">
                       {/* Frames */}
-                      <div>
-                        <div className="flex items-baseline justify-between mb-1">
-                          <label className="text-xs text-gray-400">
-                            Frames
-                          </label>
-                          <span className="text-xs text-gray-500">
-                            {wanFrames}{" "}
-                            <span className="text-gray-600">
-                              ({(wanFrames / wanFps).toFixed(1)}s)
-                            </span>
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="21"
-                          max="140"
-                          value={wanFrames}
-                          onChange={(e) => setWanFrames(Number(e.target.value))}
-                          className="w-full accent-indigo-500"
-                        />
-                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                          <span>21</span>
-                          <span>140</span>
-                        </div>
-                      </div>
+                      <SliderControl
+                        label="Frames"
+                        value={wanFrames}
+                        onChange={setWanFrames}
+                        min={21}
+                        max={140}
+                        step={1}
+                        formatValue={(v) => `${v} (${(v / wanFps).toFixed(1)}s)`}
+                      />
 
                       {/* FPS */}
-                      <div>
-                        <div className="flex items-baseline justify-between mb-1">
-                          <label className="text-xs text-gray-400">FPS</label>
-                          <span className="text-xs text-gray-500">
-                            {wanFps}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="16"
-                          max="24"
-                          value={wanFps}
-                          onChange={(e) => setWanFps(Number(e.target.value))}
-                          className="w-full accent-indigo-500"
-                        />
-                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                          <span>16</span>
-                          <span>24</span>
-                        </div>
-                      </div>
+                      <SliderControl
+                        label="FPS"
+                        value={wanFps}
+                        onChange={setWanFps}
+                        min={16}
+                        max={24}
+                        step={1}
+                      />
 
                       {/* Resolution */}
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1.5">
+                        <label className="block text-sm font-medium text-gray-300 mb-1.5">
                           Resolution
                         </label>
                         <div className="flex gap-1.5">
@@ -1890,7 +1912,7 @@ export default function VideoGenerator() {
                               onClick={() => setWanResolution(res)}
                               className={`flex-1 py-1.5 rounded text-sm transition-colors ${
                                 wanResolution === res
-                                  ? "bg-indigo-600 text-white"
+                                  ? "bg-purple-600 text-white"
                                   : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                               }`}
                             >
@@ -1902,13 +1924,13 @@ export default function VideoGenerator() {
 
                       {/* Fast Mode */}
                       <div className="flex items-center justify-between">
-                        <label className="text-xs text-gray-400">
+                        <label className="text-sm font-medium text-gray-300">
                           Fast Mode
                         </label>
                         <button
                           onClick={() => setWanFast((v) => !v)}
                           className={`relative w-9 h-5 rounded-full transition-colors ${
-                            wanFast ? "bg-indigo-600" : "bg-gray-600"
+                            wanFast ? "bg-purple-600" : "bg-gray-600"
                           }`}
                         >
                           <span
@@ -1920,167 +1942,74 @@ export default function VideoGenerator() {
                       </div>
 
                       {/* Guidance Scale */}
-                      <div>
-                        <div className="flex items-baseline justify-between mb-1">
-                          <label className="text-xs text-gray-400">
-                            Guidance Scale
-                          </label>
-                          <span className="text-xs text-gray-500">
-                            {wanGuidanceScale}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="10"
-                          step="0.5"
-                          value={wanGuidanceScale}
-                          onChange={(e) =>
-                            setWanGuidanceScale(Number(e.target.value))
-                          }
-                          className="w-full accent-indigo-500"
-                        />
-                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                          <span>0</span>
-                          <span>10</span>
-                        </div>
-                      </div>
+                      <SliderControl
+                        label="Guidance Scale"
+                        value={wanGuidanceScale}
+                        onChange={setWanGuidanceScale}
+                        min={0}
+                        max={10}
+                        step={0.5}
+                      />
 
                       {/* Guidance Scale 2 */}
-                      <div>
-                        <div className="flex items-baseline justify-between mb-1">
-                          <label className="text-xs text-gray-400">
-                            Guidance Scale 2
-                          </label>
-                          <span className="text-xs text-gray-500">
-                            {wanGuidanceScale2}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="10"
-                          step="0.5"
-                          value={wanGuidanceScale2}
-                          onChange={(e) =>
-                            setWanGuidanceScale2(Number(e.target.value))
-                          }
-                          className="w-full accent-indigo-500"
-                        />
-                        <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                          <span>0</span>
-                          <span>10</span>
-                        </div>
-                      </div>
+                      <SliderControl
+                        label="Guidance Scale 2"
+                        value={wanGuidanceScale2}
+                        onChange={setWanGuidanceScale2}
+                        min={0}
+                        max={10}
+                        step={0.5}
+                      />
 
                       {/* Inference Steps (shown for HF A14B model) */}
                       {isWanI2VA14B && (
-                        <div>
-                          <div className="flex items-baseline justify-between mb-1">
-                            <label className="text-xs text-gray-400">
-                              Inference Steps
-                            </label>
-                            <span className="text-xs text-gray-500">
-                              {wanSteps}
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min="4"
-                            max="30"
-                            step="1"
-                            value={wanSteps}
-                            onChange={(e) => setWanSteps(Number(e.target.value))}
-                            className="w-full accent-indigo-500"
-                          />
-                          <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                            <span>4 (fast)</span>
-                            <span>30 (quality)</span>
-                          </div>
-                        </div>
+                        <SliderControl
+                          label="Inference Steps"
+                          value={wanSteps}
+                          onChange={setWanSteps}
+                          min={4}
+                          max={30}
+                          step={1}
+                        />
                       )}
 
                       {/* A14B Space Parameters */}
                       {isWanI2VA14B && (
                         <>
                           {/* Video Quality */}
-                          <div>
-                            <div className="flex items-baseline justify-between mb-1">
-                              <label className="text-xs text-gray-400">
-                                Video Quality
-                              </label>
-                              <span className="text-xs text-gray-500">
-                                {wanQuality}
-                              </span>
-                            </div>
-                            <input
-                              type="range"
-                              min="1"
-                              max="10"
-                              step="1"
-                              value={wanQuality}
-                              onChange={(e) => setWanQuality(Number(e.target.value))}
-                              className="w-full accent-indigo-500"
-                            />
-                            <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                              <span>1 (low)</span>
-                              <span>10 (high)</span>
-                            </div>
-                          </div>
+                          <SliderControl
+                            label="Video Quality"
+                            value={wanQuality}
+                            onChange={setWanQuality}
+                            min={1}
+                            max={10}
+                            step={1}
+                          />
 
                           {/* Duration (seconds) */}
-                          <div>
-                            <div className="flex items-baseline justify-between mb-1">
-                              <label className="text-xs text-gray-400">
-                                Duration (seconds)
-                              </label>
-                              <span className="text-xs text-gray-500">
-                                {wanDurationSeconds}s
-                              </span>
-                            </div>
-                            <input
-                              type="range"
-                              min="1"
-                              max="10"
-                              step="0.5"
-                              value={wanDurationSeconds}
-                              onChange={(e) => setWanDurationSeconds(Number(e.target.value))}
-                              className="w-full accent-indigo-500"
-                            />
-                            <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                              <span>1s</span>
-                              <span>10s</span>
-                            </div>
-                          </div>
+                          <SliderControl
+                            label="Duration (seconds)"
+                            value={wanDurationSeconds}
+                            onChange={setWanDurationSeconds}
+                            min={1}
+                            max={10}
+                            step={0.5}
+                            formatValue={(v) => `${v}s`}
+                          />
 
                           {/* Flow Shift */}
-                          <div>
-                            <div className="flex items-baseline justify-between mb-1">
-                              <label className="text-xs text-gray-400">
-                                Flow Shift
-                              </label>
-                              <span className="text-xs text-gray-500">
-                                {wanFlowShift}
-                              </span>
-                            </div>
-                            <input
-                              type="range"
-                              min="1"
-                              max="10"
-                              step="0.5"
-                              value={wanFlowShift}
-                              onChange={(e) => setWanFlowShift(Number(e.target.value))}
-                              className="w-full accent-indigo-500"
-                            />
-                            <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-                              <span>1 (subtle)</span>
-                              <span>10 (dynamic)</span>
-                            </div>
-                          </div>
+                          <SliderControl
+                            label="Flow Shift"
+                            value={wanFlowShift}
+                            onChange={setWanFlowShift}
+                            min={1}
+                            max={10}
+                            step={0.5}
+                          />
 
                           {/* Frame Multiplier (Video Fluidity) */}
                           <div>
-                            <label className="block text-xs text-gray-400 mb-1.5">
+                            <label className="block text-sm font-medium text-gray-300 mb-1.5">
                               Video Fluidity (FPS)
                             </label>
                             <div className="flex gap-1.5">
@@ -2094,7 +2023,7 @@ export default function VideoGenerator() {
                                   onClick={() => setWanFrameMultiplier(opt.value)}
                                   className={`flex-1 py-1.5 rounded text-sm transition-colors ${
                                     wanFrameMultiplier === opt.value
-                                      ? "bg-indigo-600 text-white"
+                                      ? "bg-purple-600 text-white"
                                       : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                                   }`}
                                 >
@@ -2106,7 +2035,7 @@ export default function VideoGenerator() {
 
                           {/* Scheduler */}
                           <div>
-                            <label className="block text-xs text-gray-400 mb-1.5">
+                            <label className="block text-sm font-medium text-gray-300 mb-1.5">
                               Scheduler
                             </label>
                             <div className="flex gap-1.5 flex-wrap">
@@ -2119,7 +2048,7 @@ export default function VideoGenerator() {
                                   onClick={() => setWanScheduler(opt.value)}
                                   className={`px-3 py-1.5 rounded text-sm transition-colors ${
                                     wanScheduler === opt.value
-                                      ? "bg-indigo-600 text-white"
+                                      ? "bg-purple-600 text-white"
                                       : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                                   }`}
                                 >
@@ -2132,34 +2061,34 @@ export default function VideoGenerator() {
                       )}
 
                       {/* Seed */}
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">
-                          Seed
+                      <div className="space-y-1">
+                        <label className="block text-sm font-medium text-gray-300">
+                          Seed (-1 = random)
                         </label>
                         <input
                           type="text"
                           value={wanSeed}
                           onChange={(e) => setWanSeed(e.target.value)}
                           placeholder="Random"
-                          className="w-full bg-gray-700 text-white p-2 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         />
                       </div>
 
                       {/* Negative Prompt */}
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">
                           Negative Prompt
                         </label>
-                        <textarea
+                        <input
+                          type="text"
                           value={wanNegativePrompt}
                           onChange={(e) => setWanNegativePrompt(e.target.value)}
                           placeholder="Leave empty for default quality filter"
-                          rows={2}
-                          className="w-full bg-gray-700 text-white p-2 rounded text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         />
                       </div>
                     </div>
-                  )}
+                  </CollapsiblePanel>
                 </div>
               ) : (
                 <VideoPresetPanel
@@ -2273,7 +2202,7 @@ export default function VideoGenerator() {
                 (isWanI2VSelected && !wanImageData)
               }
               leftIcon={<Sparkles className="w-4 h-4" />}
-              className="w-full bg-indigo-600 hover:bg-indigo-500"
+              className="w-full bg-purple-600 hover:bg-purple-500"
             >
               Generate Video
               {hasActiveJobs &&

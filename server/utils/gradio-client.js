@@ -431,3 +431,138 @@ export async function downloadGradioFile(url, hfToken) {
   });
   return Buffer.from(response.data);
 }
+
+/**
+ * Generate audio from a video using the MMAudio Space on HuggingFace.
+ *
+ * @param {string} spaceUrl  - Full Space URL (e.g. "hkchengrex/MMAudio")
+ * @param {string} hfToken   - HuggingFace API token (optional for public spaces)
+ * @param {object} options
+ * @param {Buffer|string} options.video - Video as Buffer or URL string
+ * @param {string} [options.prompt] - Audio description prompt (e.g. "waves, seagulls")
+ * @param {string} [options.negative_prompt="music"] - Negative prompt
+ * @param {number} [options.seed=-1] - Random seed (-1 for random)
+ * @param {number} [options.num_steps=25] - Number of inference steps
+ * @param {number} [options.cfg_strength=4.5] - CFG guidance strength
+ * @param {number} [options.duration=8] - Duration in seconds
+ * @returns {{ url: string }} Object with URL to the generated video-with-audio
+ */
+export async function generateVideoToAudio(spaceUrl, hfToken, options = {}) {
+  const client = await getClient(spaceUrl, hfToken);
+
+  const {
+    video,
+    prompt = "",
+    negative_prompt = "music",
+    seed = -1,
+    num_steps = 25,
+    cfg_strength = 4.5,
+    duration = 8,
+  } = options;
+
+  if (!video) {
+    throw new Error("Video is required for video-to-audio generation");
+  }
+
+  // Convert video to a Gradio-compatible file reference
+  let videoRef;
+  if (Buffer.isBuffer(video)) {
+    videoRef = handle_file(new Blob([video], { type: "video/mp4" }));
+  } else if (typeof video === "string" && video.startsWith("http")) {
+    videoRef = handle_file(video);
+  } else if (typeof video === "string") {
+    // Assume base64 — convert to Buffer then Blob
+    const buf = Buffer.from(video, "base64");
+    videoRef = handle_file(new Blob([buf], { type: "video/mp4" }));
+  } else {
+    throw new Error("Video must be a Buffer, URL string, or base64 string");
+  }
+
+  console.log("[HF Gradio] Calling /video_to_audio with prompt:", prompt || "(none)");
+
+  const result = await client.predict("/video_to_audio", {
+    video: videoRef,
+    prompt: String(prompt ?? ""),
+    negative_prompt: String(negative_prompt ?? "music"),
+    seed: toNumber(seed, -1),
+    num_steps: toNumber(num_steps, 25),
+    cfg_strength: toNumber(cfg_strength, 4.5),
+    duration: toNumber(duration, 8),
+  });
+
+  const outputData = result?.data?.[0];
+  if (!outputData) {
+    throw new Error("MMAudio Space returned no video-to-audio data");
+  }
+
+  // Gradio returns { video: { url: "..." } } or { url: "..." } for video outputs
+  const outputUrl =
+    typeof outputData === "string"
+      ? outputData
+      : outputData?.video?.url || outputData?.url;
+
+  if (!outputUrl) {
+    throw new Error("MMAudio Space returned unexpected video-to-audio format");
+  }
+
+  return { url: outputUrl };
+}
+
+/**
+ * Generate audio from a text prompt using the MMAudio Space on HuggingFace.
+ *
+ * @param {string} spaceUrl  - Full Space URL (e.g. "hkchengrex/MMAudio")
+ * @param {string} hfToken   - HuggingFace API token (optional for public spaces)
+ * @param {object} options
+ * @param {string} options.prompt - Audio description prompt
+ * @param {string} [options.negative_prompt="music"] - Negative prompt
+ * @param {number} [options.seed=-1] - Random seed (-1 for random)
+ * @param {number} [options.num_steps=25] - Number of inference steps
+ * @param {number} [options.cfg_strength=4.5] - CFG guidance strength
+ * @param {number} [options.duration=8] - Duration in seconds
+ * @returns {{ url: string }} Object with URL to the generated audio file
+ */
+export async function generateTextToAudio(spaceUrl, hfToken, options = {}) {
+  const client = await getClient(spaceUrl, hfToken);
+
+  const {
+    prompt = "",
+    negative_prompt = "music",
+    seed = -1,
+    num_steps = 25,
+    cfg_strength = 4.5,
+    duration = 8,
+  } = options;
+
+  if (!prompt) {
+    throw new Error("Prompt is required for text-to-audio generation");
+  }
+
+  console.log("[HF Gradio] Calling /text_to_audio with prompt:", prompt);
+
+  const result = await client.predict("/text_to_audio", {
+    prompt: String(prompt ?? ""),
+    negative_prompt: String(negative_prompt ?? "music"),
+    seed: toNumber(seed, -1),
+    num_steps: toNumber(num_steps, 25),
+    cfg_strength: toNumber(cfg_strength, 4.5),
+    duration: toNumber(duration, 8),
+  });
+
+  const outputData = result?.data?.[0];
+  if (!outputData) {
+    throw new Error("MMAudio Space returned no text-to-audio data");
+  }
+
+  // Gradio returns { url: "..." } for audio outputs
+  const outputUrl =
+    typeof outputData === "string"
+      ? outputData
+      : outputData?.url;
+
+  if (!outputUrl) {
+    throw new Error("MMAudio Space returned unexpected text-to-audio format");
+  }
+
+  return { url: outputUrl };
+}

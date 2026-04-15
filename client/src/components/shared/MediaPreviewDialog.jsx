@@ -169,7 +169,7 @@ export default function MediaPreviewDialog({
             {showDownload && asset.url && (
               <button
                 onClick={() => onDownload?.(asset)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white transition-all"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm font-medium text-white transition-all"
               >
                 <Download className="w-4 h-4" />
                 Download

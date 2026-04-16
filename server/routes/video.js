@@ -149,6 +149,7 @@ router.post("/stitch", async (req, res) => {
         clipCount: videoUrls.length,
         sourceUrls: videoUrls,
         stitchedAt: Date.now(),
+        thumbnail: thumbnailUrl || null,
       },
     });
 
@@ -978,6 +979,7 @@ async function handleWanI2VGeneration({
       metadata: {
         model: modelId,
         provider: providerId,
+        thumbnail: thumbnailUrl || null,
       },
     });
 

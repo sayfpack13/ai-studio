@@ -53,12 +53,15 @@ function normalizeHistoryItem(item, id, type, source) {
 
   if (isInvalidMediaUrl(url)) return null;
 
+  const thumbnail = item?.thumbnail || item?.result?.thumbnail || null;
+
   return {
     id: `hist_${type}_${id}`,
     title: String(titleBase).slice(0, 120),
     type,
     source,
     url,
+    thumbnail,
     metadata: item?.metadata || {},
     createdAt: item?.createdAt || item?.lastUpdated || fallbackTime,
     updatedAt:
@@ -72,6 +75,7 @@ function normalizeLibraryAsset(asset) {
   if (!asset) return null;
   return {
     ...asset,
+    thumbnail: asset.thumbnail || asset.metadata?.thumbnail || null,
     createdAt: asset.createdAt || asset.updatedAt || fallbackTime,
     updatedAt: asset.updatedAt || asset.createdAt || fallbackTime,
     _origin: "library",

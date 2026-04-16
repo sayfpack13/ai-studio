@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { getToken, verifyToken } from '../../services/api';
-import { LoadingSpinner } from './shared';
+import LoadingSpinner from "./LoadingSpinner";
 
 /**
  * ProtectedRoute wraps routes that require admin authentication.

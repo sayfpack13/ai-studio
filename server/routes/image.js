@@ -1183,9 +1183,14 @@ router.post("/generate", async (req, res) => {
             data: [{ url: imageUrl, revised_prompt: effectivePrompt }],
           });
         } catch (error) {
-          console.error("[HuggingFace][Space] Image generation error:", error.message);
+          // Gradio client errors may have title/code/stage properties with more detail
+          const errorDetail = [
+            error.title && error.title !== error.message ? ` (${error.title})` : '',
+            error.code ? ` [${error.code}]` : '',
+          ].join('');
+          console.error("[HuggingFace][Space] Image generation error:", error.message, errorDetail || '');
           return res.status(502).json({
-            error: `HuggingFace image generation failed (space mode): ${withHfSpaceQuotaHint(error.message)}`,
+            error: `HuggingFace image generation failed (space mode): ${withHfSpaceQuotaHint(error.message)}${errorDetail}`,
           });
         }
       }

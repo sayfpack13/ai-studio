@@ -77,6 +77,7 @@ function normalizeLibraryAsset(asset) {
   if (!asset) return null;
   return {
     ...asset,
+    thumbnail: asset.thumbnail || asset.metadata?.thumbnail || null,
     createdAt: asset.createdAt || asset.updatedAt || fallbackTime,
     updatedAt: asset.updatedAt || asset.createdAt || fallbackTime,
     _origin: "library",
@@ -771,9 +772,19 @@ export default function MediaLibrary() {
                         }
                       />
                     ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-rose-950/80 via-gray-900 to-gray-950">
-                        <Video className="w-10 h-10 text-rose-400/60" />
-                      </div>
+                      <video
+                        src={resolveAssetUrl(asset.url)}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                        onError={() =>
+                          setImgVideoErrors((prev) => ({
+                            ...prev,
+                            [asset.id]: true,
+                          }))
+                        }
+                      />
                     )}
                     {!imgVideoErrors[asset.id] && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

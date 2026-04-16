@@ -235,10 +235,19 @@ export async function generateTongyiZImage(spaceUrl, hfToken, options = {}) {
   let parsedWidth = 1024;
   let parsedHeight = 1024;
   if (isMrFakeName && resolution) {
-    const match = resolution.match(/(\d+)\s*[x×]\s*(\d+)/i);
+    // Use normalizeTongyiResolution to get a valid resolution string,
+    // then extract dimensions from it. This ensures we always send
+    // dimensions that the Z-Image model supports (divisible by 16).
+    const normalized = normalizeTongyiResolution(resolution);
+    const match = normalized.match(/(\d+)\s*[x×]\s*(\d+)/i);
     if (match) {
       parsedWidth = toNumber(match[1], 1024);
       parsedHeight = toNumber(match[2], 1024);
+    }
+    if (resolution !== normalized) {
+      console.warn(
+        `[HF Gradio] Z-Image: mapped resolution "${resolution}" → "${normalized}" (${parsedWidth}x${parsedHeight})`
+      );
     }
   }
 

@@ -1,6 +1,220 @@
 {
-  "updatedAt": "2026-04-15T21:26:27.341Z",
+  "updatedAt": "2026-04-16T12:58:28.429Z",
   "jobs": [
+    {
+      "id": "audio_1776344282598_dd0d55d82259",
+      "type": "audio",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "mode": "video_to_audio",
+        "prompt": "realistic T-800 endoskeleton inspired by The Terminator, full body industrial ro",
+        "negativePrompt": "music",
+        "seed": -1,
+        "numSteps": 25,
+        "cfgStrength": 4.5,
+        "duration": 5,
+        "provider": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "videoUrl": "/uploads/videos/wan_i2v_1775818572182_123a6919.mp4"
+      },
+      "metadata": {
+        "audioId": "aud_1776344282593_b3hff37y4",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "provider": "huggingface",
+        "mode": "video_to_audio",
+        "providerId": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "promptPreview": "realistic T-800 endoskeleton inspired by The Terminator, full body industrial ro",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": {
+          "url": "/uploads/audio_video_1776344308415_342609ecad3f.mp4",
+          "mode": "video_to_audio",
+          "prompt": "realistic T-800 endoskeleton inspired by The Terminator, full body industrial ro",
+          "seed": -1
+        }
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-16T12:58:02.598Z",
+      "updatedAt": "2026-04-16T12:58:28.424Z",
+      "startedAt": "2026-04-16T12:58:02.601Z",
+      "completedAt": "2026-04-16T12:58:28.424Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-16T12:58:02.598Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-16T12:58:02.601Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-16T12:58:02.605Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-16T12:58:02.616Z",
+          "event": "progress",
+          "details": {
+            "stage": "generating_audio"
+          }
+        },
+        {
+          "at": "2026-04-16T12:58:13.721Z",
+          "event": "progress",
+          "details": {
+            "stage": "downloading_result"
+          }
+        },
+        {
+          "at": "2026-04-16T12:58:28.421Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-16T12:58:28.424Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "audio_1776343936137_81ac23b9d1ca",
+      "type": "audio",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "mode": "video_to_audio",
+        "prompt": "realistic T-800 endoskeleton inspired by The Terminator, full body industrial ro",
+        "negativePrompt": "music",
+        "seed": -1,
+        "numSteps": 25,
+        "cfgStrength": 4.5,
+        "duration": 5,
+        "provider": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "videoUrl": "/uploads/videos/wan_i2v_1775818572182_123a6919.mp4"
+      },
+      "metadata": {
+        "audioId": "aud_1776343936121_aoi8wkue9",
+        "modelKey": "huggingface:huggingface/hkchengrex/MMAudio",
+        "provider": "huggingface",
+        "mode": "video_to_audio",
+        "providerId": "huggingface",
+        "model": "huggingface/hkchengrex/MMAudio",
+        "promptPreview": "realistic T-800 endoskeleton inspired by The Terminator, full body industrial ro",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": {
+          "url": "/uploads/audio_video_1776343976257_c6d3aa4a8be5.mp4",
+          "mode": "video_to_audio",
+          "prompt": "realistic T-800 endoskeleton inspired by The Terminator, full body industrial ro",
+          "seed": -1
+        }
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-16T12:52:16.137Z",
+      "updatedAt": "2026-04-16T12:52:56.271Z",
+      "startedAt": "2026-04-16T12:52:16.141Z",
+      "completedAt": "2026-04-16T12:52:56.271Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-16T12:52:16.137Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-16T12:52:16.141Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-16T12:52:16.145Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-16T12:52:16.155Z",
+          "event": "progress",
+          "details": {
+            "stage": "generating_audio"
+          }
+        },
+        {
+          "at": "2026-04-16T12:52:31.126Z",
+          "event": "progress",
+          "details": {
+            "stage": "downloading_result"
+          }
+        },
+        {
+          "at": "2026-04-16T12:52:56.267Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-16T12:52:56.271Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "audio_1776288375495_d268ec1fabb9",
       "type": "audio",

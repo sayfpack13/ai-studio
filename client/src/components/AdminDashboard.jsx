@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Shield, Key, Server, Check, X, Loader2, Plus, Trash2, Zap, Settings, LogOut, Lock, Layers, Cloud } from 'lucide-react';
 import { loginAdmin, verifyToken, getConfig, updateConfig, logoutAdmin, getToken, testProviderConnection } from '../services/api';
 import { Button, Input } from './ui';
@@ -7,6 +8,8 @@ import ChutesPage from './Chutes/ChutesPage';
 import HFSetupPage from './HuggingFace/HFSetupPage';
 
 export default function AdminDashboard({ onAuthChange }) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState('');
@@ -49,6 +52,11 @@ export default function AdminDashboard({ onAuthChange }) {
             const configResult = await getConfig();
             applyConfig(configResult);
             setIsAuthenticated(true);
+            // If there's a redirect param and it's not /admin itself, navigate there
+            const redirect = searchParams.get('redirect');
+            if (redirect && redirect !== '/admin') {
+              navigate(redirect, { replace: true });
+            }
           }
         } catch (err) {
           console.error('Session check failed:', err);
@@ -74,6 +82,11 @@ export default function AdminDashboard({ onAuthChange }) {
         setIsAuthenticated(true);
         setPassword('');
         if (onAuthChange) onAuthChange(true);
+        // Redirect to the originally requested page if present
+        const redirect = searchParams.get('redirect');
+        if (redirect) {
+          navigate(redirect, { replace: true });
+        }
       } else {
         setError(result.error || 'Invalid password');
       }

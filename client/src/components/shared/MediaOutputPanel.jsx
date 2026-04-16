@@ -122,6 +122,7 @@ export default function MediaOutputPanel({
           thumbnail: result.thumbnail || null,
           revisedPrompt: result.revisedPrompt,
           metadata: item.metadata,
+          mode: result.mode || item.metadata?.mode || null,
           duration: result.duration,
         };
       })
@@ -257,6 +258,27 @@ export default function MediaOutputPanel({
       );
     }
     if (mediaType === "music") {
+      // Video-to-audio mode produces a video file (mp4), not just audio
+      const isVideoAudio = item.mode === "video_to_audio";
+      if (isVideoAudio) {
+        return (
+          <div className="flex flex-col items-center gap-3">
+            <video
+              key={url}
+              src={url}
+              controls={showControls}
+              className="w-full h-auto max-h-[50vh] rounded-lg"
+            >
+              Your browser does not support the video tag.
+            </video>
+            {item.prompt && (
+              <p className="text-sm text-gray-400 text-center max-w-md">
+                {item.prompt}
+              </p>
+            )}
+          </div>
+        );
+      }
       return (
         <div
           className={`bg-gradient-to-br ${config.loadingBg === "bg-emerald-600/10 border-emerald-500/30" ? "from-emerald-950/40 via-gray-900 to-gray-950" : config.loadingBg === "bg-rose-600/10 border-rose-500/30" ? "from-rose-950/40 via-gray-900 to-gray-950" : "from-violet-950/40 via-gray-900 to-gray-950"} rounded-xl p-6 flex flex-col items-center border border-gray-800`}
@@ -607,7 +629,7 @@ export default function MediaOutputPanel({
           previewMedia
             ? {
                 ...previewMedia,
-                type: mediaType,
+                type: previewMedia.mode === "video_to_audio" ? "video" : mediaType,
                 title: previewMedia.prompt || `Generated ${config.label}`,
               }
             : null

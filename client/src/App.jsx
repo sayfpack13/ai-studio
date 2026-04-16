@@ -15,6 +15,7 @@ import VideoEditor from "./components/VideoEditor";
 import Dashboard from "./components/Dashboard";
 import MediaLibrary from "./components/library/MediaLibrary";
 import AdminDashboard from "./components/AdminDashboard";
+import { ProtectedRoute } from "./components/shared";
 import { getToken } from "./services/api";
 import { useNavigate } from "react-router-dom";
 
@@ -143,7 +144,7 @@ function AppContent() {
             <Route path="/remix" element={<MusicRemix />} />
             <Route path="/editor" element={<VideoEditor />} />
             <Route path="/library" element={<MediaLibrary />} />
-            <Route path="/admin" element={<AdminDashboard onAuthChange={handleAuthChange} />} />
+            <Route path="/admin" element={<ProtectedRoute><AdminDashboard onAuthChange={handleAuthChange} /></ProtectedRoute>} />
           </Routes>
         </main>
       </div>

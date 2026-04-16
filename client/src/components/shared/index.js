@@ -23,6 +23,7 @@ export { default as MediaOutputPanel } from "./MediaOutputPanel";
 export { default as MediaGalleryGrid } from "./MediaGalleryGrid";
 export { default as MediaCompareView } from "./MediaCompareView";
 export { default as MediaPreviewDialog } from "./MediaPreviewDialog";
+export { default as ProtectedRoute } from "./ProtectedRoute";
 
 // Base UI components
 export * from "./ui";

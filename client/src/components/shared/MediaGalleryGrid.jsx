@@ -191,6 +191,27 @@ export default function MediaGalleryGrid({
     }
 
     if (mediaType === "music") {
+      // Video-to-audio mode produces a video file — show video thumbnail
+      const isVideoAudio = item.mode === "video_to_audio" || item.metadata?.mode === "video_to_audio";
+      if (isVideoAudio) {
+        return (
+          <>
+            <video
+              src={url}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              preload="metadata"
+              onError={() => markBroken(item.id)}
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20">
+                <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+              </div>
+            </div>
+          </>
+        );
+      }
       return (
         <div
           className={`w-full h-full flex flex-col items-center justify-center bg-gradient-to-br ${accent.bg}`}

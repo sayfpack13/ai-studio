@@ -7,6 +7,25 @@ import { LoadingSpinner } from './shared';
 import ChutesPage from './Chutes/ChutesPage';
 import HFSetupPage from './HuggingFace/HFSetupPage';
 
+/** Where to send the user after admin auth; null means stay on current URL. */
+function resolvePostAuthRedirect(redirectParam) {
+  if (!redirectParam) return null;
+  try {
+    const base =
+      typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const u = new URL(redirectParam, base);
+    if (u.pathname === '/admin' && u.searchParams.has('redirect')) {
+      return '/admin';
+    }
+    if (u.pathname === '/admin' && u.search === '') {
+      return null;
+    }
+    return redirectParam;
+  } catch {
+    return redirectParam.startsWith('/') ? redirectParam : null;
+  }
+}
+
 export default function AdminDashboard({ onAuthChange }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -52,11 +71,8 @@ export default function AdminDashboard({ onAuthChange }) {
             const configResult = await getConfig();
             applyConfig(configResult);
             setIsAuthenticated(true);
-            // If there's a redirect param and it's not /admin itself, navigate there
-            const redirect = searchParams.get('redirect');
-            if (redirect && redirect !== '/admin') {
-              navigate(redirect, { replace: true });
-            }
+            const next = resolvePostAuthRedirect(searchParams.get('redirect'));
+            if (next) navigate(next, { replace: true });
           }
         } catch (err) {
           console.error('Session check failed:', err);
@@ -83,10 +99,8 @@ export default function AdminDashboard({ onAuthChange }) {
         setPassword('');
         if (onAuthChange) onAuthChange(true);
         // Redirect to the originally requested page if present
-        const redirect = searchParams.get('redirect');
-        if (redirect) {
-          navigate(redirect, { replace: true });
-        }
+        const next = resolvePostAuthRedirect(searchParams.get('redirect'));
+        if (next) navigate(next, { replace: true });
       } else {
         setError(result.error || 'Invalid password');
       }

@@ -1,6 +1,608 @@
 {
-  "updatedAt": "2026-04-16T14:20:00.830Z",
+  "updatedAt": "2026-04-18T07:47:23.733Z",
   "jobs": [
+    {
+      "id": "video_1776498360097_5d39affa2f3b",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "seamless loop animation of car lights, and smoke",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1776497898225_8d3391a1044e.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1776498360094_2pwfqi47d",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "seamless loop animation of car lights, and smoke",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/hf_video_seamless_loop_animation_of_car_lights_and_smoke_1776498443717_3bf4fbb8.mp4",
+            "revised_prompt": "seamless loop animation of car lights, and smoke"
+          }
+        ]
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-18T07:46:00.097Z",
+      "updatedAt": "2026-04-18T07:47:23.725Z",
+      "startedAt": "2026-04-18T07:46:16.347Z",
+      "completedAt": "2026-04-18T07:47:23.725Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-18T07:46:00.097Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-18T07:46:16.347Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-18T07:46:16.352Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-18T07:46:16.357Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-18T07:47:22.989Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-18T07:47:23.720Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-18T07:47:23.725Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776498323097_607da3a7df18",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "seamless loop animation of anime girl",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1776497200120_0d700e8551be.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1776498323094_wq00jcojb",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "seamless loop animation of anime girl",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "HuggingFace video generation failed: GPU task aborted",
+        "name": "Error",
+        "stack": "Error: HuggingFace video generation failed: GPU task aborted\n    at processVideoJob (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/server.js:953:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async #processLoop (file:///C:/Users/sayfp/OneDrive/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-18T07:45:23.097Z",
+      "updatedAt": "2026-04-18T07:46:16.335Z",
+      "startedAt": "2026-04-18T07:45:23.100Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-04-18T07:46:16.335Z",
+      "history": [
+        {
+          "at": "2026-04-18T07:45:23.097Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-18T07:45:23.100Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-18T07:45:23.107Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-18T07:45:23.111Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-18T07:46:16.335Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776498234803_56a36e01e04c",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "seamless loop animation of a car drifting in a neon cyberpunk city at night, camera orbiting slowly, purple and blue lights, tire smoke flowing continuously, same starting and ending frame, smooth infinite loop, phonk aesthetic, cinematic lighting, no cuts, fluid motion",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1776497898225_8d3391a1044e.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1776498234798_1ilu3kn6s",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "seamless loop animation of a car drifting in a neon cyberpunk city at night, camera orbiting slowly, purple and blue lights, tire smoke flowing continuously, same starting and ending frame, smooth inf",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/hf_video_seamless_loop_animation_of_a_car_drifting_in_a_n_1776498288161_4f84ada4.mp4",
+            "revised_prompt": "seamless loop animation of a car drifting in a neon cyberpunk city at night, camera orbiting slowly, purple and blue lights, tire smoke flowing continuously, same starting and ending frame, smooth infinite loop, phonk aesthetic, cinematic lighting, no cuts, fluid motion"
+          }
+        ]
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-18T07:43:54.803Z",
+      "updatedAt": "2026-04-18T07:44:48.170Z",
+      "startedAt": "2026-04-18T07:43:54.808Z",
+      "completedAt": "2026-04-18T07:44:48.170Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-18T07:43:54.803Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-18T07:43:54.808Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-18T07:43:54.812Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-18T07:43:54.816Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-18T07:44:47.405Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-18T07:44:48.163Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-18T07:44:48.170Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776498127187_68cbf6bf6943",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "phonk drift aesthetic, night city, cars drifting, neon lights, purple and blue color grading, slow motion + speed ramps, beat synced cuts, glitch transitions, bass drops with camera shake, cinematic lighting, smoke effects",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1776497898225_8d3391a1044e.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1776498127182_c49mge962",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "phonk drift aesthetic, night city, cars drifting, neon lights, purple and blue color grading, slow motion + speed ramps, beat synced cuts, glitch transitions, bass drops with camera shake, cinematic l",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/hf_video_phonk_drift_aesthetic_night_city_cars_drifting_n_1776498186762_5dbf8f41.mp4",
+            "revised_prompt": "phonk drift aesthetic, night city, cars drifting, neon lights, purple and blue color grading, slow motion + speed ramps, beat synced cuts, glitch transitions, bass drops with camera shake, cinematic lighting, smoke effects"
+          }
+        ]
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-18T07:42:07.187Z",
+      "updatedAt": "2026-04-18T07:43:06.769Z",
+      "startedAt": "2026-04-18T07:42:07.191Z",
+      "completedAt": "2026-04-18T07:43:06.769Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-18T07:42:07.187Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-18T07:42:07.191Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-18T07:42:07.196Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-18T07:42:07.200Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-18T07:43:06.237Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-18T07:43:06.764Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-18T07:43:06.769Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1776497847641_5d7c6f110689",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "dark phonk aesthetic, anime fight scenes, cyberpunk city at night, red and black color grading, aggressive mood, fast cuts synced to beat, glitch transitions, camera shake on drops, zoom pulses, smoke overlays, cinematic lighting",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1776497200120_0d700e8551be.png",
+        "wanFrames": 81,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1776497847637_msynou2q9",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 81,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "dark phonk aesthetic, anime fight scenes, cyberpunk city at night, red and black color grading, aggressive mood, fast cuts synced to beat, glitch transitions, camera shake on drops, zoom pulses, smoke",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/hf_video_dark_phonk_aesthetic_anime_fight_scenes_cyberpun_1776497923071_e72b116e.mp4",
+            "revised_prompt": "dark phonk aesthetic, anime fight scenes, cyberpunk city at night, red and black color grading, aggressive mood, fast cuts synced to beat, glitch transitions, camera shake on drops, zoom pulses, smoke overlays, cinematic lighting"
+          }
+        ]
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-04-18T07:37:27.641Z",
+      "updatedAt": "2026-04-18T07:38:43.077Z",
+      "startedAt": "2026-04-18T07:37:27.645Z",
+      "completedAt": "2026-04-18T07:38:43.077Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-04-18T07:37:27.641Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-04-18T07:37:27.645Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-04-18T07:37:27.651Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-04-18T07:37:27.655Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-04-18T07:38:42.263Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-04-18T07:38:43.072Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-04-18T07:38:43.077Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1776349121080_aa2e67f49394",
       "type": "video",

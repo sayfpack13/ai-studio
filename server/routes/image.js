@@ -10,6 +10,7 @@ import { saveBuffer } from "../services/file-storage.js";
 import {
   generateImage as hfGenerateImage,
   generateTongyiZImage,
+  generateNanoBanana,
 } from "../utils/gradio-client.js";
 import { generateImageViaInference } from "../utils/hf-inference-client.js";
 
@@ -1055,9 +1056,13 @@ router.post("/generate", async (req, res) => {
           const isFluxModel = /black-forest-labs\/FLUX\.1-dev/i.test(
             normalizedHfModel,
           );
+          const isNanoBananaModel = /multimodalart\/nano-banana/i.test(
+            normalizedHfModel,
+          );
           const hfSpaceTarget = String(req.body?.hfSpaceTarget || "").toLowerCase();
           const hfCustomSpace = String(req.body?.hfCustomSpace || "").trim();
           const DEFAULT_FLUX_SPACE = "black-forest-labs/FLUX.1-dev";
+          const DEFAULT_NANO_BANANA_SPACE = "multimodalart/nano-banana";
           const spaceUrl = isTongyiModel
             ? hfSpaceTarget === "custom"
               ? hfCustomSpace || process.env.HF_TONGYI_SPACE_URL || DEFAULT_TONGYI_SPACE
@@ -1066,7 +1071,11 @@ router.post("/generate", async (req, res) => {
               ? hfSpaceTarget === "custom"
                 ? hfCustomSpace || process.env.HF_FLUX_SPACE_URL || DEFAULT_FLUX_SPACE
                 : DEFAULT_FLUX_SPACE
-              : process.env.HF_IMAGE_SPACE_URL || provider.apiBaseUrl;
+              : isNanoBananaModel
+                ? hfSpaceTarget === "custom"
+                  ? hfCustomSpace || process.env.HF_NANO_BANANA_SPACE_URL || DEFAULT_NANO_BANANA_SPACE
+                  : DEFAULT_NANO_BANANA_SPACE
+                : process.env.HF_IMAGE_SPACE_URL || provider.apiBaseUrl;
 
           if (!spaceUrl) {
             return res.status(400).json({
@@ -1098,7 +1107,15 @@ router.post("/generate", async (req, res) => {
                     ? req.body.tongyiParams.gallery_images
                     : [],
               })
-            : await hfGenerateImage(spaceUrl, hfToken, {
+            : isNanoBananaModel
+              ? await generateNanoBanana(spaceUrl, hfToken, {
+                  prompt: effectivePrompt,
+                  model: req.body?.nanoBananaModel || "Nano Banana",
+                  aspectRatio: req.body?.aspectRatio || req.body?.nanoBananaParams?.aspectRatio || "Auto",
+                  resolution: req.body?.nanoBananaResolution || req.body?.nanoBananaParams?.resolution || "1K",
+                  input_images: req.body.input_images || [],
+                })
+              : await hfGenerateImage(spaceUrl, hfToken, {
                 prompt: effectivePrompt,
                 width: normalizedWidth || 1024,
                 height: normalizedHeight || 1024,
@@ -1171,6 +1188,20 @@ router.post("/generate", async (req, res) => {
                     ...(hfSpaceTarget === "custom" && hfCustomSpace
                       ? { hfCustomSpace }
                       : {}),
+                  }
+                : {}),
+              ...(isNanoBananaModel
+                ? {
+                    hfSpaceTarget:
+                      hfSpaceTarget === "custom" ? "custom" : "public",
+                    ...(hfSpaceTarget === "custom" && hfCustomSpace
+                      ? { hfCustomSpace }
+                      : {}),
+                    nanoBananaParams: {
+                      model: req.body?.nanoBananaModel || "Nano Banana",
+                      aspectRatio: req.body?.aspectRatio || "Auto",
+                      resolution: req.body?.nanoBananaResolution || "1K",
+                    },
                   }
                 : {}),
               ...(result.seedUsed ? { seedUsed: result.seedUsed } : {}),

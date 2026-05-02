@@ -37,6 +37,7 @@ const IMAGE_HF_SPACE_TARGET_KEY = "blackbox_ai_image_hf_space_target";
 const IMAGE_HF_CUSTOM_SPACE_KEY = "blackbox_ai_image_hf_custom_space";
 const PUBLIC_TONGYI_SPACE_ID = "mrfakename/Z-Image-Turbo";
 const PUBLIC_FLUX_SPACE_ID = "black-forest-labs/FLUX.1-dev";
+const PUBLIC_NANO_BANANA_SPACE_ID = "multimodalart/nano-banana";
 
 const toHuggingFaceSpacePageUrl = (spaceValue) => {
   const raw = String(spaceValue || "").trim();
@@ -190,6 +191,11 @@ export default function ImageGenerator() {
     randomSeed: true,
     steps: 8,
     shift: 3,
+  });
+  const [nanoBananaParams, setNanoBananaParams] = useState({
+    model: "Nano Banana",
+    aspectRatio: "Auto",
+    resolution: "1K",
   });
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -549,6 +555,16 @@ export default function ImageGenerator() {
           }
 
           if (
+            metadata.nanoBananaParams &&
+            typeof metadata.nanoBananaParams === "object"
+          ) {
+            setNanoBananaParams((prev) => ({
+              ...prev,
+              ...metadata.nanoBananaParams,
+            }));
+          }
+
+          if (
             typeof metadata.hfMode === "string" &&
             ["inference", "space"].includes(metadata.hfMode)
           ) {
@@ -666,6 +682,16 @@ export default function ImageGenerator() {
               size: sizeFromMeta,
               width: Number(metadata.tongyiParams.width) || dims.width,
               height: Number(metadata.tongyiParams.height) || dims.height,
+            }));
+          }
+
+          if (
+            metadata.nanoBananaParams &&
+            typeof metadata.nanoBananaParams === "object"
+          ) {
+            setNanoBananaParams((prev) => ({
+              ...prev,
+              ...metadata.nanoBananaParams,
             }));
           }
 
@@ -1035,6 +1061,16 @@ export default function ImageGenerator() {
               random_seed: Boolean(tongyiParams.randomSeed),
             }
           : undefined,
+        nanoBananaModel: isNanoBananaModel ? nanoBananaParams.model : undefined,
+        aspectRatio: isNanoBananaModel ? nanoBananaParams.aspectRatio : undefined,
+        nanoBananaResolution: isNanoBananaModel ? nanoBananaParams.resolution : undefined,
+        nanoBananaParams: isNanoBananaModel
+          ? {
+              model: nanoBananaParams.model,
+              aspectRatio: nanoBananaParams.aspectRatio,
+              resolution: nanoBananaParams.resolution,
+            }
+          : undefined,
         hfMode: isHuggingFaceSelection ? hfMode : undefined,
         hfSpaceTarget:
           isHFSpaceModel && isHuggingFaceSelection && hfMode === "space"
@@ -1082,6 +1118,13 @@ export default function ImageGenerator() {
               steps: Number(tongyiParams.steps),
               shift: Number(tongyiParams.shift),
               randomSeed: Boolean(tongyiParams.randomSeed),
+            }
+          : undefined,
+        nanoBananaParams: isNanoBananaModel
+          ? {
+              model: nanoBananaParams.model,
+              aspectRatio: nanoBananaParams.aspectRatio,
+              resolution: nanoBananaParams.resolution,
             }
           : undefined,
         hfMode: isHuggingFaceSelection ? hfMode : undefined,
@@ -1266,6 +1309,16 @@ export default function ImageGenerator() {
         }
 
         if (
+          metadata.nanoBananaParams &&
+          typeof metadata.nanoBananaParams === "object"
+        ) {
+          setNanoBananaParams((prev) => ({
+            ...prev,
+            ...metadata.nanoBananaParams,
+          }));
+        }
+
+        if (
           typeof metadata.hfMode === "string" &&
           ["inference", "space"].includes(metadata.hfMode)
         ) {
@@ -1317,6 +1370,11 @@ export default function ImageGenerator() {
           randomSeed: true,
           steps: 8,
           shift: 3,
+        });
+        setNanoBananaParams({
+          model: "Nano Banana",
+          aspectRatio: "Auto",
+          resolution: "1K",
         });
         // Keep persisted HuggingFace mode/Space target preferences.
 
@@ -1434,7 +1492,9 @@ export default function ImageGenerator() {
     selectedModelInfo?.id === "huggingface/Tongyi-MAI/Z-Image-Turbo";
   const isFluxModel =
     selectedModelInfo?.id === "huggingface/black-forest-labs/FLUX.1-dev";
-  const isHFSpaceModel = isTongyiZImageTurbo || isFluxModel;
+  const isNanoBananaModel =
+    selectedModelInfo?.id === "huggingface/multimodalart/nano-banana";
+  const isHFSpaceModel = isTongyiZImageTurbo || isFluxModel || isNanoBananaModel;
   const selectedProviderForModel =
     selectedModelInfo?.configuredProvider ||
     selectedModelInfo?.provider ||
@@ -1459,16 +1519,24 @@ export default function ImageGenerator() {
 
   const activeSpaceLabel = isFluxModel
     ? `FLUX.1-dev`
-    : `Tongyi Z-Image-Turbo`;
+    : isNanoBananaModel
+      ? `Nano Banana`
+      : `Tongyi Z-Image-Turbo`;
   const activeSpaceValue = isFluxModel
     ? activeFluxSpaceValue
-    : activeTongyiSpaceValue;
+    : isNanoBananaModel
+      ? (hfSpaceTarget === "custom" && hfCustomSpace.trim() ? hfCustomSpace.trim() : PUBLIC_NANO_BANANA_SPACE_ID)
+      : activeTongyiSpaceValue;
   const activeSpaceUrl = isFluxModel
     ? activeFluxSpaceUrl
-    : activeTongyiSpaceUrl;
+    : isNanoBananaModel
+      ? toHuggingFaceSpacePageUrl(hfSpaceTarget === "custom" && hfCustomSpace.trim() ? hfCustomSpace.trim() : PUBLIC_NANO_BANANA_SPACE_ID)
+      : activeTongyiSpaceUrl;
   const activePublicSpaceId = isFluxModel
     ? PUBLIC_FLUX_SPACE_ID
-    : PUBLIC_TONGYI_SPACE_ID;
+    : isNanoBananaModel
+      ? PUBLIC_NANO_BANANA_SPACE_ID
+      : PUBLIC_TONGYI_SPACE_ID;
 
   const handleCopySpaceUrl = useCallback(async () => {
     if (!activeSpaceUrl) return;
@@ -1488,6 +1556,7 @@ export default function ImageGenerator() {
     if (modelId === "chutes/hunyuan-image-3") return hunyuanParams;
     if (modelId === "chutes/Qwen-Image-2512") return qwenImageParams;
     if (modelId === "huggingface/Tongyi-MAI/Z-Image-Turbo") return tongyiParams;
+    if (modelId === "huggingface/multimodalart/nano-banana") return nanoBananaParams;
     return { width, height, steps, guidanceScale, negativePrompt, seed };
   }, [
     selectedModelInfo?.id,
@@ -1495,6 +1564,7 @@ export default function ImageGenerator() {
     hunyuanParams,
     qwenImageParams,
     tongyiParams,
+    nanoBananaParams,
     width,
     height,
     steps,
@@ -1525,6 +1595,8 @@ export default function ImageGenerator() {
           ...newParams,
           size: buildTongyiResolution(newParams.width, newParams.height),
         });
+      } else if (modelId === "huggingface/multimodalart/nano-banana") {
+        setNanoBananaParams((prev) => ({ ...prev, ...newParams }));
       } else {
         if (newParams.width !== undefined) setWidth(newParams.width);
         if (newParams.height !== undefined) setHeight(newParams.height);

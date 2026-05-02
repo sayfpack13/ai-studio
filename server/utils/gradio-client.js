@@ -518,8 +518,88 @@ export async function generateVideoToAudio(spaceUrl, hfToken, options = {}) {
 }
 
 /**
- * Generate audio from a text prompt using the MMAudio Space on HuggingFace.
+ * Generate an image via the Nano Banana Space on HuggingFace.
  *
+ * The Nano Banana Space (multimodalart/nano-banana) uses a Gradio interface with:
+ * - API endpoint: /unified_image_generator
+ * - Inputs: gallery (images), prompt, model (radio), aspect_ratio (dropdown), resolution (dropdown)
+ * - Model choices: "Nano Banana", "Nano Banana 2", "Nano Banana PRO"
+ * - Aspect ratio choices: "Auto", "1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "5:4", "4:5", "21:9"
+ * - Resolution choices: "1K", "2K", "4K"
+ * - Output: image
+ *
+ * NOTE: This Space requires a HuggingFace PRO subscription.
+ *
+ * @param {string} spaceUrl  - Full Space URL (e.g. "multimodalart/nano-banana")
+ * @param {string} hfToken   - HuggingFace API token (REQUIRED — PRO subscription needed)
+ * @param {object} options
+ * @param {string} options.prompt - Text prompt for image generation
+ * @param {string} [options.model="Nano Banana"] - Model variant: "Nano Banana", "Nano Banana 2", or "Nano Banana PRO"
+ * @param {string} [options.aspectRatio="Auto"] - Aspect ratio
+ * @param {string} [options.resolution="1K"] - Resolution: "1K", "2K", or "4K"
+ * @param {Array}  [options.input_images=[]] - Optional reference images for editing
+ * @returns {{ url: string }} Object with URL of the generated image
+ */
+export async function generateNanoBanana(spaceUrl, hfToken, options = {}) {
+  const client = await getClient(spaceUrl, hfToken);
+
+  const {
+    prompt = "",
+    model = "Nano Banana",
+    aspectRatio = "Auto",
+    resolution = "1K",
+    input_images = [],
+  } = options;
+
+  const validModels = ["Nano Banana", "Nano Banana 2", "Nano Banana PRO"];
+  const nanoBananaModel = validModels.includes(model) ? model : "Nano Banana";
+
+  const validAspectRatios = ["Auto", "1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "5:4", "4:5", "21:9"];
+  const nanoBananaAspectRatio = validAspectRatios.includes(aspectRatio) ? aspectRatio : "Auto";
+
+  const validResolutions = ["1K", "2K", "4K"];
+  const nanoBananaResolution = validResolutions.includes(resolution) ? resolution : "1K";
+
+  const galleryRefs = Array.isArray(input_images)
+    ? input_images.map(toGalleryFileRef).filter(Boolean)
+    : [];
+
+  console.log("[HF Gradio] Calling /unified_image_generator with prompt length:", prompt.length, "model:", nanoBananaModel);
+
+  // Use positional (array) arguments because the Gradio client's keyword argument
+  // mapping may not match the actual parameter names exposed by this Space's API.
+  // Input order from the Space config: prompt, gallery, state, state, aspect_ratio, model, resolution, manual_token
+  // The manual_token field (component 27) is used by the Space to verify HF PRO subscription.
+  // Pass the HF token here so the Space can authenticate PRO access.
+  const manualToken = hfToken || null;
+
+  const result = await client.predict("/unified_image_generator", [
+    String(prompt ?? ""),                        // prompt (textbox)
+    galleryRefs.length > 0 ? galleryRefs : null, // gallery (images)
+    null,                                        // state (internal)
+    null,                                        // state (internal)
+    nanoBananaAspectRatio,                       // aspect_ratio (dropdown)
+    nanoBananaModel,                              // model (radio)
+    nanoBananaResolution,                        // resolution (dropdown)
+    manualToken,                                  // manual_token (textbox — HF PRO token)
+  ]);
+
+  // The output is an image component — extract the URL
+  const imageData = result?.data?.[0];
+  if (!imageData) {
+    throw new Error("Nano Banana Space returned no image data");
+  }
+
+  const imageUrl = typeof imageData === "string" ? imageData : imageData?.url;
+  if (!imageUrl) {
+    throw new Error("Nano Banana Space returned unexpected image format");
+  }
+
+  return { url: imageUrl };
+}
+
+/**
+ * Generate audio from text using the MMAudio Space on HuggingFace
  * @param {string} spaceUrl  - Full Space URL (e.g. "hkchengrex/MMAudio")
  * @param {string} hfToken   - HuggingFace API token (optional for public spaces)
  * @param {object} options

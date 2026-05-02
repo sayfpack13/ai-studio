@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sliders, RotateCcw, Square, RectangleHorizontal, RectangleVertical, Maximize, Lock, Unlock } from "lucide-react";
 import { Button } from "../ui";
 import { SliderControl, NumberInput, PresetCard, PresetCardGrid, CollapsiblePanel, TextAreaInput, TextInput } from "./ui";
-import { getModelConfig, commonImageSizePresets, qualityPresets } from "./configs";
+import { getModelConfig, commonImageSizePresets, qualityPresets, nanoBananaAspectRatioPresets, nanoBananaResolutionPresets } from "./configs";
 
 export default function ImagePresetPanel({
   modelId,
@@ -238,7 +238,8 @@ export default function ImagePresetPanel({
           </div>
         )}
 
-        {/* Size Presets */}
+        {/* Size Presets - hidden for models with their own aspect ratio/resolution controls */}
+        {!config.supportsNanoBananaParams ? (
         <div>
           <label className="block text-xs text-gray-500 mb-2">Size</label>
           <PresetCardGrid
@@ -254,6 +255,31 @@ export default function ImagePresetPanel({
             className={sizePresets.length > 8 ? "max-h-64 overflow-y-auto pr-1" : ""}
           />
         </div>
+        ) : (
+          <>
+            {/* Nano Banana Aspect Ratio */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-2">Aspect Ratio</label>
+              <PresetCardGrid
+                presets={config.aspectRatioPresets || nanoBananaAspectRatioPresets}
+                selectedId={getValue("aspectRatio")}
+                onSelect={(preset) => updateParam("aspectRatio", preset.id)}
+                columns={4}
+              />
+            </div>
+
+            {/* Nano Banana Resolution */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-2">Resolution</label>
+              <PresetCardGrid
+                presets={config.resolutionPresets || nanoBananaResolutionPresets}
+                selectedId={getValue("resolution")}
+                onSelect={(preset) => updateParam("resolution", preset.id)}
+                columns={3}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Expandable Content */}
@@ -410,6 +436,30 @@ export default function ImagePresetPanel({
                   onChange={(v) => updateParam("seed", v)}
                   placeholder="Random"
                 />
+              )}
+
+              {/* Nano Banana Model Variant */}
+              {config.supportsNanoBananaParams && (
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Model Variant
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {config.nanoBananaModels.map((variant) => (
+                      <button
+                        key={variant}
+                        onClick={() => updateParam("model", variant)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          getValue("model") === variant
+                            ? "bg-purple-600 text-white ring-1 ring-purple-400"
+                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        }`}
+                      >
+                        {variant}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 

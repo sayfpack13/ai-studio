@@ -147,6 +147,62 @@ export const tongyiQualityPresets = {
   },
 };
 
+// Nano Banana quality presets
+export const nanoBananaQualityPresets = {
+  fast: {
+    id: "fast",
+    label: "Fast",
+    description: "1K resolution",
+    icon: Zap,
+    color: "text-yellow-400",
+    bgColor: "bg-yellow-600/20",
+    borderColor: "ring-yellow-500",
+    params: { resolution: "1K" },
+  },
+  balanced: {
+    id: "balanced",
+    label: "Balanced",
+    description: "2K resolution",
+    icon: Gauge,
+    color: "text-blue-400",
+    bgColor: "bg-blue-600/20",
+    borderColor: "ring-blue-500",
+    params: { resolution: "2K" },
+  },
+  high: {
+    id: "high",
+    label: "High Quality",
+    description: "4K resolution",
+    icon: Sparkles,
+    color: "text-purple-400",
+    bgColor: "bg-purple-600/20",
+    borderColor: "ring-purple-500",
+    params: { resolution: "4K" },
+  },
+};
+
+// Nano Banana aspect ratio presets (PresetCard-compatible)
+export const nanoBananaAspectRatioPresets = [
+  { id: "Auto", label: "Auto", description: "Default", icon: Maximize, color: "text-gray-400", bgColor: "bg-gray-600/20", borderColor: "ring-gray-500" },
+  { id: "1:1", label: "1:1", description: "Square", icon: Square, color: "text-purple-400", bgColor: "bg-purple-600/20", borderColor: "ring-purple-500" },
+  { id: "9:16", label: "9:16", description: "Mobile", icon: RectangleVertical, color: "text-blue-400", bgColor: "bg-blue-600/20", borderColor: "ring-blue-500" },
+  { id: "16:9", label: "16:9", description: "Widescreen", icon: RectangleHorizontal, color: "text-green-400", bgColor: "bg-green-600/20", borderColor: "ring-green-500" },
+  { id: "3:4", label: "3:4", description: "Portrait", icon: RectangleVertical, color: "text-orange-400", bgColor: "bg-orange-600/20", borderColor: "ring-orange-500" },
+  { id: "4:3", label: "4:3", description: "Classic", icon: RectangleHorizontal, color: "text-yellow-400", bgColor: "bg-yellow-600/20", borderColor: "ring-yellow-500" },
+  { id: "3:2", label: "3:2", description: "Landscape", icon: RectangleHorizontal, color: "text-cyan-400", bgColor: "bg-cyan-600/20", borderColor: "ring-cyan-500" },
+  { id: "2:3", label: "2:3", description: "Tall", icon: RectangleVertical, color: "text-pink-400", bgColor: "bg-pink-600/20", borderColor: "ring-pink-500" },
+  { id: "5:4", label: "5:4", description: "Near Square", icon: Square, color: "text-indigo-400", bgColor: "bg-indigo-600/20", borderColor: "ring-indigo-500" },
+  { id: "4:5", label: "4:5", description: "Near Tall", icon: RectangleVertical, color: "text-teal-400", bgColor: "bg-teal-600/20", borderColor: "ring-teal-500" },
+  { id: "21:9", label: "21:9", description: "Cinema", icon: Maximize, color: "text-red-400", bgColor: "bg-red-600/20", borderColor: "ring-red-500" },
+];
+
+// Nano Banana resolution presets (PresetCard-compatible)
+export const nanoBananaResolutionPresets = [
+  { id: "1K", label: "1K", description: "Fast", icon: Zap, color: "text-yellow-400", bgColor: "bg-yellow-600/20", borderColor: "ring-yellow-500" },
+  { id: "2K", label: "2K", description: "Balanced", icon: Gauge, color: "text-blue-400", bgColor: "bg-blue-600/20", borderColor: "ring-blue-500" },
+  { id: "4K", label: "4K", description: "High Quality", icon: Sparkles, color: "text-purple-400", bgColor: "bg-purple-600/20", borderColor: "ring-purple-500" },
+];
+
 // Image model configurations
 export const imageModelConfigs = {
   // Generic/standard models (OpenAI, Stability, etc.)
@@ -291,6 +347,30 @@ export const imageModelConfigs = {
       { id: "ultra-tall", label: "Ultra Tall", description: "288x1536 (3:16)", width: 288, height: 1536 },
       { id: "tall-banner", label: "Tall Banner", description: "576x1536 (3:8)", width: 576, height: 1536 },
     ],
+  },
+
+  // Nano Banana (HuggingFace Space)
+  "huggingface/multimodalart/nano-banana": {
+    id: "huggingface/multimodalart/nano-banana",
+    name: "Nano Banana",
+    supportsNanoBananaParams: true,
+    supportsWidthHeight: false,
+    supportsSteps: false,
+    supportsGuidanceScale: false,
+    supportsNegativePrompt: false,
+    supportsSeed: false,
+    supportsQualityPresets: true,
+    qualityPresets: nanoBananaQualityPresets,
+    aspectRatioPresets: nanoBananaAspectRatioPresets,
+    resolutionPresets: nanoBananaResolutionPresets,
+    defaultValues: {
+      model: "Nano Banana",
+      aspectRatio: "Auto",
+      resolution: "1K",
+    },
+    nanoBananaModels: ["Nano Banana", "Nano Banana 2", "Nano Banana PRO"],
+    nanoBananaAspectRatios: ["Auto", "1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "5:4", "4:5", "21:9"],
+    nanoBananaResolutions: ["1K", "2K", "4K"],
   },
 
   // Hunyuan Image 3

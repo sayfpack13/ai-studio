@@ -44,7 +44,7 @@ ENABLE_WARMUP = os.environ.get("ENABLE_WARMUP", "false").lower() == "true"
 ATTENTION_BACKEND = os.environ.get("ATTENTION_BACKEND", "flash_3")
 UNSAFE_MAX_NEW_TOKEN = int(os.environ.get("UNSAFE_MAX_NEW_TOKEN", "10"))
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
-HF_TOKEN = os.environ.get("HF_TOKEN")
+HF_TOKEN = None
 UNSAFE_PROMPT_CHECK = os.environ.get(
     "UNSAFE_PROMPT_CHECK",
     "You are a safety classifier. Reply only 'yes' if the user prompt requests unsafe, harmful, sexual, violent, illegal, or disallowed content. Reply only 'no' otherwise.",

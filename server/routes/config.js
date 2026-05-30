@@ -184,11 +184,11 @@ router.post('/deploy-hf-space', requireAuth, async (req, res) => {
 router.get('/hf-spaces', requireAuth, async (req, res) => {
   try {
     const tokenFromQuery = String(req.query?.token || '').trim();
-    const token = tokenFromQuery || req.config.providers?.huggingface?.apiKey || process.env.HF_TOKEN || '';
+    const token = tokenFromQuery || '';
 
     if (!token) {
       return res.status(400).json({
-        error: 'HuggingFace token is required. Provide token query param or configure HuggingFace provider API key.',
+        error: 'HuggingFace token is required. Provide token query param.',
       });
     }
 
@@ -206,11 +206,11 @@ router.get('/hf-spaces', requireAuth, async (req, res) => {
 router.get('/hf-deploy-targets', requireAuth, async (req, res) => {
   try {
     const tokenFromQuery = String(req.query?.token || '').trim();
-    const token = tokenFromQuery || req.config.providers?.huggingface?.apiKey || process.env.HF_TOKEN || '';
+    const token = tokenFromQuery || '';
 
     if (!token) {
       return res.status(400).json({
-        error: 'HuggingFace token is required. Provide token query param or configure HuggingFace provider API key.',
+        error: 'HuggingFace token is required. Provide token query param.',
       });
     }
 
@@ -228,7 +228,7 @@ router.get('/hf-deploy-targets', requireAuth, async (req, res) => {
 router.post('/redeploy-hf-space', requireAuth, async (req, res) => {
   try {
     const tokenFromBody = String(req.body?.token || '').trim();
-    const token = tokenFromBody || req.config.providers?.huggingface?.apiKey || process.env.HF_TOKEN || '';
+    const token = tokenFromBody || '';
     const repoId = String(req.body?.repoId || req.body?.spaceName || '').trim();
     const templateName = String(req.body?.templateName || 'huggingface-space').trim();
 

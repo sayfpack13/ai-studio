@@ -143,6 +143,100 @@ export const remixMusic = async (payload, options = {}) => {
   return await response.json();
 };
 
+export const transcribeAudio = async (payload, options = {}) => {
+  const { signal } = options;
+  const response = await fetch(`${API_BASE_URL}/remix/transcribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify(payload),
+  });
+  return await response.json();
+};
+
+export const enhanceAudio = async (payload, options = {}) => {
+  const { signal } = options;
+  const response = await fetch(`${API_BASE_URL}/remix/enhance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify(payload),
+  });
+  return await response.json();
+};
+
+export const generateRemix = async (payload, options = {}) => {
+  const { signal } = options;
+  const response = await fetch(`${API_BASE_URL}/remix/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify(payload),
+  });
+  return await response.json();
+};
+
+/**
+ * Open a POST-based SSE stream to /remix/generate-stream.
+ * Uses fetch with streaming reader since we need to send audio body data.
+ * @param {object} payload  — same shape as generateRemix (includes audioBase64, refAudioStrength)
+ * @param {{ onProgress, onResult, onSaved, onError }} callbacks
+ * @returns {() => void}  — call to abort the stream
+ */
+export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, onError } = {}) {
+  const controller = new AbortController();
+  const url = `${API_BASE_URL}/remix/generate-stream`;
+
+  (async () => {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "Stream request failed");
+        onError?.(errText);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+          let data;
+          try { data = JSON.parse(jsonStr); } catch { continue; }
+
+          if (data.type === "progress") onProgress?.(data.value, data.message);
+          else if (data.type === "result") onResult?.(data);
+          else if (data.type === "saved") onSaved?.(data.url);
+          else if (data.type === "error") { onError?.(data.message); controller.abort(); return; }
+        }
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        onError?.(err.message || "Connection to generation stream lost");
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
+
 export const listLibraryAssets = async (filters = {}) => {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {

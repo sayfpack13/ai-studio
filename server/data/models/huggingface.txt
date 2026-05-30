@@ -8,3 +8,7 @@ image:huggingface/multimodalart/nano-banana|Nano Banana (Space)
 video:huggingface/Wan2.2-I2V-A14B|Wan 2.2 I2V A14B
 
 audio:huggingface/hkchengrex/MMAudio|MMAudio (Video→Audio)
+
+audio,music:huggingface/victor/ace-step-jam|ACE-Step (Song Remix)
+audio,music:huggingface/amaai-lab/SonicMaster|SonicMaster (Enhance & Master)
+audio,music:huggingface/stabilityai/stable-audio-3|Stable Audio 3

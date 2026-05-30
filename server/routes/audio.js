@@ -99,7 +99,7 @@ router.post("/generate", async (req, res) => {
   }
 
   // ── Determine Space URL ────────────────────────────────────────────
-  const hfToken = providerContext.provider.apiKey || process.env.HF_TOKEN || undefined;
+  const hfToken = undefined;
   const spaceTarget = String(hfSpaceTarget || "").toLowerCase();
   const customSpace = String(hfCustomSpace || "").trim();
 

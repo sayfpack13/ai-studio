@@ -599,6 +599,452 @@ export async function generateNanoBanana(spaceUrl, hfToken, options = {}) {
 }
 
 /**
+ * Transcribe audio using the OpenAI Whisper Space on HuggingFace.
+ *
+ * @param {string} spaceUrl - Space ID (e.g. "openai/whisper")
+ * @param {Buffer|string} audioInput - Audio as Buffer, base64 string, or URL
+ * @param {string} [task="transcribe"] - "transcribe" or "translate"
+ * @returns {{ text: string }} Transcript text
+ */
+export async function transcribeAudio(spaceUrl, audioInput, task = "transcribe") {
+  const hfToken = process.env.HF_TOKEN || null;
+  const client = await getClient(spaceUrl, hfToken);
+
+  let audioRef;
+  if (Buffer.isBuffer(audioInput)) {
+    audioRef = handle_file(new Blob([audioInput], { type: "audio/mpeg" }));
+  } else if (typeof audioInput === "string" && audioInput.startsWith("http")) {
+    audioRef = handle_file(audioInput);
+  } else if (typeof audioInput === "string") {
+    const cleanBase64 = audioInput.replace(/^data:[^;]+;base64,/, "");
+    const buf = Buffer.from(cleanBase64, "base64");
+    audioRef = handle_file(new Blob([buf], { type: "audio/mpeg" }));
+  } else {
+    throw new Error("audioInput must be a Buffer, URL string, or base64 string");
+  }
+
+  console.log("[HF Gradio] Calling Whisper /predict for transcription...");
+  const result = await client.predict("/predict", {
+    inputs: audioRef,
+    task,
+  });
+
+  const text = result?.data?.[0];
+  if (typeof text !== "string") {
+    throw new Error("Whisper Space returned unexpected transcription format");
+  }
+
+  return { text: text.trim() };
+}
+
+/**
+ * Enhance / restore / master an audio file using the SonicMaster Space.
+ *
+ * @param {string} spaceUrl - Space ID (e.g. "amaai-lab/SonicMaster")
+ * @param {Buffer|string} audioInput - Audio as Buffer, base64 string, or URL
+ * @param {string} [prompt="Enhance the input audio"] - Text prompt describing enhancement
+ * @returns {{ url: string }} Object with URL to the enhanced audio
+ */
+export async function enhanceAudio(spaceUrl, audioInput, prompt = "Enhance the input audio") {
+  const hfToken = process.env.HF_TOKEN || null;
+  const client = await getClient(spaceUrl, hfToken);
+
+  let audioRef;
+  if (Buffer.isBuffer(audioInput)) {
+    audioRef = handle_file(new Blob([audioInput], { type: "audio/mpeg" }));
+  } else if (typeof audioInput === "string" && audioInput.startsWith("http")) {
+    audioRef = handle_file(audioInput);
+  } else if (typeof audioInput === "string") {
+    const cleanBase64 = audioInput.replace(/^data:[^;]+;base64,/, "");
+    const buf = Buffer.from(cleanBase64, "base64");
+    audioRef = handle_file(new Blob([buf], { type: "audio/mpeg" }));
+  } else {
+    throw new Error("audioInput must be a Buffer, URL string, or base64 string");
+  }
+
+  console.log("[HF Gradio] Calling SonicMaster enhance_audio_ui, prompt:", prompt);
+  const result = await client.predict("/predict", {
+    audio_path: audioRef,
+    prompt: String(prompt || "Enhance the input audio"),
+  });
+
+  const outputData = result?.data?.[0];
+  if (!outputData) {
+    throw new Error("SonicMaster Space returned no audio data");
+  }
+
+  const outputUrl =
+    typeof outputData === "string"
+      ? outputData
+      : outputData?.url || (Array.isArray(outputData) ? outputData[1] : null);
+
+  if (!outputUrl) {
+    throw new Error("SonicMaster Space returned unexpected audio format");
+  }
+
+  return { url: outputUrl };
+}
+
+/**
+ * Generate music using the ACE-Step Space on HuggingFace.
+ *
+ * Two modes:
+ *  - mode "create": description → LLM composes tags+lyrics → generates WAV
+ *    Returns { audio (base64 data URL), title, tags, lyrics, thumbnail? }
+ *  - mode "generate": explicit tags + lyrics → generates WAV directly
+ *    Returns { audio (base64 data URL) }
+ *
+ * Supports audio2audio remixing when src_audio is provided.
+ *
+ * @param {string} spaceUrl - Space ID (e.g. "ACE-Step/ACE-Step" or "victor/ace-step-jam")
+ * @param {object} options
+ * @param {string} [options.mode="create"] - "create" or "generate"
+ * @param {string} [options.description] - Natural language song description (create mode)
+ * @param {string} [options.tags] - Genre/mood tags e.g. "lo-fi, rainy, guitar" (generate mode)
+ * @param {string} [options.lyrics] - Lyrics with [verse]/[chorus] markers (generate mode)
+ * @param {number} [options.audio_duration=60] - Duration in seconds
+ * @param {number} [options.infer_step=60] - Inference steps
+ * @param {number} [options.guidance_scale=15.0] - Guidance scale
+ * @param {number} [options.seed=-1] - Random seed
+ * @param {Buffer|null} [options.src_audio=null] - Reference audio buffer for audio2audio remix
+ * @param {number} [options.ref_audio_strength=0.5] - How strongly output matches reference (0-1)
+ * @returns {{ audio: string, title?: string, tags?: string, lyrics?: string, thumbnail?: string }}
+ */
+export async function generateWithACEStep(spaceUrl, options = {}) {
+  const hfToken = process.env.HF_TOKEN || null;
+  const client = await getClient(spaceUrl, hfToken);
+
+  const {
+    mode = "create",
+    description = "",
+    tags = "",
+    lyrics = "",
+    audio_duration = 60,
+    infer_step = 60,
+    guidance_scale = 15.0,
+    seed = -1,
+    src_audio = null,
+    ref_audio_strength = 0.5,
+  } = options;
+
+  console.log("[HF Gradio] ACE-Step mode:", mode, "duration:", audio_duration, "audio2audio:", !!src_audio);
+
+  // Detect if this is the simplified victor/ace-step-jam space (no audio2audio support)
+  const isSimplifiedSpace = spaceUrl && spaceUrl.toLowerCase().includes("victor/ace-step-jam");
+
+  if (isSimplifiedSpace && mode === "create") {
+    if (!description.trim()) {
+      throw new Error("description is required for ACE-Step create mode");
+    }
+
+    const result = await client.predict("/create", {
+      description: String(description),
+      audio_duration: toNumber(audio_duration, 60),
+      seed: toNumber(seed, -1),
+    });
+
+    const raw = result?.data?.[0];
+    if (!raw) {
+      throw new Error("ACE-Step /create returned no data");
+    }
+
+    let parsed;
+    try {
+      parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    } catch {
+      parsed = { audio: raw };
+    }
+
+    if (!parsed.audio) {
+      throw new Error("ACE-Step /create returned no audio field");
+    }
+
+    return {
+      audio: parsed.audio,
+      title: parsed.title || "",
+      tags: parsed.tags || "",
+      lyrics: parsed.lyrics || "",
+      thumbnail: parsed.thumbnail || null,
+    };
+  }
+
+  if (isSimplifiedSpace) {
+    // Simplified space /generate endpoint
+    const effectiveTags = tags.trim() || description.trim();
+    if (!effectiveTags) {
+      throw new Error("tags or description is required for ACE-Step generate mode");
+    }
+
+    const result = await client.predict("/generate", {
+      prompt: String(effectiveTags),
+      lyrics: String(lyrics || ""),
+      audio_duration: toNumber(audio_duration, 60),
+      infer_step: toNumber(infer_step, 8),
+      guidance_scale: toNumber(guidance_scale, 7.0),
+      seed: toNumber(seed, -1),
+    });
+
+    const audioData = result?.data?.[0];
+    if (!audioData) {
+      throw new Error("ACE-Step /generate returned no audio data");
+    }
+
+    const audioValue = typeof audioData === "string" ? audioData : audioData?.url;
+    if (!audioValue) {
+      throw new Error("ACE-Step /generate returned unexpected audio format");
+    }
+
+    return { audio: audioValue, tags: effectiveTags, lyrics };
+  }
+
+  // ── Official ACE-Step/ACE-Step Space (full featured with audio2audio) ──
+  const effectiveTags = tags.trim() || description.trim();
+  if (!effectiveTags) {
+    throw new Error("tags or description is required for ACE-Step generate mode");
+  }
+
+  // Build audio2audio reference if provided
+  let audioRef = null;
+  const useAudio2Audio = !!src_audio;
+  if (useAudio2Audio) {
+    const audioBuf = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
+    audioRef = handle_file(new Blob([audioBuf], { type: "audio/mpeg" }));
+  }
+
+  // Official space uses positional args for the text2music endpoint
+  // Signature: audio_duration, prompt, lyrics, infer_step, guidance_scale,
+  //   scheduler_type, cfg_type, omega_scale, manual_seeds,
+  //   guidance_interval, guidance_interval_decay, min_guidance_scale,
+  //   use_erg_tag, use_erg_lyric, use_erg_diffusion, oss_steps,
+  //   guidance_scale_text, guidance_scale_lyric,
+  //   audio2audio_enable, ref_audio_strength, ref_audio_input, lora_name_or_path
+  const seedStr = toNumber(seed, -1) === -1 ? null : String(toNumber(seed, -1));
+
+  const result = await client.predict(11, [
+    toNumber(audio_duration, 60),           // audio_duration
+    String(effectiveTags),                   // prompt (tags)
+    String(lyrics || ""),                    // lyrics
+    toNumber(infer_step, 60),               // infer_step
+    toNumber(guidance_scale, 15.0),         // guidance_scale
+    "euler",                                // scheduler_type
+    "apg",                                  // cfg_type
+    10.0,                                   // omega_scale (granularity)
+    seedStr,                                // manual_seeds
+    0.5,                                    // guidance_interval
+    0.0,                                    // guidance_interval_decay
+    3.0,                                    // min_guidance_scale
+    true,                                   // use_erg_tag
+    false,                                  // use_erg_lyric
+    true,                                   // use_erg_diffusion
+    null,                                   // oss_steps
+    0.0,                                    // guidance_scale_text
+    0.0,                                    // guidance_scale_lyric
+    useAudio2Audio,                         // audio2audio_enable
+    toNumber(ref_audio_strength, 0.5),      // ref_audio_strength
+    audioRef,                               // ref_audio_input
+    "none",                                 // lora_name_or_path
+  ]);
+
+  // Official space returns [audio_filepath, json_params]
+  const audioData = result?.data?.[0];
+  if (!audioData) {
+    throw new Error("ACE-Step text2music returned no audio data");
+  }
+
+  const audioValue = typeof audioData === "string" ? audioData : audioData?.url;
+  if (!audioValue) {
+    throw new Error("ACE-Step text2music returned unexpected audio format");
+  }
+
+  return { audio: audioValue, tags: effectiveTags, lyrics };
+}
+
+/**
+ * Stream ACE-Step generation — yields progress events via an async generator.
+ * Each yielded value is one of:
+ *   { type: "progress", value: number (0-100), message: string }
+ *   { type: "result",   audio, title, tags, lyrics, thumbnail }
+ *   { type: "error",    message: string }
+ *
+ * Supports audio2audio remixing when src_audio is provided.
+ *
+ * @param {string} spaceUrl
+ * @param {object} options  — same shape as generateWithACEStep
+ */
+export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
+  const hfToken = process.env.HF_TOKEN || null;
+  const client = await getClient(spaceUrl, hfToken);
+
+  const {
+    mode = "create",
+    description = "",
+    tags = "",
+    lyrics = "",
+    audio_duration = 60,
+    infer_step = 60,
+    guidance_scale = 15.0,
+    seed = -1,
+    src_audio = null,
+    ref_audio_strength = 0.5,
+  } = options;
+
+  console.log("[HF Gradio] ACE-Step stream mode:", mode, "duration:", audio_duration, "audio2audio:", !!src_audio);
+
+  // Detect if this is the simplified victor/ace-step-jam space
+  const isSimplifiedSpace = spaceUrl && spaceUrl.toLowerCase().includes("victor/ace-step-jam");
+
+  let endpoint;
+  let payload;
+
+  if (isSimplifiedSpace) {
+    endpoint = mode === "create" ? "/create" : "/generate";
+    payload =
+      mode === "create"
+        ? {
+            description: String(description),
+            audio_duration: toNumber(audio_duration, 60),
+            seed: toNumber(seed, -1),
+          }
+        : {
+            prompt: String(tags.trim() || description.trim()),
+            lyrics: String(lyrics || ""),
+            audio_duration: toNumber(audio_duration, 60),
+            infer_step: toNumber(infer_step, 8),
+            guidance_scale: toNumber(guidance_scale, 7.0),
+            seed: toNumber(seed, -1),
+          };
+  } else {
+    // Official ACE-Step/ACE-Step space — full text2music with audio2audio support
+    endpoint = 11;
+    const effectiveTags = tags.trim() || description.trim();
+    const useAudio2Audio = !!src_audio;
+
+    let audioRef = null;
+    if (useAudio2Audio) {
+      const audioBuf = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
+      audioRef = handle_file(new Blob([audioBuf], { type: "audio/mpeg" }));
+    }
+
+    const seedStr = toNumber(seed, -1) === -1 ? null : String(toNumber(seed, -1));
+
+    payload = [
+      toNumber(audio_duration, 60),           // audio_duration
+      String(effectiveTags),                   // prompt (tags)
+      String(lyrics || ""),                    // lyrics
+      toNumber(infer_step, 60),               // infer_step
+      toNumber(guidance_scale, 15.0),         // guidance_scale
+      "euler",                                // scheduler_type
+      "apg",                                  // cfg_type
+      10.0,                                   // omega_scale
+      seedStr,                                // manual_seeds
+      0.5,                                    // guidance_interval
+      0.0,                                    // guidance_interval_decay
+      3.0,                                    // min_guidance_scale
+      true,                                   // use_erg_tag
+      false,                                  // use_erg_lyric
+      true,                                   // use_erg_diffusion
+      null,                                   // oss_steps
+      0.0,                                    // guidance_scale_text
+      0.0,                                    // guidance_scale_lyric
+      useAudio2Audio,                         // audio2audio_enable
+      toNumber(ref_audio_strength, 0.5),      // ref_audio_strength
+      audioRef,                               // ref_audio_input
+      "none",                                 // lora_name_or_path
+    ];
+  }
+
+  yield { type: "progress", value: 0, message: "Submitting to ACE-Step…" };
+
+  const job = client.submit(endpoint, payload);
+
+  let lastValue = 0;
+
+  for await (const event of job) {
+    if (!event) continue;
+
+    console.log("[ACE-Step stream] event:", JSON.stringify(event).slice(0, 300));
+
+    // ── Helper: extract audio from a data array ──────────────────────────
+    const extractAudio = (dataArr) => {
+      const raw = Array.isArray(dataArr) ? dataArr[0] : dataArr;
+      if (!raw) return null;
+      let parsed;
+      try { parsed = typeof raw === "string" ? JSON.parse(raw) : raw; }
+      catch { parsed = { audio: raw }; }
+      return parsed?.audio
+        || (typeof parsed === "string" ? parsed : null)
+        || parsed?.url
+        || (typeof raw === "object" ? raw?.url : null)
+        || null;
+    };
+
+    // ── status events ────────────────────────────────────────────────────
+    if (event.type === "status") {
+      const stage = event.stage || "";
+      const progress = event.progress_data;
+      const queueSize = event.queue_size;
+
+      // Real progress_data from Gradio tqdm steps
+      if (Array.isArray(progress) && progress.length > 0) {
+        const p = progress[0];
+        const pct = p?.index != null && p?.length != null && p.length > 0
+          ? Math.round((p.index / p.length) * 95)
+          : lastValue;
+        lastValue = Math.max(lastValue, pct);
+        yield { type: "progress", value: lastValue, message: `Generating… ${lastValue}%` };
+      } else if (stage === "pending" || stage === "in_queue") {
+        const queueMsg = queueSize != null && queueSize > 0
+          ? `Queued — position ${queueSize}, waiting for GPU…`
+          : "Queued — waiting for GPU (Space may be waking up)…";
+        yield { type: "progress", value: lastValue, message: queueMsg };
+      } else if (stage === "generating" || stage === "process_generating" || stage === "process_starts") {
+        if (lastValue === 0) lastValue = 5;
+        else lastValue = Math.min(lastValue + 5, 90);
+        yield { type: "progress", value: lastValue, message: `Generating… ${lastValue}%` };
+      } else if (stage === "complete" || stage === "process_completed") {
+        // Some spaces return the result inside the status event's output
+        const output = event.output?.data ?? event.data;
+        const audioValue = extractAudio(output);
+        if (audioValue) {
+          yield { type: "progress", value: 100, message: "Finalizing…" };
+          yield {
+            type: "result",
+            audio: audioValue,
+            title: "",
+            tags: tags || "",
+            lyrics: lyrics || "",
+            thumbnail: null,
+          };
+        } else {
+          yield { type: "progress", value: 98, message: "Almost done…" };
+        }
+      }
+      continue;
+    }
+
+    // ── data events ──────────────────────────────────────────────────────
+    if (event.type === "data") {
+      const audioValue = extractAudio(event.data);
+      if (!audioValue) continue;
+
+      let parsed;
+      try { parsed = typeof event.data?.[0] === "string" ? JSON.parse(event.data[0]) : event.data?.[0]; }
+      catch { parsed = {}; }
+
+      yield { type: "progress", value: 100, message: "Finalizing…" };
+      yield {
+        type: "result",
+        audio: audioValue,
+        title: parsed?.title || "",
+        tags: parsed?.tags || tags || "",
+        lyrics: parsed?.lyrics || lyrics || "",
+        thumbnail: parsed?.thumbnail || null,
+      };
+    }
+  }
+}
+
+/**
  * Generate audio from text using the MMAudio Space on HuggingFace
  * @param {string} spaceUrl  - Full Space URL (e.g. "hkchengrex/MMAudio")
  * @param {string} hfToken   - HuggingFace API token (optional for public spaces)

@@ -1084,7 +1084,7 @@ router.post("/generate", async (req, res) => {
 
     // ── HuggingFace Gradio Space (video) ──────────────────────────────
     if (providerId === "huggingface") {
-      const hfToken = apiKey || process.env.HF_TOKEN || undefined;
+      const hfToken = undefined;
       const isSpace = actualModelId && actualModelId.includes("/");
 
       // Wan 2.2 I2V A14B uses a specific Space by default

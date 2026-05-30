@@ -18,6 +18,7 @@ import pipelinesRoutes from "./routes/pipelines.js";
 import editorRoutes from "./routes/editor.js";
 import chutesRoutes from "./routes/chutes.js";
 import audioRoutes from "./routes/audio.js";
+import remixRoutes from "./routes/remix.js";
 import jobQueue from "./services/jobQueue.js";
 import { normalizeConfig } from "./utils/config.js";
 import { resolveProviderContext } from "./utils/provider-routing.js";
@@ -531,7 +532,7 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
       payload?.hfMode ||
       process.env.HF_IMAGE_MODE ||
       "inference";
-    const hfToken = providerContext.provider.apiKey || process.env.HF_TOKEN || undefined;
+    const hfToken = undefined;
     const hfModel =
       payload?.hfModel ||
       process.env.HF_IMAGE_MODEL ||
@@ -869,7 +870,7 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
       spaceUrl = isSpace ? actualVideoModelId : (process.env.HF_VIDEO_SPACE_URL || providerContext.provider.apiBaseUrl);
     }
 
-    const hfToken = providerContext.provider.apiKey || undefined;
+    const hfToken = undefined;
 
     if (!spaceUrl) {
       throw new Error("HuggingFace video Space URL is not configured. Set HF_VIDEO_SPACE_URL or Admin → Providers → HuggingFace.");
@@ -1687,7 +1688,7 @@ async function processAudioJob({ payload, setProgress, isCanceled }) {
 
   await setProgress(20, { stage: "generating_audio" });
 
-  const hfToken = providerContext.provider.apiKey || process.env.HF_TOKEN || undefined;
+  const hfToken = undefined;
   const DEFAULT_MMAUDIO_SPACE = "hkchengrex/MMAudio";
   const spaceTarget = String(payload?.hfSpaceTarget || "").toLowerCase();
   const customSpace = String(payload?.hfCustomSpace || "").trim();
@@ -1814,6 +1815,7 @@ app.use("/api/pipelines", pipelinesRoutes);
 app.use("/api/editor", editorRoutes);
 app.use("/api/chutes", chutesRoutes);
 app.use("/api/audio", audioRoutes);
+app.use("/api/remix", remixRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

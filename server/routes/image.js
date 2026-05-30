@@ -1034,7 +1034,7 @@ router.post("/generate", async (req, res) => {
         req.body?.hfMode ||
         process.env.HF_IMAGE_MODE ||
         "inference";
-      const hfToken = apiKey || process.env.HF_TOKEN || undefined;
+      const hfToken = undefined;
       const hfModel =
         req.body?.hfModel ||
         process.env.HF_IMAGE_MODEL ||
@@ -1224,12 +1224,6 @@ router.post("/generate", async (req, res) => {
             error: `HuggingFace image generation failed (space mode): ${withHfSpaceQuotaHint(error.message)}${errorDetail}`,
           });
         }
-      }
-
-      if (!hfToken) {
-        return res.status(400).json({
-          error: "HuggingFace token is not configured. Set Admin → Providers → HuggingFace API key or HF_TOKEN.",
-        });
       }
 
       try {

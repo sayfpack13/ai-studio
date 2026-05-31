@@ -186,8 +186,17 @@ export const generateRemix = async (payload, options = {}) => {
 export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, onError } = {}) {
   const controller = new AbortController();
   const url = `${API_BASE_URL}/remix/generate-stream`;
+  const STREAM_TIMEOUT_MS = 12 * 60 * 1000;
 
   (async () => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      controller.abort();
+      onError?.("Generation timed out after 12 minutes. Please retry.");
+    }, STREAM_TIMEOUT_MS);
+
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -197,6 +206,7 @@ export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, on
       });
 
       if (!response.ok) {
+        settled = true;
         const errText = await response.text().catch(() => "Stream request failed");
         onError?.(errText);
         return;
@@ -221,16 +231,23 @@ export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, on
           let data;
           try { data = JSON.parse(jsonStr); } catch { continue; }
 
-          if (data.type === "progress") onProgress?.(data.value, data.message);
-          else if (data.type === "result") onResult?.(data);
+          if (data.type === "progress") onProgress?.(data.value, data.message, data.preview);
+          else if (data.type === "result") { settled = true; onResult?.(data); }
           else if (data.type === "saved") onSaved?.(data.url);
-          else if (data.type === "error") { onError?.(data.message); controller.abort(); return; }
+          else if (data.type === "error") { settled = true; onError?.(data.message); controller.abort(); return; }
         }
       }
+
+      if (!settled) {
+        settled = true;
+        onError?.("Stream ended without producing audio");
+      }
     } catch (err) {
-      if (err.name !== "AbortError") {
+      if (err.name !== "AbortError" && !settled) {
         onError?.(err.message || "Connection to generation stream lost");
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
   })();
 

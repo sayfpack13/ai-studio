@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Image as ImageIcon,
   Video as VideoIcon,
   Music as MusicIcon,
+  Wand2,
   History,
   GitCompare,
   Download,
@@ -65,6 +66,18 @@ const MEDIA_CONFIG = {
     loadingBg: "bg-emerald-600/10 border-emerald-500/30",
     loadingText: "text-emerald-300",
   },
+  remix: {
+    icon: Wand2,
+    label: "Remix",
+    loadingMessage: "Generating remix...",
+    emptyMessage: "No remix generated yet",
+    supportsComparison: false,
+    accent: "purple",
+    activeTab: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+    progressBg: "bg-purple-500",
+    loadingBg: "bg-purple-600/10 border-purple-500/30",
+    loadingText: "text-purple-300",
+  },
 };
 
 export default function MediaOutputPanel({
@@ -81,6 +94,7 @@ export default function MediaOutputPanel({
   loading,
   error,
   progress,
+  loadingMessage: loadingMessageOverride,
   onClearError,
   className = "",
 }) {
@@ -103,6 +117,12 @@ export default function MediaOutputPanel({
   const [zoomedMedia, setZoomedMedia] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
   const [compareItems, setCompareItems] = useState([]);
+
+  useEffect(() => {
+    if (loading) {
+      setActiveTab("current");
+    }
+  }, [loading]);
 
   // Get history items as array
   const historyItems = useMemo(() => {
@@ -257,9 +277,9 @@ export default function MediaOutputPanel({
         </video>
       );
     }
-    if (mediaType === "music") {
+    if (mediaType === "music" || mediaType === "remix") {
       // Video-to-audio mode produces a video file (mp4), not just audio
-      const isVideoAudio = item.mode === "video_to_audio";
+      const isVideoAudio = mediaType === "music" && item.mode === "video_to_audio";
       if (isVideoAudio) {
         return (
           <div className="flex flex-col items-center gap-3">
@@ -279,16 +299,40 @@ export default function MediaOutputPanel({
           </div>
         );
       }
+      const playerGradient =
+        mediaType === "remix"
+          ? "from-purple-950/40 via-gray-900 to-gray-950"
+          : config.loadingBg === "bg-emerald-600/10 border-emerald-500/30"
+            ? "from-emerald-950/40 via-gray-900 to-gray-950"
+            : config.loadingBg === "bg-rose-600/10 border-rose-500/30"
+              ? "from-rose-950/40 via-gray-900 to-gray-950"
+              : "from-violet-950/40 via-gray-900 to-gray-950";
       return (
         <div
-          className={`bg-gradient-to-br ${config.loadingBg === "bg-emerald-600/10 border-emerald-500/30" ? "from-emerald-950/40 via-gray-900 to-gray-950" : config.loadingBg === "bg-rose-600/10 border-rose-500/30" ? "from-rose-950/40 via-gray-900 to-gray-950" : "from-violet-950/40 via-gray-900 to-gray-950"} rounded-xl p-6 flex flex-col items-center border border-gray-800`}
+          className={`bg-gradient-to-br ${playerGradient} rounded-xl p-6 flex flex-col items-center border border-gray-800`}
         >
+          {item.thumbnail && (
+            <img
+              src={resolveAssetUrl(item.thumbnail)}
+              alt={item.title || "Remix thumbnail"}
+              className="w-24 h-24 rounded-xl object-cover border border-gray-700 mb-4"
+            />
+          )}
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/20">
-            <Volume2 className="w-10 h-10 text-white" />
+            {mediaType === "remix" ? (
+              <Wand2 className="w-10 h-10 text-white" />
+            ) : (
+              <Volume2 className="w-10 h-10 text-white" />
+            )}
           </div>
           <audio key={url} src={url} controls className="w-full max-w-md" />
-          {item.prompt && (
-            <p className="text-sm text-gray-400 mt-4 text-center max-w-md">
+          {(item.title || item.prompt) && (
+            <p className="text-sm text-gray-300 mt-4 text-center max-w-md font-medium">
+              {item.title || item.prompt}
+            </p>
+          )}
+          {item.prompt && item.title && (
+            <p className="text-xs text-gray-500 mt-1 text-center max-w-md">
               {item.prompt}
             </p>
           )}
@@ -365,7 +409,7 @@ export default function MediaOutputPanel({
                   />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm ${config.loadingText} font-medium`}>
-                      {config.loadingMessage}
+                      {loadingMessageOverride || config.loadingMessage}
                     </p>
                     {progress !== null && progress !== undefined && (
                       <div className="mt-1.5 h-1.5 bg-gray-700 rounded-full overflow-hidden">
@@ -432,6 +476,32 @@ export default function MediaOutputPanel({
                     </div>
                   )}
 
+                  {mediaType === "remix" &&
+                    (generatedMedia.tags || generatedMedia.lyrics) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {generatedMedia.tags && (
+                          <div className="p-3 bg-gray-900/80 rounded-xl border border-gray-800">
+                            <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">
+                              Generated tags
+                            </p>
+                            <p className="text-sm text-purple-300">
+                              {generatedMedia.tags}
+                            </p>
+                          </div>
+                        )}
+                        {generatedMedia.lyrics && (
+                          <div className="p-3 bg-gray-900/80 rounded-xl border border-gray-800 max-h-40 overflow-y-auto">
+                            <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">
+                              Generated lyrics
+                            </p>
+                            <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
+                              {generatedMedia.lyrics}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                   {/* Metadata */}
                   <div className="flex flex-wrap gap-1.5">
                     {generatedMedia.model && (
@@ -464,7 +534,8 @@ export default function MediaOutputPanel({
                     >
                       Download
                     </Button>
-                    {mediaType === "image" && onSendToVideo && (
+                    {(mediaType === "image" || mediaType === "remix") &&
+                      onSendToVideo && (
                       <Button
                         variant="secondary"
                         size="sm"

@@ -1,11 +1,13 @@
-import { useCallback, useRef, useState } from "react";
-import { enqueuePipeline, transcribeAudio, enhanceAudio, generateRemix, streamGenerateRemix } from "../services/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { enqueuePipeline, transcribeAudio, enhanceAudio, resolveAssetUrl } from "../services/api";
 import { useApp } from "../context/AppContext";
+import { useJobs } from "../context/JobContext";
+import { MediaOutputPanel } from "./shared";
 import {
-  Mic, Sparkles, Wand2, Music2, Download, Film,
-  ChevronDown, ChevronUp, Loader2, CheckCircle2,
-  UploadCloud, Clock, AlertCircle, Eye, ArrowRight,
-  SlidersHorizontal,
+  Mic, Sparkles, Wand2, Music2,
+  ChevronDown, ChevronUp, Loader2,
+  UploadCloud, Clock, AlertCircle,
+  SlidersHorizontal, Cpu, Brain,
 } from "lucide-react";
 
 const GENRE_TAGS = [
@@ -13,10 +15,9 @@ const GENRE_TAGS = [
   "ambient", "classical", "r&b", "drum & bass", "synthwave", "acoustic",
 ];
 
-const ACESTEP_SPACE = "ACE-Step/ACE-Step";
-
 const MIN_DURATION = 15;
 const MAX_DURATION = 240;
+const ACEMUSIC_COVER_MAX_SEC = 90;
 
 const SONICMASTER_SPACE = "amaai-lab/SonicMaster";
 const WHISPER_SPACE = "openai/whisper";
@@ -49,26 +50,6 @@ function formatDuration(secs) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function StageIndicator({ stages, current }) {
-  return (
-    <div className="flex items-center gap-2 text-xs flex-wrap">
-      {stages.map((stage, i) => {
-        const done = i < current;
-        const active = i === current;
-        return (
-          <div key={stage} className="flex items-center gap-1">
-            {i > 0 && <div className="w-4 h-px bg-gray-700" />}
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${done ? "bg-emerald-900/60 text-emerald-400" : active ? "bg-blue-900/60 text-blue-400" : "bg-gray-800 text-gray-500"}`}>
-              {done ? <CheckCircle2 className="w-3 h-3" /> : active ? <Loader2 className="w-3 h-3 animate-spin" /> : <span className="w-3 h-3 rounded-full border border-current inline-block" />}
-              {stage}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function ValidationErrors({ errors }) {
   if (!errors.length) return null;
   return (
@@ -84,7 +65,22 @@ function ValidationErrors({ errors }) {
 }
 
 export default function MusicRemix() {
-  const { addLibraryAsset } = useApp();
+  const {
+    remixHistory,
+    saveRemix,
+    deleteRemix,
+    clearAllRemixes,
+    getRemixIds,
+  } = useApp();
+  const { enqueueJob, selectedJob, setSelectedJob, getJobsByType, registerSaveFns } = useJobs();
+
+  const [selectedRunningJobId, setSelectedRunningJobId] = useState(null);
+  const remixJobs = getJobsByType("remix");
+  const runningRemixJobs = remixJobs.filter((job) => job.status === "running");
+  const pendingRemixJobs = remixJobs.filter((job) => job.status === "pending");
+  const selectedRunningJob = remixJobs.find((job) => job.id === selectedRunningJobId);
+  const selectedJobProgress = selectedRunningJob?.progress ?? 0;
+  const hasActiveRemixJobs = runningRemixJobs.length > 0 || pendingRemixJobs.length > 0;
 
   const [file, setFile] = useState(null);
   const [audioUrl, setAudioUrl] = useState("");
@@ -102,40 +98,130 @@ export default function MusicRemix() {
   const [tags, setTags] = useState("");
   const [selectedTags, setSelectedTags] = useState([]);
   const [lyrics, setLyrics] = useState("");
-  const [duration, setDuration] = useState(60);
+  const [duration, setDuration] = useState("");
   const [refAudioStrength, setRefAudioStrength] = useState(0.5);
   const [seed, setSeed] = useState(-1);
-  const [inferStep, setInferStep] = useState(60);
-  const [guidanceScale, setGuidanceScale] = useState(15.0);
+  const [inferStep, setInferStep] = useState(8);
+  const [guidanceScale, setGuidanceScale] = useState(7.0);
+  const [model, setModel] = useState("acestep-v15-xl-turbo");
+  const [thinking, setThinking] = useState(false);
+  const [bpm, setBpm] = useState("");
+  const [keyScale, setKeyScale] = useState("");
+  const [timeSignature, setTimeSignature] = useState("");
+  const [coverStrength, setCoverStrength] = useState(1.0);
+  const [negativeStyles, setNegativeStyles] = useState("");
+  const [refAudioFile, setRefAudioFile] = useState(null);
+  const [refAudioBase64, setRefAudioBase64] = useState(null);
+  const [refAudioMime, setRefAudioMime] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [stageIndex, setStageIndex] = useState(-1);
-  const [stages] = useState(["Enhance", "Transcribe", "Generate"]);
+  const [isPreparing, setIsPreparing] = useState(false);
 
-  const [showReview, setShowReview] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
-  const [result, setResult] = useState(null);
-  const [liveAudioUrl, setLiveAudioUrl] = useState(null);
+  const [generatedRemix, setGeneratedRemix] = useState(null);
   const [genProgress, setGenProgress] = useState(0);
   const [genMessage, setGenMessage] = useState("");
   const [error, setError] = useState("");
 
   const fileInputRef = useRef(null);
-  const sseAbortRef = useRef(null);
+  const saveRemixRef = useRef(saveRemix);
   const instrumental = inputMode === "instrumental";
+
+  useEffect(() => {
+    saveRemixRef.current = saveRemix;
+  }, [saveRemix]);
+
+  useEffect(() => {
+    registerSaveFns("remix", (remixHistoryId, prompt, result, model, metadata) => {
+      saveRemixRef.current?.(remixHistoryId, prompt, result, model, metadata);
+    });
+  }, [registerSaveFns, saveRemix]);
+
+  // Re-attach UI to in-flight remix jobs when returning to this page
+  useEffect(() => {
+    if (selectedRunningJobId || isPreparing) return;
+    const active = remixJobs.find(
+      (job) => job.status === "running" || job.status === "pending",
+    );
+    if (!active) return;
+    setSelectedRunningJobId(active.id);
+    if (active.progress != null) setGenProgress(active.progress);
+    if (active.message) setGenMessage(active.message);
+  }, [remixJobs, selectedRunningJobId, isPreparing]);
+
+  useEffect(() => {
+    if (!selectedJob || selectedJob.type !== "remix") return;
+
+    const jobPrompt = selectedJob.prompt || selectedJob.params?.prompt || "";
+    if (jobPrompt) {
+      setDescription(jobPrompt);
+    }
+
+    if (selectedJob.status === "failed") {
+      setError(selectedJob.error || "Generation failed");
+      setSelectedRunningJobId(null);
+    } else if (
+      selectedJob.status === "running" ||
+      selectedJob.status === "pending"
+    ) {
+      setSelectedRunningJobId(selectedJob.id);
+      setError("");
+      if (selectedJob.progress != null) setGenProgress(selectedJob.progress);
+      if (selectedJob.message) setGenMessage(selectedJob.message);
+    } else if (selectedJob.status === "completed") {
+      setSelectedRunningJobId(null);
+      if (selectedJob.resultUrl) {
+        setGeneratedRemix({
+          prompt: jobPrompt,
+          model: selectedJob.model,
+          url: selectedJob.resultUrl,
+        });
+      }
+    }
+
+    setSelectedJob(null);
+  }, [selectedJob, setSelectedJob]);
+
+  useEffect(() => {
+    if (!selectedRunningJobId) return;
+
+    const job = remixJobs.find((j) => j.id === selectedRunningJobId);
+    if (!job) {
+      setSelectedRunningJobId(null);
+      return;
+    }
+
+    if (job.status === "completed") {
+      if (job.resultUrl) {
+        setGeneratedRemix({
+          id: job.params?.remixHistoryId,
+          prompt: job.prompt,
+          model: job.model,
+          url: job.resultUrl,
+        });
+      }
+      setSelectedRunningJobId(null);
+    } else if (job.status === "failed" || job.status === "cancelled") {
+      if (job.status === "failed") {
+        setError(job.error || "Generation failed");
+      }
+      setSelectedRunningJobId(null);
+    } else if (!isPreparing && !isTranscribing && !isEnhancing) {
+      if (job.progress != null) setGenProgress(job.progress);
+      if (job.message) setGenMessage(job.message);
+    }
+  }, [selectedRunningJobId, remixJobs, isPreparing, isTranscribing, isEnhancing]);
 
   const onFileSelected = useCallback(async (f) => {
     if (!f) return;
     const url = URL.createObjectURL(f);
     setFile(f);
     setAudioUrl(url);
-    setResult(null);
+    setGeneratedRemix(null);
     setError("");
     setEnhancedUrl(null);
-    setShowReview(false);
     setValidationErrors([]);
 
     const [b64, detectedDuration] = await Promise.all([
@@ -146,7 +232,7 @@ export default function MusicRemix() {
 
     if (detectedDuration && detectedDuration > 0) {
       setSourceDuration(detectedDuration);
-      setDuration(Math.max(MIN_DURATION, Math.min(MAX_DURATION, detectedDuration)));
+      // Duration stays empty (auto) — API/LM will auto-fill based on prompt
     }
   }, []);
 
@@ -169,7 +255,6 @@ export default function MusicRemix() {
     setSelectedTags((prev) => {
       const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
       setTags(next.join(", "));
-      setShowReview(false);
       return next;
     });
   };
@@ -206,32 +291,37 @@ export default function MusicRemix() {
     }
   };
 
-  const handleGenerateClick = () => {
+  const handleGenerateClick = async () => {
     const errors = validate();
     setValidationErrors(errors);
-    if (errors.length > 0) {
-      setShowReview(false);
-      return;
-    }
-    setShowReview(true);
-  };
+    if (errors.length > 0) return;
 
-  const handleConfirmGenerate = async () => {
-    setShowReview(false);
-    setIsGenerating(true);
     setError("");
-    setResult(null);
-    setLiveAudioUrl(null);
-    setGenProgress(0);
-    setGenMessage("");
-    setStageIndex(0);
+    setIsPreparing(true);
 
     const workingAudioBase64 = audioBase64;
     const workingAudioMime = file?.type || "audio/mpeg";
 
+    const baseTags = inputMode === "simple" ? (description.trim() || tags.trim()) : tags.trim();
+    const effectiveTags = instrumental ? `${baseTags}, instrumental`.replace(/^,\s*/, "instrumental") : baseTags;
+    const effectiveDesc = instrumental && inputMode === "simple" ? `${description.trim()}, instrumental, no vocals`.trim() : description.trim();
+    const jobPrompt = effectiveDesc || effectiveTags || "Music remix";
+    const modelLabel = model === "acestep-v15-turbo" ? "Turbo" : "XL Turbo";
+    const remixId = `remix_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const remixMetadata = {
+      inputMode,
+      description: effectiveDesc,
+      tags: effectiveTags,
+      model,
+      refAudioStrength,
+      instrumental,
+    };
+
+    let workingLyrics = lyrics;
+
     try {
       if (enhanceEnabled && audioBase64) {
-        setStageIndex(0);
         setIsEnhancing(true);
         try {
           const enhRes = await enhanceAudio({
@@ -250,9 +340,7 @@ export default function MusicRemix() {
         }
       }
 
-      setStageIndex(1);
-
-      if (!instrumental && inputMode === "genre" && !lyrics.trim() && audioBase64) {
+      if (!instrumental && inputMode === "genre" && !workingLyrics.trim() && audioBase64) {
         setIsTranscribing(true);
         try {
           const txRes = await transcribeAudio({
@@ -262,6 +350,7 @@ export default function MusicRemix() {
             task: "transcribe",
           });
           if (txRes?.success && txRes.data?.text) {
+            workingLyrics = txRes.data.text;
             setLyrics(txRes.data.text);
           }
         } catch {
@@ -271,93 +360,241 @@ export default function MusicRemix() {
         }
       }
 
-      setStageIndex(2);
-      setGenMessage("Submitting to ACE-Step…");
+      const remixPayload = {
+        mode: "generate",
+        description: effectiveDesc,
+        tags: effectiveTags,
+        lyrics: instrumental ? "" : workingLyrics.trim(),
+        duration: duration ? Math.round(Number(duration)) : null,
+        seed: Number(seed),
+        inferStep: Number(inferStep),
+        guidanceScale: Number(guidanceScale),
+        model,
+        thinking,
+        bpm: bpm ? Number(bpm) : null,
+        keyScale: keyScale.trim() || null,
+        timeSignature: timeSignature ? Number(timeSignature) : null,
+        negativeStyles: negativeStyles.trim() || null,
+        audioBase64: workingAudioBase64 || undefined,
+        audioMime: workingAudioMime || undefined,
+        refAudioStrength: Number(refAudioStrength),
+        refAudioBase64: refAudioBase64 || undefined,
+        refAudioMime: refAudioMime || undefined,
+      };
+      if (coverStrength !== 1.0) {
+        remixPayload.coverStrength = Number(coverStrength);
+      }
 
-      const effectiveMode = "generate";
-      const baseTags = inputMode === "simple" ? (description.trim() || tags.trim()) : tags.trim();
-      const effectiveTags = instrumental ? `${baseTags}, instrumental`.replace(/^,\s*/, "instrumental") : baseTags;
-      const effectiveDesc = instrumental && inputMode === "simple" ? `${description.trim()}, instrumental, no vocals`.trim() : description.trim();
+      const jobId = enqueueJob(
+        "remix",
+        {
+          prompt: jobPrompt,
+          model: modelLabel,
+          remixHistoryId: remixId,
+          remixMetadata,
+          streamPayload: remixPayload,
+        },
+        (result) => {
+          setGeneratedRemix({
+            id: remixId,
+            prompt: jobPrompt,
+            model: modelLabel,
+            url: result.url,
+            title: result.title,
+            tags: result.tags,
+            lyrics: result.lyrics,
+            thumbnail: result.thumbnail,
+          });
+        },
+      );
 
-      await new Promise((resolve, reject) => {
-        const abort = streamGenerateRemix(
-          {
-            spaceUrl: ACESTEP_SPACE,
-            mode: effectiveMode,
-            description: effectiveDesc,
-            tags: effectiveTags,
-            lyrics: instrumental ? "" : lyrics.trim(),
-            duration: Math.round(Number(duration)),
-            seed: Number(seed),
-            inferStep: Number(inferStep),
-            guidanceScale: Number(guidanceScale),
-            audioBase64: workingAudioBase64 || undefined,
-            audioMime: workingAudioMime || undefined,
-            refAudioStrength: Number(refAudioStrength),
-          },
-          {
-            onProgress: (value, message) => {
-              setGenProgress(value);
-              setGenMessage(message || `Generating… ${value}%`);
-            },
-            onResult: (data) => {
-              // Audio is ready — unblock UI and play immediately
-              const playUrl = data.audio || data.url;
-              if (playUrl) setLiveAudioUrl(playUrl);
-              setResult(data);
-              resolve(); // don't wait for save
-            },
-            onSaved: (savedUrl) => {
-              // Silently upgrade to persisted library URL
-              setResult((prev) => ({ ...(prev || {}), url: savedUrl }));
-              setLiveAudioUrl(savedUrl);
-            },
-            onError: (msg) => reject(new Error(msg)),
-          }
-        );
-        sseAbortRef.current = abort;
-      });
-
-    } catch (err) {
-      setError(err.message || "Generation failed");
-    } finally {
-      sseAbortRef.current = null;
-      setIsGenerating(false);
-      setStageIndex(-1);
+      setSelectedRunningJobId(jobId);
+      setGenProgress(0);
       setGenMessage("");
+    } catch (err) {
+      setError(err.message || "Failed to start remix");
+    } finally {
+      setIsPreparing(false);
     }
   };
 
   const handleSendToVideo = async () => {
-    if (!result?.url) return;
+    if (!generatedRemix?.url) return;
     await enqueuePipeline("remix-to-video", {
       remixPayload: { prompt: `Use remix for video soundtrack: ${description || tags}` },
       videoPayload: { prompt: "Generate visuals synced to remix soundtrack", duration: 10, fps: 24 },
     });
   };
 
-  const isWorking = isGenerating || isTranscribing || isEnhancing;
-  const safeDuration = Math.round(Number(duration)) || 60;
-  const displayDuration = sourceDuration ? `${formatDuration(sourceDuration)} (${sourceDuration}s) — auto matched` : "Upload a song to set duration";
+  const handleDownload = () => {
+    if (!generatedRemix?.url) return;
+    const link = document.createElement("a");
+    link.href = resolveAssetUrl(generatedRemix.url);
+    link.download = `remix_${Date.now()}.wav`;
+    link.click();
+  };
+
+  const applyRemixHistoryItem = useCallback((remixId, remixItem) => {
+    if (!remixItem) return;
+    const result = remixItem.result || {};
+    setGeneratedRemix({
+      id: remixId,
+      url: result.url,
+      prompt: remixItem.prompt,
+      model: remixItem.model,
+      title: result.title,
+      tags: result.tags,
+      lyrics: result.lyrics,
+      thumbnail: result.thumbnail,
+    });
+    setError("");
+
+    const metadata =
+      remixItem.metadata && typeof remixItem.metadata === "object"
+        ? remixItem.metadata
+        : null;
+
+    if (metadata?.inputMode) setInputMode(metadata.inputMode);
+    if (metadata?.description) setDescription(metadata.description);
+    if (metadata?.tags) {
+      setTags(metadata.tags);
+      setSelectedTags(
+        metadata.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      );
+    } else if (remixItem.prompt) {
+      setDescription(remixItem.prompt);
+    }
+    if (metadata?.model) setModel(metadata.model);
+    if (metadata?.refAudioStrength != null) {
+      setRefAudioStrength(Number(metadata.refAudioStrength));
+    }
+  }, []);
+
+  const handleReloadPrompt = useCallback(
+    (item) => {
+      const remixItem = remixHistory[item.id] || {
+        prompt: item.prompt,
+        model: item.model,
+        result: {
+          url: item.url,
+          title: item.title,
+          tags: item.tags,
+          lyrics: item.lyrics,
+          thumbnail: item.thumbnail,
+        },
+        metadata: item.metadata,
+      };
+      applyRemixHistoryItem(item.id, remixItem);
+    },
+    [applyRemixHistoryItem, remixHistory],
+  );
+
+  const handleRemixHistorySelected = useCallback(
+    (event) => {
+      const { remixId } = event.detail || {};
+      if (!remixId) return;
+      applyRemixHistoryItem(remixId, remixHistory[remixId]);
+    },
+    [applyRemixHistoryItem, remixHistory],
+  );
+
+  useEffect(() => {
+    window.addEventListener("remixHistorySelected", handleRemixHistorySelected);
+    return () => {
+      window.removeEventListener(
+        "remixHistorySelected",
+        handleRemixHistorySelected,
+      );
+    };
+  }, [handleRemixHistorySelected]);
+
+  const isWorking = isPreparing || isTranscribing || isEnhancing;
+  const selectedJobIsActive =
+    selectedRunningJob &&
+    (selectedRunningJob.status === "running" ||
+      selectedRunningJob.status === "pending");
+  const outputLoading =
+    isWorking || (selectedRunningJobId !== null && selectedJobIsActive);
+  const outputProgress = outputLoading
+    ? isWorking
+      ? genProgress
+      : selectedJobProgress
+    : null;
+  const outputLoadingMessage = isWorking
+    ? genMessage || selectedRunningJob?.message || undefined
+    : selectedJobIsActive
+      ? selectedRunningJob?.message || undefined
+      : undefined;
+  const outputError =
+    error ||
+    (selectedRunningJob?.status === "failed" ? selectedRunningJob.error : null);
+
+  const renderOutputPanel = (className = "") => (
+    <MediaOutputPanel
+      mediaType="remix"
+      generatedMedia={generatedRemix}
+      mediaHistory={remixHistory}
+      getMediaIds={getRemixIds}
+      onDownload={handleDownload}
+      onSendToVideo={handleSendToVideo}
+      onReloadPrompt={(item) => {
+        setSelectedRunningJobId(null);
+        handleReloadPrompt(item);
+      }}
+      onPreview={(item) => {
+        setSelectedRunningJobId(null);
+        setGeneratedRemix({
+          id: item.id,
+          url: item.url,
+          prompt: item.prompt,
+          model: item.model,
+          title: item.title,
+          tags: item.tags,
+          lyrics: item.lyrics,
+          thumbnail: item.thumbnail,
+        });
+      }}
+      onDeleteMedia={(remixId) => {
+        deleteRemix(remixId);
+        if (generatedRemix?.id === remixId) {
+          setGeneratedRemix(null);
+        }
+      }}
+      onClearHistory={clearAllRemixes}
+      loading={outputLoading}
+      error={outputError}
+      progress={outputProgress}
+      loadingMessage={outputLoadingMessage}
+      onClearError={() => {
+        setError("");
+        if (selectedRunningJobId && selectedRunningJob?.status === "failed") {
+          setSelectedRunningJobId(null);
+        }
+      }}
+      className={className}
+    />
+  );
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950">
-      <div className="max-w-5xl mx-auto p-4 space-y-4">
-
-        {/* Header */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
-              <Music2 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">Music Remixer</h2>
-              <p className="text-sm text-gray-400">Upload a track → set style & strength → review → AI remixes your audio with ACE-Step</p>
-            </div>
+    <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
+      <div className="flex-shrink-0 p-4 border-b border-gray-800">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
+            <Music2 className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Music Remixer</h2>
+            <p className="text-sm text-gray-400">Upload a track → set style & strength → AI remixes your audio with ACE-Step</p>
           </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        <div className="w-full lg:w-[60%] overflow-y-auto p-4 space-y-4 border-r border-gray-800">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
           {/* ── Panel A: Source ── */}
           <div className="space-y-4">
@@ -393,6 +630,12 @@ export default function MusicRemix() {
               {audioUrl && (
                 <div className="space-y-2">
                   <audio src={audioUrl} controls className="w-full rounded-lg" />
+                  {sourceDuration > ACEMUSIC_COVER_MAX_SEC && (
+                    <p className="text-xs text-amber-400/90">
+                      Long track detected — AceMusic cloud uses the first {ACEMUSIC_COVER_MAX_SEC}s only
+                      (auto-trimmed on the server) to avoid gateway timeouts.
+                    </p>
+                  )}
                   <div className="h-10 rounded-lg bg-gray-800 flex items-end gap-px px-2 overflow-hidden">
                     {Array.from({ length: 48 }).map((_, i) => (
                       <div key={i} className="bg-purple-500/60 flex-1 rounded-t-sm" style={{ height: `${25 + ((i * 17 + i * i) % 75)}%` }} />
@@ -410,7 +653,7 @@ export default function MusicRemix() {
                   <span className="text-sm font-semibold text-white">Pre-Enhance with SonicMaster</span>
                 </div>
                 <button
-                  onClick={() => { setEnhanceEnabled((v) => !v); setShowReview(false); }}
+                  onClick={() => { setEnhanceEnabled((v) => !v); }}
                   className={`relative w-10 h-5 rounded-full transition-colors ${enhanceEnabled ? "bg-amber-500" : "bg-gray-700"}`}
                 >
                   <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${enhanceEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
@@ -421,7 +664,7 @@ export default function MusicRemix() {
                   <p className="text-xs text-gray-500">Clean up your track before remixing (de-reverb, EQ, mastering)</p>
                   <input
                     value={enhancePrompt}
-                    onChange={(e) => { setEnhancePrompt(e.target.value); setShowReview(false); }}
+                    onChange={(e) => { setEnhancePrompt(e.target.value); }}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500"
                     placeholder="e.g. reduce reverb, clarify vocals"
                   />
@@ -472,7 +715,7 @@ export default function MusicRemix() {
                 ].map(({ id, icon, title, sub }) => (
                   <button
                     key={id}
-                    onClick={() => { setInputMode(id); setShowReview(false); }}
+                    onClick={() => { setInputMode(id); }}
                     className={`flex flex-col items-center gap-1 py-3 px-2 rounded-xl border text-center transition-all ${
                       inputMode === id
                         ? "border-purple-500 bg-purple-600/20 text-white"
@@ -492,7 +735,7 @@ export default function MusicRemix() {
                   <label className="text-xs text-gray-400">Describe the remix you want</label>
                   <textarea
                     value={description}
-                    onChange={(e) => { setDescription(e.target.value); setShowReview(false); }}
+                    onChange={(e) => { setDescription(e.target.value); }}
                     rows={4}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 resize-none"
                     placeholder="e.g. A chill lo-fi hip hop remix with rain sounds and mellow piano, relaxing evening vibes"
@@ -508,7 +751,7 @@ export default function MusicRemix() {
                     <label className="text-xs text-gray-400">Genre / Mood Tags <span className="text-red-500">*</span></label>
                     <input
                       value={tags}
-                      onChange={(e) => { setTags(e.target.value); setShowReview(false); }}
+                      onChange={(e) => { setTags(e.target.value); }}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500"
                       placeholder="e.g. lo-fi, hip hop, rainy, mellow guitar"
                     />
@@ -528,7 +771,7 @@ export default function MusicRemix() {
                     <label className="text-xs text-gray-400">Lyrics <span className="text-gray-600">(optional — use [verse]/[chorus])</span></label>
                     <textarea
                       value={lyrics}
-                      onChange={(e) => { setLyrics(e.target.value); setShowReview(false); }}
+                      onChange={(e) => { setLyrics(e.target.value); }}
                       rows={5}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 resize-none font-mono"
                       placeholder={"[verse]\nYour verse lyrics here...\n\n[chorus]\nYour chorus here..."}
@@ -544,7 +787,7 @@ export default function MusicRemix() {
                     <label className="text-xs text-gray-400">Genre / Mood Tags <span className="text-red-500">*</span></label>
                     <input
                       value={tags}
-                      onChange={(e) => { setTags(e.target.value); setShowReview(false); }}
+                      onChange={(e) => { setTags(e.target.value); }}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500"
                       placeholder="e.g. synthwave, french electronic, dark beats"
                     />
@@ -567,18 +810,63 @@ export default function MusicRemix() {
                 </div>
               )}
 
-              {/* Duration — auto from source */}
-              <div className="flex items-center justify-between py-1">
-                <span className="text-xs text-gray-400 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Output Duration
-                </span>
-                <span className={`text-xs font-medium ${sourceDuration ? "text-blue-400" : "text-gray-600"}`}>
-                  {displayDuration}
-                </span>
+              {/* Duration — editable with Auto/Clear */}
+              <div className="space-y-2 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    Duration
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {duration ? (
+                      <span className="text-xs text-blue-400 font-mono">{duration}s</span>
+                    ) : (
+                      <span className="text-xs text-gray-600">Auto · LM decides</span>
+                    )}
+                    <button
+                      onClick={() => { setDuration(""); }}
+                      className="text-xs text-gray-500 hover:text-white px-1"
+                    >Auto</button>
+                    <button
+                      onClick={() => { setDuration(""); }}
+                      className="text-xs text-gray-500 hover:text-white px-1"
+                    >Clear</button>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={MIN_DURATION}
+                  max={MAX_DURATION}
+                  step="5"
+                  value={duration || MIN_DURATION}
+                  onChange={(e) => { setDuration(Number(e.target.value)); }}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-purple-500"
+                />
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>{MIN_DURATION}s</span>
+                  <span>{MAX_DURATION}s</span>
+                </div>
               </div>
 
-              {/* Remix Strength slider */}
+              {/* Cover Strength */}
+              <div className="space-y-2 py-2 border-t border-gray-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400 font-medium">Cover Strength</span>
+                  <span className="text-xs text-purple-400 font-mono">{Math.round(coverStrength * 100)}%</span>
+                </div>
+                <input
+                  type="range" min="0" max="1" step="0.05"
+                  value={coverStrength}
+                  onChange={(e) => { setCoverStrength(Number(e.target.value)); }}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-purple-500"
+                />
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Subtle</span>
+                  <span>Strong</span>
+                </div>
+              </div>
+
+              {/* Remix Strength */}
               {audioBase64 && (
                 <div className="space-y-2 py-2 border-t border-gray-800">
                   <div className="flex items-center justify-between">
@@ -589,12 +877,9 @@ export default function MusicRemix() {
                     <span className="text-xs text-purple-400 font-mono tabular-nums">{Math.round(refAudioStrength * 100)}%</span>
                   </div>
                   <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
+                    type="range" min="0" max="1" step="0.05"
                     value={refAudioStrength}
-                    onChange={(e) => { setRefAudioStrength(Number(e.target.value)); setShowReview(false); }}
+                    onChange={(e) => { setRefAudioStrength(Number(e.target.value)); }}
                     className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-purple-500"
                   />
                   <div className="flex items-center justify-between text-xs text-gray-600">
@@ -604,6 +889,51 @@ export default function MusicRemix() {
                   <p className="text-xs text-gray-500">Controls how closely the remix matches your uploaded audio. Higher = closer to source.</p>
                 </div>
               )}
+
+              {/* Model & Quality */}
+              <div className="space-y-3 py-2 border-t border-gray-800">
+                <div className="space-y-1.5">
+                  <span className="text-xs text-gray-400 font-medium flex items-center gap-1">
+                    <Cpu className="w-3 h-3" />
+                    Model
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "acestep-v15-xl-turbo", title: "XL Turbo", sub: "Best quality" },
+                      { id: "acestep-v15-turbo", title: "Turbo", sub: "Faster / lighter" },
+                    ].map(({ id, title, sub }) => (
+                      <button
+                        key={id}
+                        onClick={() => { setModel(id); }}
+                        className={`flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg border text-left transition-all ${
+                          model === id
+                            ? "border-purple-500 bg-purple-600/20 text-white"
+                            : "border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600 hover:text-white"
+                        }`}
+                      >
+                        <span className="text-xs font-semibold leading-none">{title}</span>
+                        <span className="text-xs text-gray-500 leading-none">{sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-emerald-400" />
+                    <div className="leading-tight">
+                      <span className="text-xs font-medium text-white">Thinking mode</span>
+                      <p className="text-xs text-gray-500">Higher quality, but much slower — disable for speed / to avoid GPU timeouts</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setThinking((v) => !v); }}
+                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${thinking ? "bg-emerald-500" : "bg-gray-700"}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${thinking ? "translate-x-5" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+              </div>
 
               {/* Advanced toggle */}
               <button
@@ -615,35 +945,127 @@ export default function MusicRemix() {
               </button>
 
               {showAdvanced && (
-                <div className="space-y-3 border border-gray-800 rounded-lg p-3 bg-gray-800/50">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-xs text-gray-500">Seed <span className="text-gray-600">(-1 = random)</span></label>
-                      <input
-                        type="number"
-                        value={seed}
-                        onChange={(e) => { setSeed(Number(e.target.value)); setShowReview(false); }}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white mt-1"
-                      />
+                <div className="space-y-4 border border-gray-800 rounded-lg p-4 bg-gray-800/50">
+                  {/* ── Row: Tempo ── */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 w-28 shrink-0">Tempo</span>
+                    <input
+                      type="number" min="30" max="200"
+                      value={bpm}
+                      placeholder="Auto"
+                      onChange={(e) => { setBpm(e.target.value); }}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                    />
+                    <button onClick={() => { setBpm(""); }} className="text-xs text-gray-500 hover:text-white px-2">Clear</button>
+                  </div>
+
+                  {/* ── Row: Time Signature ── */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 w-28 shrink-0">Time Signature</span>
+                    <select
+                      value={timeSignature}
+                      onChange={(e) => { setTimeSignature(e.target.value); }}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                    >
+                      <option value="">Auto</option>
+                      <option value="2">2/4</option>
+                      <option value="3">3/4</option>
+                      <option value="4">4/4</option>
+                      <option value="6">6/8</option>
+                    </select>
+                    <button onClick={() => { setTimeSignature(""); }} className="text-xs text-gray-500 hover:text-white px-2">Clear</button>
+                  </div>
+
+                  {/* ── Row: Key ── */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 w-28 shrink-0">Key</span>
+                    <input
+                      type="text"
+                      value={keyScale}
+                      placeholder="Auto"
+                      onChange={(e) => { setKeyScale(e.target.value); }}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                    />
+                    <button onClick={() => { setKeyScale(""); }} className="text-xs text-gray-500 hover:text-white px-2">Clear</button>
+                  </div>
+
+                  {/* ── Row: Negative Styles ── */}
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-gray-400">Negative Styles</span>
+                    <input
+                      type="text"
+                      value={negativeStyles}
+                      placeholder="e.g. no vocals, no drums..."
+                      onChange={(e) => { setNegativeStyles(e.target.value); }}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white"
+                    />
+                  </div>
+
+                  {/* ── Generation Params (collapsible sub-section) ── */}
+                  <div className="pt-3 border-t border-gray-700 space-y-3">
+                    <span className="text-xs text-gray-500 font-medium">Generation Parameters</span>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-xs text-gray-600">Seed <span className="text-gray-700">(-1 = random)</span></label>
+                        <input
+                          type="number"
+                          value={seed}
+                          onChange={(e) => { setSeed(Number(e.target.value)); }}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Infer Steps</label>
+                        <input
+                          type="number" min="1" max="50"
+                          value={inferStep}
+                          onChange={(e) => { setInferStep(Number(e.target.value)); }}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Guidance</label>
+                        <input
+                          type="number" min="1" max="20" step="0.5"
+                          value={guidanceScale}
+                          onChange={(e) => { setGuidanceScale(Number(e.target.value)); }}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white mt-1"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Infer Steps</label>
-                      <input
-                        type="number" min="1" max="50"
-                        value={inferStep}
-                        onChange={(e) => { setInferStep(Number(e.target.value)); setShowReview(false); }}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Guidance</label>
-                      <input
-                        type="number" min="1" max="20" step="0.5"
-                        value={guidanceScale}
-                        onChange={(e) => { setGuidanceScale(Number(e.target.value)); setShowReview(false); }}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white mt-1"
-                      />
-                    </div>
+                  </div>
+
+                  {/* ── Reference Audio upload ── */}
+                  <div className="pt-3 border-t border-gray-700 space-y-2">
+                    <span className="text-xs text-gray-400 font-medium">Upload Reference Audio <span className="text-gray-600">(style transfer)</span></span>
+                    {refAudioFile ? (
+                      <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
+                        <Music2 className="w-3 h-3 text-purple-400" />
+                        <span className="text-xs text-white truncate flex-1">{refAudioFile.name}</span>
+                        <button
+                          onClick={() => { setRefAudioFile(null); setRefAudioBase64(null); setRefAudioMime(null); }}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >Remove</button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center justify-center gap-2 border border-dashed border-gray-600 rounded-lg px-3 py-2 cursor-pointer hover:border-gray-500 transition-colors">
+                        <Music2 className="w-3 h-3 text-gray-400" />
+                        <span className="text-xs text-gray-400">Upload reference audio</span>
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setRefAudioFile(f);
+                            setRefAudioMime(f.type || "audio/mpeg");
+                            const b64 = await fileToBase64(f);
+                            setRefAudioBase64(b64);
+                          }}
+                        />
+                      </label>
+                    )}
                   </div>
                 </div>
               )}
@@ -656,213 +1078,25 @@ export default function MusicRemix() {
           <ValidationErrors errors={validationErrors} />
         )}
 
-        {/* ── Pre-generation review panel ── */}
-        {showReview && !isWorking && (
-          <div className="bg-gray-900 border border-purple-700/60 rounded-xl p-4 space-y-4">
-            <div className="flex items-center gap-2">
-              <Eye className="w-5 h-5 text-purple-400" />
-              <h3 className="font-semibold text-white">Review Before Generating</h3>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-              <div className="text-gray-500">Source file</div>
-              <div className="text-white font-medium truncate">
-                {file ? `${file.name}${sourceDuration ? ` · ${formatDuration(sourceDuration)} (${sourceDuration}s)` : ""}` : "—"}
-              </div>
-
-              <div className="text-gray-500">Mode</div>
-              <div className="text-white">{inputMode === "simple" ? "Simple (Describe)" : inputMode === "genre" ? "Genre + Lyrics" : "Instrumental"}</div>
-
-              <div className="text-gray-500">Output duration</div>
-              <div className="text-blue-400 font-medium">{sourceDuration ? `${formatDuration(sourceDuration)} (${sourceDuration}s)` : `${safeDuration}s`} · auto matched</div>
-
-              <div className="text-gray-500">Pre-enhance</div>
-              <div className={enhanceEnabled ? "text-amber-400" : "text-gray-500"}>{enhanceEnabled ? `On — "${enhancePrompt}"` : "Off"}</div>
-
-              {inputMode === "simple" && description && (
-                <>
-                  <div className="text-gray-500">Description</div>
-                  <div className="text-purple-300 italic">"{description.slice(0, 80)}{description.length > 80 ? "…" : ""}"</div>
-                </>
-              )}
-              {(inputMode === "genre" || inputMode === "instrumental") && tags && (
-                <>
-                  <div className="text-gray-500">Tags</div>
-                  <div className="text-purple-300">{tags}</div>
-                </>
-              )}
-              {audioBase64 && (
-                <>
-                  <div className="text-gray-500">Remix Strength</div>
-                  <div className="text-purple-400 font-medium">{Math.round(refAudioStrength * 100)}% — {refAudioStrength >= 0.7 ? "closely matches source" : refAudioStrength >= 0.4 ? "balanced remix" : "more creative"}</div>
-                </>
-              )}
-              <div className="text-gray-500">Vocals</div>
-              <div className={instrumental ? "text-indigo-400 font-medium" : "text-gray-400"}>
-                {instrumental ? "Instrumental only (no lyrics)" : "Vocal / lyrics included"}
-              </div>
-              {seed !== -1 && (
-                <>
-                  <div className="text-gray-500">Seed</div>
-                  <div className="text-white">{seed}</div>
-                </>
-              )}
-            </div>
-
-            <div className="flex gap-3 pt-1">
-              <button
-                onClick={() => setShowReview(false)}
-                className="flex-1 py-2 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 text-sm font-medium transition-colors"
-              >
-                Edit
-              </button>
-              <button
-                onClick={handleConfirmGenerate}
-                className="flex-1 py-2 rounded-xl font-semibold text-white flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all"
-              >
-                <ArrowRight className="w-4 h-4" />
-                Confirm &amp; Generate
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Generate Button + Live Progress ── */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          {isWorking && (
-            <StageIndicator stages={stages} current={stageIndex} />
-          )}
-
-          {/* Live generation progress — shown while ACE-Step is running */}
-          {isGenerating && stageIndex === 2 && (
-            <div className="space-y-3">
-              {/* Animated waveform bars */}
-              <div className="h-12 rounded-lg bg-gray-800/80 flex items-end justify-center gap-px px-3 overflow-hidden">
-                {Array.from({ length: 40 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t-sm bg-gradient-to-t from-purple-600 to-pink-400"
-                    style={{
-                      height: `${25 + ((i * 13 + i * i * 3) % 60)}%`,
-                      transformOrigin: "bottom",
-                      animation: `waveBar ${0.5 + (i % 6) * 0.12}s ease-in-out infinite`,
-                      animationDelay: `${(i * 0.05) % 0.9}s`,
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-400">{genMessage || "Generating…"}</span>
-                  <span className="text-purple-400 font-medium tabular-nums">{genProgress}%</span>
-                </div>
-                <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-purple-600 to-pink-500 rounded-full transition-all duration-500"
-                    style={{ width: `${genProgress}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Live audio preview — appears as soon as audio data arrives */}
-              {liveAudioUrl && (
-                <div className="space-y-1">
-                  <p className="text-xs text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Remix ready — auto-playing preview
-                  </p>
-                  <audio
-                    key={liveAudioUrl}
-                    src={liveAudioUrl}
-                    controls
-                    autoPlay
-                    className="w-full rounded-lg"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {!showReview && (
-            <button
-              onClick={handleGenerateClick}
-              disabled={isWorking}
-              className="w-full py-3 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isWorking ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  {stageIndex === 0 ? "Enhancing audio…" : stageIndex === 1 ? "Detecting lyrics…" : genMessage || "Generating remix…"}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5" />
-                  Generate Remix
-                </>
-              )}
-            </button>
-          )}
-          {error && (
-            <div className="bg-red-950/50 border border-red-900 rounded-lg px-3 py-2 text-sm text-red-400">
-              {error}
-            </div>
-          )}
+        {/* ── Generate ── */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <button
+            onClick={handleGenerateClick}
+            className="w-full py-3 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500"
+          >
+            <Sparkles className="w-5 h-5" />
+            Generate Remix
+          </button>
         </div>
 
-        {/* ── Panel C: Result ── */}
-        {(result?.url || liveAudioUrl) && !isGenerating && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-semibold text-white">
-                {result?.title || "Remix Result"}
-              </h3>
-            </div>
+        <div className="lg:hidden">
+          {renderOutputPanel()}
+        </div>
+        </div>
 
-            {result?.thumbnail && (
-              <img src={result.thumbnail} alt="Thumbnail" className="w-24 h-24 rounded-xl object-cover border border-gray-700" />
-            )}
-
-            <audio controls src={result?.url || liveAudioUrl} className="w-full rounded-lg" />
-
-            {(result?.tags || result?.lyrics) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {result?.tags && (
-                  <div className="bg-gray-800 rounded-lg p-3 space-y-1">
-                    <p className="text-xs text-gray-500 font-medium">Generated Tags</p>
-                    <p className="text-sm text-purple-300">{result.tags}</p>
-                  </div>
-                )}
-                {result?.lyrics && (
-                  <div className="bg-gray-800 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
-                    <p className="text-xs text-gray-500 font-medium">Generated Lyrics</p>
-                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">{result.lyrics}</pre>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              <a
-                href={result?.url || liveAudioUrl}
-                download="remix.wav"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Download
-              </a>
-              <button
-                onClick={handleSendToVideo}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
-              >
-                <Film className="w-4 h-4" />
-                Send to Video Pipeline
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="hidden lg:flex lg:w-[40%] flex-col p-4 min-h-0">
+          {renderOutputPanel("h-full")}
+        </div>
       </div>
     </div>
   );

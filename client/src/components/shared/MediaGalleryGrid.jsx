@@ -13,6 +13,7 @@ import {
   Video,
   Image,
   Music,
+  Wand2,
   ImageOff,
   Clock,
 } from "lucide-react";
@@ -36,6 +37,12 @@ const TYPE_ACCENT = {
     icon: Volume2,
     badge: "bg-emerald-500/25 text-emerald-200",
     glow: "ring-emerald-500/40",
+  },
+  remix: {
+    bg: "from-purple-500/20 via-gray-900 to-gray-950",
+    icon: Wand2,
+    badge: "bg-purple-500/25 text-purple-200",
+    glow: "ring-purple-500/40",
   },
 };
 
@@ -190,9 +197,12 @@ export default function MediaGalleryGrid({
       );
     }
 
-    if (mediaType === "music") {
+    if (mediaType === "music" || mediaType === "remix") {
       // Video-to-audio mode produces a video file — show video thumbnail
-      const isVideoAudio = item.mode === "video_to_audio" || item.metadata?.mode === "video_to_audio";
+      const isVideoAudio =
+        mediaType === "music" &&
+        (item.mode === "video_to_audio" ||
+          item.metadata?.mode === "video_to_audio");
       if (isVideoAudio) {
         return (
           <>
@@ -216,8 +226,18 @@ export default function MediaGalleryGrid({
         <div
           className={`w-full h-full flex flex-col items-center justify-center bg-gradient-to-br ${accent.bg}`}
         >
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/15">
-            <Volume2 className="w-10 h-10 text-emerald-400/70" />
+          <div
+            className={`p-4 rounded-2xl border ${
+              mediaType === "remix"
+                ? "bg-purple-500/10 border-purple-500/15"
+                : "bg-emerald-500/10 border-emerald-500/15"
+            }`}
+          >
+            {mediaType === "remix" ? (
+              <Wand2 className="w-10 h-10 text-purple-400/70" />
+            ) : (
+              <Volume2 className="w-10 h-10 text-emerald-400/70" />
+            )}
           </div>
         </div>
       );

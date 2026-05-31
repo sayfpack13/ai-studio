@@ -1023,7 +1023,7 @@ export default function MusicGenerator() {
       {/* Main Content - Split Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - Controls */}
-        <div className="w-full lg:w-[45%] flex flex-col border-r border-gray-700">
+        <div className="w-full lg:w-[60%] flex flex-col border-r border-gray-700">
           <div className="flex-1 overflow-y-auto p-4">
             <div className="space-y-4">
               {/* HuggingFace Space URL Display */}
@@ -1497,7 +1497,7 @@ export default function MusicGenerator() {
         </div>
 
         {/* Right Panel - Output */}
-        <div className="hidden lg:flex lg:w-[55%] flex-col">
+        <div className="hidden lg:flex lg:w-[40%] flex-col">
           <MediaOutputPanel
             mediaType="music"
             generatedMedia={generatedAudio}

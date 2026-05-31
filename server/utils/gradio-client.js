@@ -1,6 +1,9 @@
 import { Client, handle_file } from "@gradio/client";
+import Replicate from "replicate";
+import { isAceStepApiConfigured, streamAceStepGeneration } from "./acestep-api.js";
 
 const _clientCacheBySpace = new Map();
+const HF_ACESTEP_SPACE = process.env.HF_ACESTEP_SPACE_URL || "ACE-Step/ACE-Step-1.5";
 
 /**
  * Get or create a Gradio client connection to the HuggingFace Space.
@@ -36,6 +39,137 @@ export function resetClient() {
 function toNumber(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Build the input payload for the official ACE-Step v1.5 Space
+ * "/generation_wrapper" endpoint.
+ *
+ * The endpoint exposes 54 inputs. The first four are named parameters and the
+ * rest are "param_N" (param_40 and param_50-53 are gr.State components with no
+ * parameter_name, so they are intentionally omitted and use server defaults).
+ *
+ * @param {object} args
+ * @param {string} args.effectiveTags      - Prompt / captions
+ * @param {string} args.lyrics             - Lyrics text
+ * @param {number} args.audio_duration     - Duration in seconds (-1 = auto)
+ * @param {number} args.infer_step         - DiT inference steps
+ * @param {number} args.guidance_scale     - Guidance scale
+ * @param {number} args.seedVal            - Seed (-1 = random)
+ * @param {*}      args.refAudioRef        - handle_file ref or null
+ * @param {*}      args.srcAudioRef        - handle_file ref or null
+ * @param {boolean} args.isCoverMode       - Whether this is a cover/remix
+ * @param {number} args.ref_audio_strength - Audio cover strength (0-1)
+ * @param {string} args.audioCodes         - Pre-computed audio codes from /process_source_audio_wrapper
+ * @param {string} args.model              - Model variant (acestep-v15-xl-turbo | acestep-v15-turbo)
+ * @param {boolean} args.thinking          - Enable LM "Thinking"/CoT phase (slower, higher quality)
+ */
+function buildACEStepPayload({
+  effectiveTags,
+  lyrics,
+  audio_duration,
+  infer_step,
+  guidance_scale,
+  seedVal,
+  refAudioRef,
+  srcAudioRef,
+  isCoverMode,
+  ref_audio_strength,
+  audioCodes = "",
+  model = "acestep-v15-xl-turbo",
+  thinking = true,
+}) {
+  const taskType = isCoverMode ? "cover" : "text2music";
+  const useThinking = thinking !== false;
+  const allowedModels = ["acestep-v15-xl-turbo", "acestep-v15-turbo"];
+  const selectedModel = allowedModels.includes(model) ? model : "acestep-v15-xl-turbo";
+  return {
+    selected_model: selectedModel,                     // models
+    generation_mode: isCoverMode ? "cover" : "custom", // simple/custom/cover/repaint
+    simple_query_input: "",                            // Song Description (simple mode only)
+    simple_vocal_language: "unknown",                  // Vocal Language (simple mode only)
+    param_4: String(effectiveTags),                    // Prompt (captions)
+    param_5: String(lyrics || ""),                     // Lyrics
+    param_6: 0,                                         // BPM (0 = auto)
+    param_7: "",                                        // Key Signature
+    param_8: "",                                        // Time Signature
+    param_9: "unknown",                                 // Vocal Language
+    param_10: toNumber(infer_step, 8),                 // DiT Inference Steps
+    param_11: toNumber(guidance_scale, 7),             // Guidance Scale
+    param_12: seedVal === -1,                          // Random Seed checkbox
+    param_13: String(seedVal),                         // Seed
+    param_14: refAudioRef,                             // Reference Audio
+    param_15: toNumber(audio_duration, -1),            // Audio Duration (seconds)
+    param_16: 1,                                        // batch size
+    param_17: srcAudioRef,                             // Source Audio
+    param_18: audioCodes,                              // Audio Codes (from /process_source_audio_wrapper)
+    param_19: 0,                                        // Start (seconds)
+    param_20: -1,                                       // End (seconds, -1 for end)
+    param_21: "Fill the audio semantic mask based on the given conditions:", // instruction
+    param_22: toNumber(ref_audio_strength, 1),         // audio_cover_strength
+    param_23: taskType,                                // task_type (text2music/repaint/cover)
+    param_24: false,                                    // use_adg
+    param_25: 0,                                        // cfg_interval_start
+    param_26: 1,                                        // cfg_interval_end
+    param_27: 3,                                        // Shift
+    param_28: "ode",                                    // Inference Method
+    param_29: "",                                       // Custom Timesteps
+    param_30: "mp3",                                    // Audio Format
+    param_31: 0.85,                                     // LM Temperature
+    param_32: useThinking,                              // Thinking (LM CoT phase)
+    param_33: 2,                                        // LM CFG Scale
+    param_34: 0,                                        // LM Top-K
+    param_35: 0.9,                                       // LM Top-P
+    param_36: "NO USER INPUT",                          // LM Negative Prompt
+    param_37: useThinking,                              // use_cot_metas
+    param_38: useThinking,                              // use_cot_caption
+    param_39: useThinking,                              // use_cot_language
+    param_41: false,                                    // constrained_decoding_debug
+    param_42: true,                                     // allow_lm_batch
+    param_43: false,                                    // Get Scores
+    param_44: false,                                    // Get LRC
+    param_45: 0.5,                                       // score_scale
+    param_46: 8,                                         // lm_batch_chunk_size
+    param_47: "woodwinds",                              // track_name
+    param_48: [],                                        // complete_track_classes
+    param_49: false,                                     // autogen checkbox
+  };
+}
+
+/**
+ * Translate raw ACE-Step / ZeroGPU errors into user-friendly guidance.
+ * The public ACE-Step ZeroGPU Space aborts long GPU tasks (~3 min limit), surfaced
+ * as "GPU task aborted" / "ZeroGPU worker error". Quota exhaustion is also common.
+ *
+ * @param {string} rawMessage - The error string from the Space.
+ * @param {string} [prefix]   - Optional context prefix (e.g. "Failed to encode source audio").
+ * @returns {string} A clear, actionable message for the UI.
+ */
+function friendlyAceStepError(rawMessage = "", prefix = "") {
+  const msg = String(rawMessage || "");
+  const withPrefix = (text) => (prefix ? `${prefix}: ${text}` : text);
+
+  if (/abort|zerogpu worker error|task was aborted/i.test(msg)) {
+    return (
+      "The ACE-Step Space ran out of GPU time and aborted (public ZeroGPU Spaces cap a " +
+      "single run at ~3 minutes). Try a shorter duration, turn off Thinking mode, or use " +
+      "the faster model. For reliable results, point HF_ACESTEP_SPACE_URL at a dedicated-GPU " +
+      "Space or set REPLICATE_API_TOKEN."
+    );
+  }
+  if (/quota|exceeded|rate limit|too many requests|429/i.test(msg)) {
+    return (
+      "HuggingFace GPU quota reached for this token. Wait for the quota to reset, use a PRO " +
+      "token, or switch to a dedicated-GPU Space / Replicate backend."
+    );
+  }
+  if (/no gpu|gpu.*unavailable|waiting for a gpu|cuda|out of memory|oom/i.test(msg)) {
+    return (
+      "The ACE-Step Space could not get a GPU (the shared ZeroGPU pool is busy or out of memory). " +
+      "Please retry shortly, or use a dedicated-GPU Space / Replicate backend for reliability."
+    );
+  }
+  return withPrefix(msg || "ACE-Step generation failed");
 }
 
 function toGalleryFileRef(item) {
@@ -710,8 +844,19 @@ export async function enhanceAudio(spaceUrl, audioInput, prompt = "Enhance the i
  * @param {number} [options.ref_audio_strength=0.5] - How strongly output matches reference (0-1)
  * @returns {{ audio: string, title?: string, tags?: string, lyrics?: string, thumbnail?: string }}
  */
-export async function generateWithACEStep(spaceUrl, options = {}) {
+export async function generateWithACEStep(options = {}) {
+  if (isAceStepApiConfigured()) {
+    console.log("[ACE-Step] Using ACE-Step task API (ACEMUSIC_API_KEY set)");
+    let result = null;
+    for await (const event of streamAceStepGeneration(options)) {
+      if (event.type === "result") result = event;
+      if (event.type === "error") throw new Error(event.message);
+    }
+    if (!result) throw new Error("ACE-Step API returned no result");
+    return result;
+  }
   const hfToken = process.env.HF_TOKEN || null;
+  const spaceUrl = HF_ACESTEP_SPACE;
   const client = await getClient(spaceUrl, hfToken);
 
   const {
@@ -725,9 +870,11 @@ export async function generateWithACEStep(spaceUrl, options = {}) {
     seed = -1,
     src_audio = null,
     ref_audio_strength = 0.5,
+    model = "acestep-v15-xl-turbo",
+    thinking = true,
   } = options;
 
-  console.log("[HF Gradio] ACE-Step mode:", mode, "duration:", audio_duration, "audio2audio:", !!src_audio);
+  console.log("[HF Gradio] ACE-Step mode:", mode, "duration:", audio_duration, "audio2audio:", !!src_audio, "model:", model, "thinking:", thinking);
 
   // Detect if this is the simplified victor/ace-step-jam space (no audio2audio support)
   const isSimplifiedSpace = spaceUrl && spaceUrl.toLowerCase().includes("victor/ace-step-jam");
@@ -797,68 +944,188 @@ export async function generateWithACEStep(spaceUrl, options = {}) {
     return { audio: audioValue, tags: effectiveTags, lyrics };
   }
 
-  // ── Official ACE-Step/ACE-Step Space (full featured with audio2audio) ──
+  // ── Official ACE-Step v1.5 Space (full featured with audio2audio / cover) ──
   const effectiveTags = tags.trim() || description.trim();
   if (!effectiveTags) {
     throw new Error("tags or description is required for ACE-Step generate mode");
   }
 
-  // Build audio2audio reference if provided
-  let audioRef = null;
-  const useAudio2Audio = !!src_audio;
-  if (useAudio2Audio) {
+  // Build audio blobs if provided (for cover/remix mode)
+  let srcAudioRef = null;
+  let refAudioRef = null;
+  let audioCodes = "";
+  const isCoverMode = !!src_audio;
+  if (isCoverMode) {
     const audioBuf = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
-    audioRef = handle_file(new Blob([audioBuf], { type: "audio/mpeg" }));
+    const blob = new Blob([audioBuf], { type: "audio/mpeg" });
+    srcAudioRef = handle_file(blob);
+    refAudioRef = handle_file(blob);
+
+    // Pre-process source audio to get audio codes (required for cover mode)
+    console.log("[ACE-Step] calling /process_source_audio_wrapper to get audio codes…");
+    const codeResult = await client.predict("/process_source_audio_wrapper", {
+      src: handle_file(new Blob([audioBuf], { type: "audio/mpeg" })),
+      debug: false,
+    });
+    audioCodes = codeResult?.data?.[0] || "";
+    console.log("[ACE-Step] got audio codes, length:", audioCodes.length);
   }
 
-  // Official space uses positional args for the text2music endpoint
-  // Signature: audio_duration, prompt, lyrics, infer_step, guidance_scale,
-  //   scheduler_type, cfg_type, omega_scale, manual_seeds,
-  //   guidance_interval, guidance_interval_decay, min_guidance_scale,
-  //   use_erg_tag, use_erg_lyric, use_erg_diffusion, oss_steps,
-  //   guidance_scale_text, guidance_scale_lyric,
-  //   audio2audio_enable, ref_audio_strength, ref_audio_input, lora_name_or_path
-  const seedStr = toNumber(seed, -1) === -1 ? null : String(toNumber(seed, -1));
+  const seedVal = toNumber(seed, -1);
 
-  const result = await client.predict(11, [
-    toNumber(audio_duration, 60),           // audio_duration
-    String(effectiveTags),                   // prompt (tags)
-    String(lyrics || ""),                    // lyrics
-    toNumber(infer_step, 60),               // infer_step
-    toNumber(guidance_scale, 15.0),         // guidance_scale
-    "euler",                                // scheduler_type
-    "apg",                                  // cfg_type
-    10.0,                                   // omega_scale (granularity)
-    seedStr,                                // manual_seeds
-    0.5,                                    // guidance_interval
-    0.0,                                    // guidance_interval_decay
-    3.0,                                    // min_guidance_scale
-    true,                                   // use_erg_tag
-    false,                                  // use_erg_lyric
-    true,                                   // use_erg_diffusion
-    null,                                   // oss_steps
-    0.0,                                    // guidance_scale_text
-    0.0,                                    // guidance_scale_lyric
-    useAudio2Audio,                         // audio2audio_enable
-    toNumber(ref_audio_strength, 0.5),      // ref_audio_strength
-    audioRef,                               // ref_audio_input
-    "none",                                 // lora_name_or_path
-  ]);
+  const result = await client.predict("/generation_wrapper", buildACEStepPayload({
+    effectiveTags,
+    lyrics,
+    audio_duration,
+    infer_step,
+    guidance_scale,
+    seedVal,
+    refAudioRef,
+    srcAudioRef,
+    isCoverMode,
+    ref_audio_strength,
+    audioCodes,
+    model,
+    thinking,
+  }));
 
-  // Official space returns [audio_filepath, json_params]
+  // /generation_wrapper returns 38 elements — first 8 are audio samples
   const audioData = result?.data?.[0];
   if (!audioData) {
-    throw new Error("ACE-Step text2music returned no audio data");
+    throw new Error("ACE-Step v1.5 returned no audio data");
   }
 
   const audioValue = typeof audioData === "string" ? audioData : audioData?.url;
   if (!audioValue) {
-    throw new Error("ACE-Step text2music returned unexpected audio format");
+    throw new Error("ACE-Step v1.5 returned unexpected audio format");
   }
 
   return { audio: audioValue, tags: effectiveTags, lyrics };
 }
 
+/**
+ * Stream ACE-Step generation via Replicate API (lucataco/ace-step).
+ * Used when REPLICATE_API_TOKEN is set. Much more reliable than ZeroGPU.
+ * ~$0.03/run on dedicated L40S GPU, typically completes in 6-30 seconds.
+ */
+async function* streamGenerateWithReplicate(options = {}) {
+  const {
+    description = "",
+    tags = "",
+    lyrics = "",
+    audio_duration = 60,
+    infer_step = 60,
+    guidance_scale = 15.0,
+    seed = -1,
+    src_audio = null,
+    ref_audio_strength = 0.5,
+  } = options;
+
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+
+  const effectiveTags = tags.trim() || description.trim();
+  if (!effectiveTags) {
+    yield { type: "error", message: "tags or description is required" };
+    return;
+  }
+
+  const input = {
+    tags: effectiveTags,
+    lyrics: String(lyrics || "[Instrumental]"),
+    duration: Math.min(Math.max(toNumber(audio_duration, 60), 5), 240),
+    infer_step: toNumber(infer_step, 60),
+    guidance_scale: toNumber(guidance_scale, 15),
+    seed: toNumber(seed, -1),
+  };
+
+  // Add source audio for cover/remix mode
+  if (src_audio) {
+    const audioBuf = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
+    const base64Audio = audioBuf.toString("base64");
+    input.src_audio = `data:audio/mpeg;base64,${base64Audio}`;
+    input.audio2audio_strength = toNumber(ref_audio_strength, 0.5);
+  }
+
+  console.log("[ACE-Step Replicate] Starting generation, tags:", effectiveTags.slice(0, 80), "duration:", input.duration);
+  yield { type: "progress", value: 5, message: "Submitting to Replicate…" };
+
+  try {
+    let prediction = await replicate.predictions.create({
+      model: "lucataco/ace-step",
+      input,
+    });
+
+    console.log("[ACE-Step Replicate] Prediction created:", prediction.id, "status:", prediction.status);
+    yield { type: "progress", value: 10, message: "Queued on Replicate…" };
+
+    // Poll for completion
+    const startTime = Date.now();
+    const MAX_WAIT_MS = 300_000; // 5 minutes max
+
+    while (!["succeeded", "failed", "canceled"].includes(prediction.status)) {
+      if (Date.now() - startTime > MAX_WAIT_MS) {
+        try { await replicate.predictions.cancel(prediction.id); } catch {}
+        yield { type: "error", message: "Replicate prediction timed out after 5 minutes" };
+        return;
+      }
+
+      await new Promise(r => setTimeout(r, 2000));
+      prediction = await replicate.predictions.get(prediction.id);
+
+      if (prediction.status === "processing") {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const pct = Math.min(Math.round(10 + (elapsed / (input.duration * 0.5)) * 80), 90);
+        yield { type: "progress", value: pct, message: `Generating… ${pct}%` };
+      } else if (prediction.status === "starting") {
+        yield { type: "progress", value: 8, message: "GPU starting…" };
+      }
+    }
+
+    if (prediction.status === "failed") {
+      console.error("[ACE-Step Replicate] Failed:", prediction.error);
+      yield { type: "error", message: prediction.error || "Replicate generation failed" };
+      return;
+    }
+
+    if (prediction.status === "canceled") {
+      yield { type: "error", message: "Generation was canceled" };
+      return;
+    }
+
+    // Success — extract audio URL
+    const output = prediction.output;
+    let audioUrl = null;
+
+    if (typeof output === "string") {
+      audioUrl = output;
+    } else if (Array.isArray(output) && output.length > 0) {
+      audioUrl = typeof output[0] === "string" ? output[0] : output[0]?.url;
+    } else if (output?.url) {
+      audioUrl = output.url;
+    }
+
+    if (!audioUrl) {
+      console.error("[ACE-Step Replicate] Unexpected output format:", JSON.stringify(output).slice(0, 200));
+      yield { type: "error", message: "Replicate returned no audio URL" };
+      return;
+    }
+
+    console.log("[ACE-Step Replicate] Success! Audio URL:", audioUrl.slice(0, 100));
+    yield { type: "progress", value: 95, message: "Audio ready!" };
+    yield {
+      type: "result",
+      audio: audioUrl,
+      title: effectiveTags.slice(0, 60),
+      tags: effectiveTags,
+      lyrics: lyrics || "",
+    };
+  } catch (err) {
+    console.error("[ACE-Step Replicate] Error:", err.message);
+    yield { type: "error", message: `Replicate error: ${err.message}` };
+  }
+}
+
+/**
 /**
  * Stream ACE-Step generation — yields progress events via an async generator.
  * Each yielded value is one of:
@@ -867,12 +1134,24 @@ export async function generateWithACEStep(spaceUrl, options = {}) {
  *   { type: "error",    message: string }
  *
  * Supports audio2audio remixing when src_audio is provided.
+ * Priority: AceMusic API > Replicate > HuggingFace Gradio Space.
  *
- * @param {string} spaceUrl
  * @param {object} options  — same shape as generateWithACEStep
  */
-export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
+export async function* streamGenerateWithACEStep(options = {}) {
+  if (isAceStepApiConfigured()) {
+    console.log("[ACE-Step] Using ACE-Step task API (ACEMUSIC_API_KEY set)");
+    yield* streamAceStepGeneration(options);
+    return;
+  }
+  // Then Replicate if token is available (no ZeroGPU timeouts)
+  if (process.env.REPLICATE_API_TOKEN) {
+    console.log("[ACE-Step] Using Replicate backend (REPLICATE_API_TOKEN set)");
+    yield* streamGenerateWithReplicate(options);
+    return;
+  }
   const hfToken = process.env.HF_TOKEN || null;
+  const spaceUrl = HF_ACESTEP_SPACE;
   const client = await getClient(spaceUrl, hfToken);
 
   const {
@@ -886,9 +1165,11 @@ export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
     seed = -1,
     src_audio = null,
     ref_audio_strength = 0.5,
+    model = "acestep-v15-xl-turbo",
+    thinking = true,
   } = options;
 
-  console.log("[HF Gradio] ACE-Step stream mode:", mode, "duration:", audio_duration, "audio2audio:", !!src_audio);
+  console.log("[HF Gradio] ACE-Step stream mode:", mode, "duration:", audio_duration, "audio2audio:", !!src_audio, "model:", model, "thinking:", thinking);
 
   // Detect if this is the simplified victor/ace-step-jam space
   const isSimplifiedSpace = spaceUrl && spaceUrl.toLowerCase().includes("victor/ace-step-jam");
@@ -914,55 +1195,90 @@ export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
             seed: toNumber(seed, -1),
           };
   } else {
-    // Official ACE-Step/ACE-Step space — full text2music with audio2audio support
-    endpoint = 11;
+    // Official ACE-Step v1.5 space — full generation with cover/remix support
+    endpoint = "/generation_wrapper";
     const effectiveTags = tags.trim() || description.trim();
-    const useAudio2Audio = !!src_audio;
+    const isCoverMode = !!src_audio;
 
-    let audioRef = null;
-    if (useAudio2Audio) {
+    let srcAudioRef = null;
+    let refAudioRef = null;
+    let audioCodes = "";
+    if (isCoverMode) {
       const audioBuf = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
-      audioRef = handle_file(new Blob([audioBuf], { type: "audio/mpeg" }));
+      const blob = new Blob([audioBuf], { type: "audio/mpeg" });
+      srcAudioRef = handle_file(blob);
+      refAudioRef = handle_file(blob);
+
+      // Pre-process source audio to get audio codes (required for cover mode)
+      yield { type: "progress", value: 0, message: "Encoding source audio…" };
+      try {
+        console.log("[ACE-Step stream] calling /process_source_audio_wrapper to get audio codes…");
+        const codeResult = await client.predict("/process_source_audio_wrapper", {
+          src: handle_file(new Blob([audioBuf], { type: "audio/mpeg" })),
+          debug: false,
+        });
+        audioCodes = codeResult?.data?.[0] || "";
+        console.log("[ACE-Step stream] got audio codes, length:", audioCodes.length);
+      } catch (codeErr) {
+        console.error("[ACE-Step stream] /process_source_audio_wrapper failed:", codeErr.message);
+        yield { type: "error", message: friendlyAceStepError(codeErr.message, "Failed to encode source audio") };
+        return;
+      }
     }
 
-    const seedStr = toNumber(seed, -1) === -1 ? null : String(toNumber(seed, -1));
+    const seedVal = toNumber(seed, -1);
 
-    payload = [
-      toNumber(audio_duration, 60),           // audio_duration
-      String(effectiveTags),                   // prompt (tags)
-      String(lyrics || ""),                    // lyrics
-      toNumber(infer_step, 60),               // infer_step
-      toNumber(guidance_scale, 15.0),         // guidance_scale
-      "euler",                                // scheduler_type
-      "apg",                                  // cfg_type
-      10.0,                                   // omega_scale
-      seedStr,                                // manual_seeds
-      0.5,                                    // guidance_interval
-      0.0,                                    // guidance_interval_decay
-      3.0,                                    // min_guidance_scale
-      true,                                   // use_erg_tag
-      false,                                  // use_erg_lyric
-      true,                                   // use_erg_diffusion
-      null,                                   // oss_steps
-      0.0,                                    // guidance_scale_text
-      0.0,                                    // guidance_scale_lyric
-      useAudio2Audio,                         // audio2audio_enable
-      toNumber(ref_audio_strength, 0.5),      // ref_audio_strength
-      audioRef,                               // ref_audio_input
-      "none",                                 // lora_name_or_path
-    ];
+    payload = buildACEStepPayload({
+      effectiveTags,
+      lyrics,
+      audio_duration,
+      infer_step,
+      guidance_scale,
+      seedVal,
+      refAudioRef,
+      srcAudioRef,
+      isCoverMode,
+      ref_audio_strength,
+      audioCodes,
+      model,
+      thinking,
+    });
   }
 
   yield { type: "progress", value: 0, message: "Submitting to ACE-Step…" };
 
-  const job = client.submit(endpoint, payload);
+  console.log("[ACE-Step stream] submitting to endpoint:", endpoint, "payload keys:", Object.keys(payload));
+  let job;
+  try {
+    job = client.submit(endpoint, payload, null, null, true);
+    console.log("[ACE-Step stream] submit returned (all_events=true), job type:", typeof job, "has asyncIterator:", typeof job?.[Symbol.asyncIterator] === "function");
+  } catch (submitErr) {
+    console.error("[ACE-Step stream] submit threw:", submitErr.message);
+    yield { type: "error", message: `Submit failed: ${submitErr.message}` };
+    return;
+  }
 
   let lastValue = 0;
+  let resultEmitted = false;
+  let eventCount = 0;
 
-  for await (const event of job) {
-    if (!event) continue;
+  const TIMEOUT_MS = 180_000;
+  const timeoutId = setTimeout(() => {
+    console.error(`[ACE-Step stream] No events for ${TIMEOUT_MS / 1000}s — aborting`);
+    try { job.cancel?.(); } catch {}
+  }, TIMEOUT_MS);
 
-    console.log("[ACE-Step stream] event:", JSON.stringify(event).slice(0, 300));
+  try {
+    for await (const event of job) {
+      eventCount++;
+      if (!event) {
+        console.log(`[ACE-Step stream] event #${eventCount} is null/undefined`);
+        continue;
+      }
+
+      if (eventCount === 1) clearTimeout(timeoutId);
+
+      console.log(`[ACE-Step stream] event #${eventCount}:`, JSON.stringify(event).slice(0, 400));
 
     // ── Helper: extract audio from a data array ──────────────────────────
     const extractAudio = (dataArr) => {
@@ -987,11 +1303,17 @@ export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
       // Real progress_data from Gradio tqdm steps
       if (Array.isArray(progress) && progress.length > 0) {
         const p = progress[0];
-        const pct = p?.index != null && p?.length != null && p.length > 0
-          ? Math.round((p.index / p.length) * 95)
-          : lastValue;
+        let pct;
+        if (p?.index != null && p?.length != null && p.length > 0) {
+          pct = Math.round((p.index / p.length) * 95);
+        } else if (p?.progress != null && p.progress > 0) {
+          pct = Math.round(p.progress * 95);
+        } else {
+          pct = lastValue;
+        }
         lastValue = Math.max(lastValue, pct);
-        yield { type: "progress", value: lastValue, message: `Generating… ${lastValue}%` };
+        const desc = p?.desc ? ` — ${p.desc}` : "";
+        yield { type: "progress", value: lastValue, message: `Generating… ${lastValue}%${desc}` };
       } else if (stage === "pending" || stage === "in_queue") {
         const queueMsg = queueSize != null && queueSize > 0
           ? `Queued — position ${queueSize}, waiting for GPU…`
@@ -1004,7 +1326,9 @@ export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
       } else if (stage === "complete" || stage === "process_completed") {
         // Some spaces return the result inside the status event's output
         const output = event.output?.data ?? event.data;
+        console.log(`[ACE-Step stream] complete status — output keys:`, Object.keys(event.output || {}), "output.data type:", typeof event.output?.data, "event.data type:", typeof event.data);
         const audioValue = extractAudio(output);
+        console.log(`[ACE-Step stream] complete status — audioValue:`, audioValue ? audioValue.slice(0, 100) : null);
         if (audioValue) {
           yield { type: "progress", value: 100, message: "Finalizing…" };
           yield {
@@ -1015,17 +1339,25 @@ export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
             lyrics: lyrics || "",
             thumbnail: null,
           };
+          resultEmitted = true;
         } else {
           yield { type: "progress", value: 98, message: "Almost done…" };
         }
+      } else if (stage === "error") {
+        const msg = event.message || event.code || "Space returned an error";
+        yield { type: "error", message: friendlyAceStepError(msg) };
       }
       continue;
     }
 
     // ── data events ──────────────────────────────────────────────────────
     if (event.type === "data") {
+      console.log(`[ACE-Step stream] data event — data[0] type:`, typeof event.data?.[0], "isArray:", Array.isArray(event.data), "data length:", event.data?.length);
       const audioValue = extractAudio(event.data);
-      if (!audioValue) continue;
+      if (!audioValue) {
+        console.log(`[ACE-Step stream] data event — no audio extracted from data[0] =`, JSON.stringify(event.data?.[0]).slice(0, 200));
+        continue;
+      }
 
       let parsed;
       try { parsed = typeof event.data?.[0] === "string" ? JSON.parse(event.data[0]) : event.data?.[0]; }
@@ -1040,7 +1372,26 @@ export async function* streamGenerateWithACEStep(spaceUrl, options = {}) {
         lyrics: parsed?.lyrics || lyrics || "",
         thumbnail: parsed?.thumbnail || null,
       };
+      resultEmitted = true;
+      continue;
     }
+
+    // Log unrecognized event types
+    console.log(`[ACE-Step stream] unrecognized event type:`, event.type, "keys:", Object.keys(event));
+  }
+  } catch (loopErr) {
+    clearTimeout(timeoutId);
+    console.error(`[ACE-Step stream] for-await loop threw after ${eventCount} events:`, loopErr.message);
+    yield { type: "error", message: friendlyAceStepError(loopErr.message, "Stream broke") };
+    return;
+  }
+
+  clearTimeout(timeoutId);
+
+  console.log(`[ACE-Step stream] loop ended after ${eventCount} events, resultEmitted:`, resultEmitted);
+
+  if (!resultEmitted) {
+    yield { type: "error", message: "Generation ended without producing audio" };
   }
 }
 

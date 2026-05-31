@@ -13,7 +13,21 @@ const router = express.Router();
 
 const DEFAULT_WHISPER_SPACE = "openai/whisper";
 const DEFAULT_SONICMASTER_SPACE = "amaai-lab/SonicMaster";
-const DEFAULT_ACESTEP_SPACE = "ACE-Step/ACE-Step";
+
+const ACESTEP_MODELS = ["acestep-v15-turbo", "acestep-v15-turbo-shift3", "acestep-v15-xl-turbo"];
+
+function normalizeAceStepModel(model) {
+  const value = String(model || "").trim();
+  if (value === "acestep-v15-xl-turbo") return "acestep-v15-turbo";
+  return ACESTEP_MODELS.includes(value) ? value : "acestep-v15-turbo";
+}
+
+function normalizeCoverStrength(coverStrength, refAudioStrength) {
+  if (coverStrength != null && Number(coverStrength) !== 1.0) {
+    return Number(coverStrength);
+  }
+  return null;
+}
 
 function slugify(value = "", maxLength = 48) {
   return String(value || "")
@@ -112,7 +126,6 @@ router.post("/enhance", async (req, res) => {
 router.post("/generate", async (req, res) => {
   try {
     const {
-      spaceUrl,
       mode = "create",
       description = "",
       tags = "",
@@ -122,9 +135,18 @@ router.post("/generate", async (req, res) => {
       inferStep = 60,
       guidanceScale = 15.0,
       refAudioStrength = 0.5,
+      model,
+      thinking,
+      bpm,
+      keyScale,
+      timeSignature,
+      coverStrength,
+      negativeStyles,
+      refAudioBase64,
+      refAudioMime,
+      audioMime,
     } = req.body || {};
 
-    const effectiveSpaceUrl = String(spaceUrl || DEFAULT_ACESTEP_SPACE).trim();
     const effectiveMode = String(mode).trim().toLowerCase();
 
     if (effectiveMode === "create" && !String(description || "").trim()) {
@@ -134,24 +156,41 @@ router.post("/generate", async (req, res) => {
       return res.status(400).json({ error: "tags or description is required for generate mode" });
     }
 
-    // Build reference audio buffer if provided
+    // Build source audio buffer if provided
     const audioInput = normalizeAudioInput(req.body);
+    const sourceAudioMime = String(audioMime || audioInput?.mime || "audio/mpeg");
     let srcAudioBuf = null;
     if (audioInput) {
       srcAudioBuf = await audioInputToBuffer(audioInput);
     }
 
-    const result = await generateWithACEStep(effectiveSpaceUrl, {
+    // Build reference audio buffer if provided (style transfer)
+    let refAudioBuf = null;
+    if (refAudioBase64) {
+      const raw = String(refAudioBase64).replace(/^data:[^;]+;base64,/, "");
+      refAudioBuf = Buffer.from(raw, "base64");
+    }
+
+    const result = await generateWithACEStep({
       mode: effectiveMode,
       description: String(description || ""),
       tags: String(tags || ""),
       lyrics: String(lyrics || ""),
-      audio_duration: Number(duration) || 60,
+      audio_duration: duration != null ? Number(duration) : null,
       infer_step: Number(inferStep) || 60,
       guidance_scale: Number(guidanceScale) || 15.0,
       seed: Number(seed) || -1,
       src_audio: srcAudioBuf,
       ref_audio_strength: Number(refAudioStrength) || 0.5,
+      model: normalizeAceStepModel(model),
+      thinking: thinking !== false,
+      bpm: bpm ? Number(bpm) : null,
+      key_scale: keyScale ? String(keyScale) : null,
+      time_signature: timeSignature ? Number(timeSignature) : null,
+      cover_strength: normalizeCoverStrength(coverStrength, refAudioStrength),
+      negative_styles: negativeStyles ? String(negativeStyles) : null,
+      ref_audio: refAudioBuf,
+      audio_mime: sourceAudioMime,
     });
 
     const { audio, title, tags: generatedTags, lyrics: generatedLyrics, thumbnail } = result;
@@ -188,7 +227,7 @@ router.post("/generate", async (req, res) => {
             description,
             duration: Number(duration) || 60,
             seed: Number(seed) || -1,
-            space: effectiveSpaceUrl,
+            space: "acemusic-api",
           },
         });
       } catch (saveErr) {
@@ -250,7 +289,6 @@ router.post("/generate-stream", async (req, res) => {
   }, 8000);
 
   const {
-    spaceUrl,
     mode = "create",
     description = "",
     tags = "",
@@ -260,9 +298,18 @@ router.post("/generate-stream", async (req, res) => {
     inferStep = 60,
     guidanceScale = 15.0,
     refAudioStrength = 0.5,
+    model,
+    thinking,
+    bpm,
+    keyScale,
+    timeSignature,
+    coverStrength,
+    negativeStyles,
+    refAudioBase64,
+    refAudioMime,
+    audioMime,
   } = req.body || {};
 
-  const effectiveSpaceUrl = String(spaceUrl || DEFAULT_ACESTEP_SPACE).trim();
   const effectiveMode = String(mode).trim().toLowerCase();
 
   if (effectiveMode === "create" && !String(description || "").trim()) {
@@ -270,14 +317,17 @@ router.post("/generate-stream", async (req, res) => {
     clearInterval(heartbeat);
     return res.end();
   }
-  if (effectiveMode === "generate" && !String(tags || "").trim() && !String(description || "").trim()) {
+  const tagsTrimmed = String(tags || "").trim();
+  const descTrimmed = String(description || "").trim();
+  if (effectiveMode === "generate" && !tagsTrimmed && !descTrimmed) {
     send({ type: "error", message: "tags or description is required for generate mode" });
     clearInterval(heartbeat);
     return res.end();
   }
 
-  // Build reference audio buffer if provided
+  // Build source audio buffer if provided
   const audioInput = normalizeAudioInput(req.body);
+  const sourceAudioMime = String(audioMime || audioInput?.mime || "audio/mpeg");
   let srcAudioBuf = null;
   if (audioInput) {
     try {
@@ -287,19 +337,40 @@ router.post("/generate-stream", async (req, res) => {
     }
   }
 
+  // Build reference audio buffer if provided (style transfer)
+  let refAudioBuf = null;
+  if (refAudioBase64) {
+    try {
+      const raw = String(refAudioBase64).replace(/^data:[^;]+;base64,/, "");
+      refAudioBuf = Buffer.from(raw, "base64");
+    } catch (refErr) {
+      console.warn("[remix/generate-stream] Could not read reference audio:", refErr.message);
+    }
+  }
+
   try {
-    const stream = streamGenerateWithACEStep(effectiveSpaceUrl, {
+    const payload = {
       mode: effectiveMode,
       description: String(description || ""),
       tags: String(tags || ""),
       lyrics: String(lyrics || ""),
-      audio_duration: Number(duration) || 60,
+      audio_duration: duration != null ? Number(duration) : null,
       infer_step: Number(inferStep) || 60,
       guidance_scale: Number(guidanceScale) || 15.0,
       seed: Number(seed) || -1,
       src_audio: srcAudioBuf,
       ref_audio_strength: Number(refAudioStrength) || 0.5,
-    });
+      model: normalizeAceStepModel(model),
+      thinking: thinking !== false,
+      bpm: bpm ? Number(bpm) : null,
+      key_scale: keyScale ? String(keyScale) : null,
+      time_signature: timeSignature ? Number(timeSignature) : null,
+      cover_strength: normalizeCoverStrength(coverStrength, refAudioStrength),
+      negative_styles: negativeStyles ? String(negativeStyles) : null,
+      ref_audio: refAudioBuf,
+      audio_mime: sourceAudioMime,
+    };
+    const stream = streamGenerateWithACEStep(payload);
 
     for await (const event of stream) {
       send(event);
@@ -331,7 +402,7 @@ router.post("/generate-stream", async (req, res) => {
               description,
               duration: Number(duration) || 60,
               seed: Number(seed) || -1,
-              space: effectiveSpaceUrl,
+              space: "acemusic-api",
             },
           });
 

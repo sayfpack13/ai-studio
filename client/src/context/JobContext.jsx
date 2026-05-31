@@ -11,6 +11,7 @@ import {
   generateImage,
   generateVideo,
   generateMusic,
+  streamGenerateRemix,
   getJobs,
   cancelServerJob,
   deleteServerJob,
@@ -23,6 +24,21 @@ const JOBS_STORAGE_KEY = "blackbox_ai_jobs";
 const MAX_COMPLETED_JOBS = 50; // Reduced from 200 to prevent quota issues
 const COMPLETED_JOB_TTL = 24 * 60 * 60 * 1000; // 1 day for completed
 const FAILED_JOB_TTL = 5 * 60 * 1000; // 5 minutes for failed (don't show old errors)
+/** Running/pending jobs older than this are marked failed (page refresh, dropped SSE, etc.) */
+const STALE_RUNNING_JOB_TTL = 12 * 60 * 1000;
+
+function normalizeStaleRunningJob(job, now = Date.now()) {
+  if (job.status !== "running" && job.status !== "pending") return job;
+  const startedAt = job.createdAt || 0;
+  if (now - startedAt < STALE_RUNNING_JOB_TTL) return job;
+  return {
+    ...job,
+    status: "failed",
+    error: job.error || "Generation timed out or was interrupted. Please retry.",
+    completedAt: now,
+    message: undefined,
+  };
+}
 
 // Helper to load from localStorage
 const loadJobsFromStorage = () => {
@@ -32,7 +48,9 @@ const loadJobsFromStorage = () => {
     const jobs = JSON.parse(stored);
     // Filter out old jobs based on status
     const now = Date.now();
-    return jobs.filter((job) => {
+    return jobs
+      .map((job) => normalizeStaleRunningJob(job, now))
+      .filter((job) => {
       if (job.status === "failed") {
         return now - (job.completedAt || 0) < FAILED_JOB_TTL;
       }
@@ -62,6 +80,8 @@ const saveJobsToStorage = (jobs) => {
               imageId: params.imageId,
               videoId: params.videoId,
               musicId: params.musicId,
+              remixHistoryId: params.remixHistoryId,
+              remixMetadata: params.remixMetadata,
             }
           : undefined,
       };
@@ -128,27 +148,7 @@ const serverJobToClient = (serverJob) => ({
 });
 
 export function JobProvider({ children }) {
-  const [jobs, setJobs] = useState(() => {
-    const loaded = loadJobsFromStorage();
-    // Keep jobs as-is - they will sync with server via polling
-    return loaded
-      .map((job) => {
-        // Clear old error messages from previous bugs
-        if (
-          job.status === "failed" &&
-          (job.error === "Connection lost - job interrupted" ||
-            job.error ===
-              "Generation interrupted - page was closed. Please retry manually.")
-        ) {
-          return { ...job, status: "pending", error: null, progress: 0 };
-        }
-        return job;
-      })
-      .filter(() => {
-        // Keep all jobs - they will be processed or cleaned up by user action
-        return true;
-      });
-  });
+  const [jobs, setJobs] = useState(() => loadJobsFromStorage());
   const [serverJobs, setServerJobs] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -160,6 +160,12 @@ export function JobProvider({ children }) {
     saveFnsRef.current[type] = fn;
   }, []);
 
+  /** Register an external abort handler (e.g. remix SSE stream). */
+  const registerJobAbort = useCallback((jobId, abortFn) => {
+    if (!jobId || typeof abortFn !== "function") return;
+    abortControllersRef.current[jobId] = { abort: abortFn };
+  }, []);
+
   // Persist jobs to localStorage
   useEffect(() => {
     const serializable = jobs.map((job) => {
@@ -169,6 +175,25 @@ export function JobProvider({ children }) {
     });
     saveJobsToStorage(serializable);
   }, [jobs]);
+
+  // Mark orphaned running jobs as failed (refresh mid-generation, lost SSE, etc.)
+  useEffect(() => {
+    const reconcile = () => {
+      const now = Date.now();
+      setJobs((prev) => {
+        let changed = false;
+        const next = prev.map((job) => {
+          const normalized = normalizeStaleRunningJob(job, now);
+          if (normalized !== job) changed = true;
+          return normalized;
+        });
+        return changed ? next : prev;
+      });
+    };
+    reconcile();
+    const interval = setInterval(reconcile, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch server jobs on mount and periodically (adaptive polling)
   const hasActiveLocalJobs = jobs.some(
@@ -451,7 +476,9 @@ export function JobProvider({ children }) {
   const processJob = useCallback(
     async (job, saveResult) => {
       const controller = new AbortController();
-      abortControllersRef.current[job.id] = controller;
+      if (job.type !== "remix") {
+        abortControllersRef.current[job.id] = controller;
+      }
 
       try {
         updateJob(job.id, { status: "running", progress: 10 });
@@ -474,6 +501,61 @@ export function JobProvider({ children }) {
             ...params.options,
             signal: controller.signal,
           });
+        } else if (type === "remix") {
+          if (!params.streamPayload) {
+            return { error: "Remix payload missing — please start again from the remix page." };
+          }
+
+          const resultData = await new Promise((resolve, reject) => {
+            let settled = false;
+            const abortStream = streamGenerateRemix(params.streamPayload, {
+              onProgress: (value, message) => {
+                updateJob(job.id, {
+                  status: "running",
+                  progress: value,
+                  message: message || `Generating… ${value}%`,
+                });
+              },
+              onResult: (data) => {
+                if (settled) return;
+                settled = true;
+                const playUrl = data.audio || data.url;
+                resolve({
+                  url: playUrl,
+                  title: data.title,
+                  tags: data.tags,
+                  lyrics: data.lyrics,
+                  thumbnail: data.thumbnail,
+                });
+              },
+              onSaved: (savedUrl) => {
+                updateJob(job.id, { resultUrl: savedUrl });
+              },
+              onError: (msg) => {
+                if (settled) return;
+                settled = true;
+                reject(new Error(msg));
+              },
+            });
+
+            abortControllersRef.current[job.id] = { abort: abortStream };
+            controller.signal.addEventListener("abort", () => {
+              if (settled) return;
+              settled = true;
+              abortStream();
+              reject(Object.assign(new Error("Canceled"), { name: "AbortError" }));
+            });
+          });
+
+          if (controller.signal.aborted) {
+            return { cancelled: true };
+          }
+
+          if (saveResult) {
+            await saveResult(resultData);
+          }
+
+          return { result: resultData };
         }
 
         if (controller.signal.aborted) {
@@ -587,6 +669,15 @@ export function JobProvider({ children }) {
               data,
               job.params.model,
             );
+        } else if (job.type === "remix") {
+          saveResult = (data) =>
+            saveFn(
+              job.params.remixHistoryId,
+              job.params.prompt,
+              data,
+              job.params.model,
+              job.params.remixMetadata,
+            );
         }
       }
 
@@ -615,6 +706,7 @@ export function JobProvider({ children }) {
             updateJob(job.id, {
               status: "completed",
               result: outcome.result,
+              resultUrl: outcome.result?.url || job.resultUrl || null,
               progress: 100,
               completedAt: Date.now(),
             });
@@ -653,6 +745,7 @@ export function JobProvider({ children }) {
     getJobsByType,
     updateJob,
     registerSaveFns,
+    registerJobAbort,
     processQueue: () => {}, // Placeholder for future queue management
     sidebarOpen,
     setSidebarOpen,

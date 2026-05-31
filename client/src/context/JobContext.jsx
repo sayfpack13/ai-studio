@@ -17,6 +17,7 @@ import {
   deleteServerJob,
   clearServerJobs,
 } from "../services/api";
+import { useApp } from "./AppContext";
 
 const JobContext = createContext();
 
@@ -148,13 +149,31 @@ const serverJobToClient = (serverJob) => ({
 });
 
 export function JobProvider({ children }) {
+  const { saveRemix, refreshLibraryAssets } = useApp();
   const [jobs, setJobs] = useState(() => loadJobsFromStorage());
   const [serverJobs, setServerJobs] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const activeJobIdsRef = useRef(new Set());
   const abortControllersRef = useRef({});
-  const saveFnsRef = useRef({ image: null, video: null, music: null });
+  const saveFnsRef = useRef({ image: null, video: null, music: null, remix: null });
+  const saveRemixRef = useRef(saveRemix);
+  const refreshLibraryRef = useRef(refreshLibraryAssets);
+
+  useEffect(() => {
+    saveRemixRef.current = saveRemix;
+  }, [saveRemix]);
+
+  useEffect(() => {
+    refreshLibraryRef.current = refreshLibraryAssets;
+  }, [refreshLibraryAssets]);
+
+  // Register remix save before job auto-process runs (avoids race on first paint)
+  useEffect(() => {
+    saveFnsRef.current.remix = (remixHistoryId, prompt, result, model, metadata) => {
+      saveRemixRef.current?.(remixHistoryId, prompt, result, model, metadata);
+    };
+  }, []);
 
   const registerSaveFns = useCallback((type, fn) => {
     saveFnsRef.current[type] = fn;
@@ -508,6 +527,20 @@ export function JobProvider({ children }) {
 
           const resultData = await new Promise((resolve, reject) => {
             let settled = false;
+            let pendingMeta = null;
+
+            const finish = (url) => {
+              if (settled) return;
+              settled = true;
+              resolve({
+                url,
+                title: pendingMeta?.title,
+                tags: pendingMeta?.tags,
+                lyrics: pendingMeta?.lyrics,
+                thumbnail: pendingMeta?.thumbnail,
+              });
+            };
+
             const abortStream = streamGenerateRemix(params.streamPayload, {
               onProgress: (value, message) => {
                 updateJob(job.id, {
@@ -517,19 +550,21 @@ export function JobProvider({ children }) {
                 });
               },
               onResult: (data) => {
-                if (settled) return;
-                settled = true;
-                const playUrl = data.audio || data.url;
-                resolve({
-                  url: playUrl,
+                pendingMeta = {
                   title: data.title,
                   tags: data.tags,
                   lyrics: data.lyrics,
                   thumbnail: data.thumbnail,
-                });
+                };
+                const candidate = data.url || data.audio;
+                if (candidate && !String(candidate).startsWith("data:")) {
+                  finish(candidate);
+                }
               },
               onSaved: (savedUrl) => {
+                if (!savedUrl) return;
                 updateJob(job.id, { resultUrl: savedUrl });
+                finish(savedUrl);
               },
               onError: (msg) => {
                 if (settled) return;
@@ -553,7 +588,17 @@ export function JobProvider({ children }) {
 
           if (saveResult) {
             await saveResult(resultData);
+          } else if (params.remixHistoryId) {
+            saveRemixRef.current?.(
+              params.remixHistoryId,
+              params.prompt,
+              resultData,
+              params.model,
+              params.remixMetadata,
+            );
           }
+
+          refreshLibraryRef.current?.({}).catch(() => {});
 
           return { result: resultData };
         }

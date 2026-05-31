@@ -160,6 +160,56 @@ const mergeVideoHistoryFromLibrary = (history, assets = []) => {
   return trimHistory(filterInvalidVideos(next));
 };
 
+const getRemixUrl = (remix) => {
+  if (!remix) return "";
+  return remix?.result?.url || remix?.url || "";
+};
+
+const mergeRemixHistoryFromLibrary = (history, assets = []) => {
+  if (!Array.isArray(assets) || assets.length === 0) return history;
+
+  const next = { ...(history || {}) };
+  const existingUrls = new Set(
+    Object.values(history || {})
+      .map((item) => getRemixUrl(item))
+      .filter((url) => !isInvalidMediaUrl(url)),
+  );
+
+  for (const asset of assets) {
+    if (!asset || asset.type !== "audio") continue;
+    if (asset.source !== "remix") continue;
+
+    const url = asset.url;
+    if (isInvalidMediaUrl(url) || existingUrls.has(url)) continue;
+
+    const lastUpdatedMs =
+      Date.parse(asset.updatedAt || asset.createdAt || "") || Date.now();
+    const historyId = asset.metadata?.remixHistoryId || asset.id;
+
+    next[historyId] = {
+      prompt:
+        asset.metadata?.description ||
+        asset.metadata?.tags ||
+        asset.title ||
+        "Remix",
+      result: {
+        url,
+        title: asset.title,
+        tags: asset.metadata?.tags,
+        lyrics: asset.metadata?.lyrics,
+        thumbnail: asset.thumbnail || null,
+      },
+      model: asset.metadata?.model,
+      metadata: asset.metadata || {},
+      lastUpdated: lastUpdatedMs,
+    };
+
+    existingUrls.add(url);
+  }
+
+  return trimHistory(next);
+};
+
 // Helper to load from localStorage with size check
 const loadFromStorage = (key, defaultValue) => {
   try {
@@ -312,6 +362,7 @@ export function AppProvider({ children }) {
     setLibraryAssets(assets);
     setImageHistory((prev) => mergeImageHistoryFromLibrary(prev, assets));
     setVideoHistory((prev) => mergeVideoHistoryFromLibrary(prev, assets));
+    setRemixHistory((prev) => mergeRemixHistoryFromLibrary(prev, assets));
     return assets;
   }, []);
 
@@ -333,6 +384,9 @@ export function AppProvider({ children }) {
       );
       setVideoHistory((prev) =>
         mergeVideoHistoryFromLibrary(prev, [response.asset]),
+      );
+      setRemixHistory((prev) =>
+        mergeRemixHistoryFromLibrary(prev, [response.asset]),
       );
     }
     return response;
@@ -362,6 +416,7 @@ export function AppProvider({ children }) {
     setLibraryAssets(assets);
     setImageHistory((prev) => mergeImageHistoryFromLibrary(prev, assets));
     setVideoHistory((prev) => mergeVideoHistoryFromLibrary(prev, assets));
+    setRemixHistory((prev) => mergeRemixHistoryFromLibrary(prev, assets));
     return assets;
   }, []);
 
@@ -597,12 +652,26 @@ export function AppProvider({ children }) {
 
   const saveRemix = useCallback(
     (remixId, prompt, result, model, metadata = {}) => {
+      const url = result?.url || result?.audio || "";
+      if (isInvalidMediaUrl(url)) {
+        console.warn("[saveRemix] Skipping entry without a persisted URL:", remixId);
+        return;
+      }
+
+      const normalizedResult = {
+        url,
+        title: result?.title,
+        tags: result?.tags,
+        lyrics: result?.lyrics,
+        thumbnail: result?.thumbnail,
+      };
+
       setRemixHistory((prev) => {
         const updated = {
           ...prev,
           [remixId]: {
             prompt,
-            result,
+            result: normalizedResult,
             model,
             metadata,
             lastUpdated: Date.now(),

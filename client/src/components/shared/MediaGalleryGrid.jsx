@@ -322,6 +322,18 @@ export default function MediaGalleryGrid({
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex flex-col opacity-0 group-hover:opacity-100">
                 {/* Top row: icon actions */}
                 <div className="absolute top-2 right-2 flex gap-1.5">
+                  {(mediaType === "music" || mediaType === "remix") && item.url && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onView?.(item);
+                      }}
+                      className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                      title="Play"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => handleDownload(e, item)}
                     className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"

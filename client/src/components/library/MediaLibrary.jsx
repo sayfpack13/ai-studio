@@ -459,6 +459,13 @@ export default function MediaLibrary() {
 
   const handleLoadHistory = (asset) => {
     const originId = asset._originId;
+    if (asset.source === "remix-history" || asset.metadata?.source === "remix") {
+      window.dispatchEvent(
+        new CustomEvent("remixHistorySelected", { detail: { remixId: originId } }),
+      );
+      navigate("/remix");
+      return;
+    }
     const routeMap = { image: "/image", video: "/video", audio: "/music" };
     const eventMap = {
       image: "imageHistorySelected",

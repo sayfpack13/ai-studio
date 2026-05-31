@@ -308,6 +308,7 @@ router.post("/generate-stream", async (req, res) => {
     refAudioBase64,
     refAudioMime,
     audioMime,
+    remixHistoryId,
   } = req.body || {};
 
   const effectiveMode = String(mode).trim().toLowerCase();
@@ -373,9 +374,16 @@ router.post("/generate-stream", async (req, res) => {
     const stream = streamGenerateWithACEStep(payload);
 
     for await (const event of stream) {
-      send(event);
-
       if (event.type === "result" && event.audio) {
+        // Send metadata only — audio stays on server (avoids multi-MB SSE + data: URLs in client history)
+        send({
+          type: "result",
+          title: event.title,
+          tags: event.tags,
+          lyrics: event.lyrics,
+          thumbnail: event.thumbnail,
+        });
+
         try {
           const isDataUrl = event.audio.startsWith("data:");
           let audioBuf;
@@ -403,15 +411,19 @@ router.post("/generate-stream", async (req, res) => {
               duration: Number(duration) || 60,
               seed: Number(seed) || -1,
               space: "acemusic-api",
+              remixHistoryId: remixHistoryId || null,
             },
           });
 
           send({ type: "saved", url: saved.url });
         } catch (saveErr) {
           console.warn("[remix/generate-stream] Could not save audio:", saveErr.message);
-          send({ type: "saved", url: event.audio });
+          send({ type: "error", message: saveErr.message || "Failed to save remix audio" });
         }
+        continue;
       }
+
+      send(event);
     }
   } catch (err) {
     console.error("Remix stream error:", err.message);

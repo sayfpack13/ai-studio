@@ -146,7 +146,7 @@ export default function MediaOutputPanel({
           duration: result.duration,
         };
       })
-      .filter((item) => item?.url);
+      .filter((item) => item?.url && !String(item.url).startsWith("data:"));
   }, [mediaHistory, getMediaIds]);
 
   const historyCount = historyItems.length;
@@ -700,7 +700,12 @@ export default function MediaOutputPanel({
           previewMedia
             ? {
                 ...previewMedia,
-                type: previewMedia.mode === "video_to_audio" ? "video" : mediaType,
+                type:
+                  previewMedia.mode === "video_to_audio"
+                    ? "video"
+                    : mediaType === "music" || mediaType === "remix"
+                      ? "audio"
+                      : mediaType,
                 title: previewMedia.prompt || `Generated ${config.label}`,
               }
             : null

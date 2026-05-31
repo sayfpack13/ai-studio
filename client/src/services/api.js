@@ -190,6 +190,8 @@ export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, on
 
   (async () => {
     let settled = false;
+    let gotResult = false;
+    let gotSaved = false;
     const timeoutId = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -232,15 +234,33 @@ export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, on
           try { data = JSON.parse(jsonStr); } catch { continue; }
 
           if (data.type === "progress") onProgress?.(data.value, data.message, data.preview);
-          else if (data.type === "result") { settled = true; onResult?.(data); }
-          else if (data.type === "saved") onSaved?.(data.url);
-          else if (data.type === "error") { settled = true; onError?.(data.message); controller.abort(); return; }
+          else if (data.type === "result") {
+            gotResult = true;
+            onProgress?.(95, "Saving remix…");
+            onResult?.(data);
+          }
+          else if (data.type === "saved") {
+            gotSaved = true;
+            settled = true;
+            onProgress?.(100, "Complete");
+            onSaved?.(data.url);
+          }
+          else if (data.type === "error") {
+            settled = true;
+            onError?.(data.message);
+            controller.abort();
+            return;
+          }
         }
       }
 
       if (!settled) {
         settled = true;
-        onError?.("Stream ended without producing audio");
+        if (gotResult && !gotSaved) {
+          onError?.("Remix generated but file save did not complete. Check Media Library or retry.");
+        } else {
+          onError?.("Stream ended without producing audio");
+        }
       }
     } catch (err) {
       if (err.name !== "AbortError" && !settled) {

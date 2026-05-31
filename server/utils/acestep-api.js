@@ -134,7 +134,7 @@ function buildCompletionPayload(options = {}, modelId) {
     sample_mode: false,
     use_cot_caption: true,
     use_cot_language: false,
-    stream: false,
+    stream: true,
     audio_config: audioConfig,
   };
 
@@ -527,6 +527,84 @@ async function fetchWithRetry(url, init, { label = "request", retries = 2 } = {}
   throw lastError || new Error(`${label} failed after retries`);
 }
 
+/**
+ * Read AceMusic /v1/chat/completions SSE stream (stream: true).
+ * Yields { progress, audioUrl, finishReason, errorMessage } per chunk.
+ */
+async function* readCompletionSseStream(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let chunkIndex = 0;
+  let audioUrl = null;
+  let finishReason = null;
+  let errorMessage = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+
+    for (const part of parts) {
+      for (const line of part.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const dataStr = line.slice(6).trim();
+        if (!dataStr || dataStr === "[DONE]") continue;
+
+        let parsed;
+        try {
+          parsed = JSON.parse(dataStr);
+        } catch {
+          continue;
+        }
+
+        chunkIndex += 1;
+        const choice = parsed?.choices?.[0];
+        const delta = choice?.delta || {};
+        const message = choice?.message || {};
+
+        if (choice?.finish_reason) {
+          finishReason = choice.finish_reason;
+        }
+
+        if (finishReason === "error") {
+          const content = delta.content || message.content;
+          if (typeof content === "string" && content.trim()) {
+            errorMessage = content.trim();
+          }
+        }
+
+        const audioArr = delta.audio || message.audio;
+        if (Array.isArray(audioArr) && audioArr.length > 0) {
+          const url = audioArr[0]?.audio_url?.url;
+          if (url) audioUrl = url;
+        }
+
+        const progress = Math.min(92, 15 + Math.floor(chunkIndex * 1.5));
+        yield {
+          progress,
+          audioUrl,
+          finishReason,
+          errorMessage,
+          chunkIndex,
+        };
+      }
+    }
+  }
+
+  yield {
+    progress: audioUrl ? 95 : 15,
+    audioUrl,
+    finishReason,
+    errorMessage,
+    chunkIndex,
+    done: true,
+  };
+}
+
 async function prepareCompletionOptions(options = {}) {
   const next = { ...options };
   if (!next.src_audio) return next;
@@ -599,7 +677,7 @@ async function* streamAceStepCompletion(options = {}) {
   yield {
     type: "progress",
     value: 15,
-    message: isCover ? "Generating remix… this may take 1–3 minutes" : "Generating music…",
+    message: isCover ? "Generating remix… streaming from AceMusic" : "Generating music…",
   };
 
   try {
@@ -611,6 +689,7 @@ async function* streamAceStepCompletion(options = {}) {
         headers: {
           "Content-Type": "application/json; charset=utf-8",
           Authorization: `Bearer ${apiKey}`,
+          Accept: "text/event-stream, application/json",
         },
         body: requestBody,
         signal: AbortSignal.timeout(660_000),
@@ -624,8 +703,40 @@ async function* streamAceStepCompletion(options = {}) {
       throw new Error(`AceMusic API ${resp.status}: ${detail}`);
     }
 
-    const body = await resp.json();
-    const audioUrl = parseCompletionResponse(body);
+    const contentType = String(resp.headers.get("content-type") || "").toLowerCase();
+    let audioUrl = null;
+
+    if (contentType.includes("text/event-stream")) {
+      let lastProgress = 15;
+      for await (const chunk of readCompletionSseStream(resp)) {
+        if (chunk.errorMessage) {
+          throw new Error(chunk.errorMessage);
+        }
+        if (chunk.finishReason === "error") {
+          throw new Error("AceMusic generation failed");
+        }
+        if (chunk.audioUrl) {
+          audioUrl = chunk.audioUrl;
+        }
+        if (!chunk.done && chunk.progress > lastProgress) {
+          lastProgress = chunk.progress;
+          yield {
+            type: "progress",
+            value: chunk.progress,
+            message: isCover
+              ? `Generating remix… ${chunk.progress}%`
+              : `Generating music… ${chunk.progress}%`,
+          };
+        }
+      }
+    } else {
+      const body = await resp.json();
+      audioUrl = parseCompletionResponse(body);
+    }
+
+    if (!audioUrl) {
+      throw new Error("AceMusic API returned no audio");
+    }
 
     let resultAudio = audioUrl;
     if (!audioUrl.startsWith("data:")) {

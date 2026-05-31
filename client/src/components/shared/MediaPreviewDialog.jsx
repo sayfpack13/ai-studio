@@ -20,8 +20,14 @@ const TYPE_META = {
   image: { icon: ImageIcon, label: "IMAGE", accent: "text-violet-300" },
   video: { icon: VideoIcon, label: "VIDEO", accent: "text-rose-300" },
   audio: { icon: MusicIcon, label: "AUDIO", accent: "text-emerald-300" },
+  music: { icon: MusicIcon, label: "MUSIC", accent: "text-emerald-300" },
+  remix: { icon: MusicIcon, label: "REMIX", accent: "text-purple-300" },
   project: { icon: FileText, label: "PROJECT", accent: "text-amber-300" },
 };
+
+function isAudioType(type) {
+  return type === "audio" || type === "music" || type === "remix";
+}
 
 export default function MediaPreviewDialog({
   open,
@@ -107,10 +113,12 @@ export default function MediaPreviewDialog({
         />
       );
     }
-    if (type === "audio") {
+    if (isAudioType(type)) {
       return (
         <div className="w-full max-w-xl mx-auto space-y-3">
-          <p className="text-sm text-gray-300">Audio preview</p>
+          <p className="text-sm text-gray-300">
+            {type === "remix" ? "Remix preview" : "Audio preview"}
+          </p>
           <audio src={resolvedUrl} controls autoPlay className="w-full" />
         </div>
       );

@@ -138,6 +138,37 @@ export default function MusicRemix() {
     });
   }, [registerSaveFns, saveRemix]);
 
+  const applyRemixFormFromMetadata = useCallback((metadata, fallbackPrompt = "") => {
+    if (!metadata || typeof metadata !== "object") {
+      if (fallbackPrompt) setDescription(fallbackPrompt);
+      return;
+    }
+
+    if (metadata.inputMode) setInputMode(metadata.inputMode);
+
+    if (metadata.tags) {
+      const tagList = metadata.tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+      setTags(metadata.tags);
+      setSelectedTags(tagList);
+    }
+
+    if (metadata.description) {
+      setDescription(metadata.description);
+    } else if (metadata.inputMode === "simple" && fallbackPrompt) {
+      setDescription(fallbackPrompt);
+    } else if (!metadata.tags && fallbackPrompt) {
+      setDescription(fallbackPrompt);
+    }
+
+    if (metadata.model) setModel(metadata.model);
+    if (metadata.refAudioStrength != null) {
+      setRefAudioStrength(Number(metadata.refAudioStrength));
+    }
+  }, []);
+
   // Re-attach UI to in-flight remix jobs when returning to this page
   useEffect(() => {
     if (selectedRunningJobId || isPreparing) return;
@@ -148,15 +179,21 @@ export default function MusicRemix() {
     setSelectedRunningJobId(active.id);
     if (active.progress != null) setGenProgress(active.progress);
     if (active.message) setGenMessage(active.message);
-  }, [remixJobs, selectedRunningJobId, isPreparing]);
+    if (active.params?.remixMetadata) {
+      applyRemixFormFromMetadata(active.params.remixMetadata, active.prompt);
+    }
+  }, [remixJobs, selectedRunningJobId, isPreparing, applyRemixFormFromMetadata]);
 
   useEffect(() => {
     if (!selectedJob || selectedJob.type !== "remix") return;
 
     const jobPrompt = selectedJob.prompt || selectedJob.params?.prompt || "";
-    if (jobPrompt) {
-      setDescription(jobPrompt);
-    }
+    const remixHistoryId = selectedJob.params?.remixHistoryId;
+    const historyItem = remixHistoryId ? remixHistory[remixHistoryId] : null;
+    const metadata = historyItem?.metadata || selectedJob.params?.remixMetadata || null;
+
+    applyRemixFormFromMetadata(metadata, jobPrompt);
+    setError("");
 
     if (selectedJob.status === "failed") {
       setError(selectedJob.error || "Generation failed");
@@ -166,22 +203,28 @@ export default function MusicRemix() {
       selectedJob.status === "pending"
     ) {
       setSelectedRunningJobId(selectedJob.id);
-      setError("");
       if (selectedJob.progress != null) setGenProgress(selectedJob.progress);
       if (selectedJob.message) setGenMessage(selectedJob.message);
     } else if (selectedJob.status === "completed") {
       setSelectedRunningJobId(null);
-      if (selectedJob.resultUrl) {
+      const historyResult = historyItem?.result;
+      const resultUrl = historyResult?.url || selectedJob.resultUrl;
+      if (resultUrl) {
         setGeneratedRemix({
-          prompt: jobPrompt,
-          model: selectedJob.model,
-          url: selectedJob.resultUrl,
+          id: remixHistoryId,
+          url: resultUrl,
+          prompt: historyItem?.prompt || jobPrompt,
+          model: historyItem?.model || selectedJob.model,
+          title: historyResult?.title,
+          tags: historyResult?.tags,
+          lyrics: historyResult?.lyrics,
+          thumbnail: historyResult?.thumbnail,
         });
       }
     }
 
     setSelectedJob(null);
-  }, [selectedJob, setSelectedJob]);
+  }, [selectedJob, setSelectedJob, applyRemixFormFromMetadata, remixHistory]);
 
   useEffect(() => {
     if (!selectedRunningJobId) return;
@@ -193,12 +236,19 @@ export default function MusicRemix() {
     }
 
     if (job.status === "completed") {
-      if (job.resultUrl) {
+      const remixId = job.params?.remixHistoryId;
+      const historyItem = remixId ? remixHistory[remixId] : null;
+      const url = job.resultUrl || historyItem?.result?.url || job.result?.url;
+      if (url) {
         setGeneratedRemix({
-          id: job.params?.remixHistoryId,
-          prompt: job.prompt,
-          model: job.model,
-          url: job.resultUrl,
+          id: remixId,
+          prompt: historyItem?.prompt || job.prompt,
+          model: historyItem?.model || job.model,
+          url,
+          title: historyItem?.result?.title || job.result?.title,
+          tags: historyItem?.result?.tags || job.result?.tags,
+          lyrics: historyItem?.result?.lyrics || job.result?.lyrics,
+          thumbnail: historyItem?.result?.thumbnail || job.result?.thumbnail,
         });
       }
       setSelectedRunningJobId(null);
@@ -211,7 +261,7 @@ export default function MusicRemix() {
       if (job.progress != null) setGenProgress(job.progress);
       if (job.message) setGenMessage(job.message);
     }
-  }, [selectedRunningJobId, remixJobs, isPreparing, isTranscribing, isEnhancing]);
+  }, [selectedRunningJobId, remixJobs, isPreparing, isTranscribing, isEnhancing, remixHistory]);
 
   const onFileSelected = useCallback(async (f) => {
     if (!f) return;
@@ -360,6 +410,7 @@ export default function MusicRemix() {
       }
 
       const remixPayload = {
+        remixHistoryId: remixId,
         mode: "generate",
         description: effectiveDesc,
         tags: effectiveTags,
@@ -453,24 +504,8 @@ export default function MusicRemix() {
         ? remixItem.metadata
         : null;
 
-    if (metadata?.inputMode) setInputMode(metadata.inputMode);
-    if (metadata?.description) setDescription(metadata.description);
-    if (metadata?.tags) {
-      setTags(metadata.tags);
-      setSelectedTags(
-        metadata.tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-      );
-    } else if (remixItem.prompt) {
-      setDescription(remixItem.prompt);
-    }
-    if (metadata?.model) setModel(metadata.model);
-    if (metadata?.refAudioStrength != null) {
-      setRefAudioStrength(Number(metadata.refAudioStrength));
-    }
-  }, []);
+    applyRemixFormFromMetadata(metadata, remixItem.prompt);
+  }, [applyRemixFormFromMetadata]);
 
   const handleReloadPrompt = useCallback(
     (item) => {

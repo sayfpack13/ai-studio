@@ -4,7 +4,7 @@
  * per https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/API.md
  */
 
-import { prepareCoverAudio } from "./audio-prepare.js";
+import { prepareCoverAudio, CLOUD_SAFE_UPLOAD_BYTES } from "./audio-prepare.js";
 
 const ALLOWED_MODELS = ["acestep-v15-turbo", "acestep-v15-turbo-shift3"];
 
@@ -228,8 +228,8 @@ function friendlyAceStepError(rawMessage = "", prefix = "") {
   }
   if (/504|502|503|gateway timeout|cloudflare/i.test(msg)) {
     return (
-      "AceMusic request timed out. Long remixes can take several minutes — please retry. " +
-      "If it keeps failing, try a shorter clip or set ACEMUSIC_MAX_COVER_SEC in server env."
+      "AceMusic timed out (504). Long uploads often hit Cloudflare limits — the server auto-trims " +
+      "large tracks for cloud. Retry, or set ACEMUSIC_MAX_COVER_SEC=120 in server env for a shorter clip."
     );
   }
   return withPrefix(msg || "ACE-Step generation failed");
@@ -613,10 +613,19 @@ async function prepareCompletionOptions(options = {}) {
     ? next.src_audio
     : Buffer.from(next.src_audio, "base64");
 
-  const prepared = await prepareCoverAudio(buf, next.audio_mime || next.audioMime || "audio/mpeg");
-  next.src_audio = prepared;
+  const forceTrimSec =
+    options._forceTrimSec != null ? Number(options._forceTrimSec) : undefined;
+  const prepared = await prepareCoverAudio(
+    buf,
+    next.audio_mime || next.audioMime || "audio/mpeg",
+    forceTrimSec != null ? { maxDurationSec: forceTrimSec, force: true } : {},
+  );
+
+  next.src_audio = prepared.buffer;
   next.audio_mime = "audio/mpeg";
   next.audioMime = "audio/mpeg";
+  next._coverTrimSec = prepared.trimSec;
+  next._coverAutoTrimmed = prepared.autoTrimmed;
 
   return next;
 }
@@ -680,11 +689,47 @@ async function* streamAceStepCompletion(options = {}) {
     message: isCover ? "Generating remix… streaming from AceMusic" : "Generating music…",
   };
 
+  if (preparedOptions._coverAutoTrimmed) {
+    yield {
+      type: "progress",
+      value: 14,
+      message: `Source auto-trimmed to ${preparedOptions._coverTrimSec || "?"}s for cloud upload`,
+    };
+  }
+
+  const COVER_504_TRIM_STEPS = [120, 90, 60];
+
   try {
-    const requestBody = JSON.stringify(payload);
-    const resp = await fetchWithRetry(
-      `${baseUrl}/v1/chat/completions`,
-      {
+    let resp = null;
+
+    for (let attempt = 0; attempt <= (isCover ? COVER_504_TRIM_STEPS.length : 1); attempt++) {
+      if (attempt > 0 && isCover) {
+        const trimSec = COVER_504_TRIM_STEPS[attempt - 1];
+        yield {
+          type: "progress",
+          value: 12,
+          message: `Gateway timeout — retrying with first ${trimSec}s of audio…`,
+        };
+        preparedOptions = await prepareCompletionOptions({ ...options, _forceTrimSec: trimSec });
+        ({ payload, effectiveTags, lyricsText } = buildCompletionPayload(preparedOptions, modelId));
+        console.log(
+          "[ACE-Step Completion] 504 retry:",
+          trimSec,
+          "s, audio_bytes:",
+          preparedOptions.src_audio?.length,
+        );
+      }
+
+      const requestBody = JSON.stringify(payload);
+      console.log(
+        "[ACE-Step Completion] Request size:",
+        `${(requestBody.length / 1024 / 1024).toFixed(2)}MB`,
+        `(cloud safe ≤ ${(CLOUD_SAFE_UPLOAD_BYTES * 1.34 / 1024 / 1024).toFixed(2)}MB est.)`,
+        "attempt",
+        attempt + 1,
+      );
+
+      resp = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=utf-8",
@@ -693,14 +738,37 @@ async function* streamAceStepCompletion(options = {}) {
         },
         body: requestBody,
         signal: AbortSignal.timeout(660_000),
-      },
-      { label: "chat/completions", retries: 2 },
-    );
+      });
 
-    if (!resp.ok) {
+      if (resp.ok) break;
+
       const errText = await resp.text().catch(() => "");
+      const canRetryCover =
+        isCover &&
+        COMPLETION_RETRY_STATUSES.has(resp.status) &&
+        attempt < COVER_504_TRIM_STEPS.length;
+
+      if (canRetryCover) {
+        console.warn(
+          `[ACE-Step Completion] HTTP ${resp.status} (attempt ${attempt + 1}), will trim and retry…`,
+          errText.slice(0, 80),
+        );
+        await new Promise((r) => setTimeout(r, COMPLETION_RETRY_DELAYS_MS[attempt] ?? 10_000));
+        continue;
+      }
+
+      if (!isCover && COMPLETION_RETRY_STATUSES.has(resp.status) && attempt === 0) {
+        console.warn(`[ACE-Step Completion] HTTP ${resp.status}, retrying once…`);
+        await new Promise((r) => setTimeout(r, COMPLETION_RETRY_DELAYS_MS[0] ?? 8000));
+        continue;
+      }
+
       const detail = parseApiErrorBody(resp.status, errText);
       throw new Error(`AceMusic API ${resp.status}: ${detail}`);
+    }
+
+    if (!resp?.ok) {
+      throw new Error("AceMusic API request failed after retries");
     }
 
     const contentType = String(resp.headers.get("content-type") || "").toLowerCase();

@@ -1,6 +1,7 @@
 /**
- * Prepare source audio for AceMusic cloud cover/remix (Cloudflare-safe size/duration).
- * Uses ffmpeg-static when available; falls back to system ffmpeg.
+ * Prepare source audio for AceMusic cloud cover/remix uploads.
+ * Compresses large files (mono 64kbps MP3) per AceMusic docs; does not trim duration
+ * unless ACEMUSIC_MAX_COVER_SEC is set.
  */
 
 import { execFile } from "child_process";
@@ -12,8 +13,9 @@ import { randomBytes } from "crypto";
 
 const execFileAsync = promisify(execFile);
 
-export const MAX_COVER_DURATION_SEC = 90;
-export const MAX_COVER_BYTES = 2 * 1024 * 1024;
+/** Optional trim cap (seconds). 0 / unset = send full track length. */
+export const MAX_COVER_DURATION_SEC = Number(process.env.ACEMUSIC_MAX_COVER_SEC || 0) || null;
+export const MAX_COVER_BYTES = 8 * 1024 * 1024;
 /** Compress when above this threshold (AceMusic skill recommends compression for cloud). */
 const COMPRESS_ABOVE_BYTES = 512 * 1024;
 
@@ -52,7 +54,8 @@ function extForMime(mime = "") {
 }
 
 /**
- * Trim + compress cover source for api.acemusic.ai (mono 64kbps MP3, max duration).
+ * Compress cover source for api.acemusic.ai (mono 64kbps MP3). Full duration preserved
+ * unless MAX_COVER_DURATION_SEC / ACEMUSIC_MAX_COVER_SEC is configured.
  * @returns {Promise<Buffer>}
  */
 export async function prepareCoverAudio(
@@ -73,14 +76,13 @@ export async function prepareCoverAudio(
     if (buffer.length > maxBytes) {
       throw new Error(
         `Source audio is too large (${(buffer.length / 1024 / 1024).toFixed(1)}MB). ` +
-          `AceMusic cloud needs clips under ~${maxDurationSec}s and 2MB. ` +
-          "Install ffmpeg on the server, or upload a shorter clip (under 90 seconds).",
+          "Install ffmpeg on the server to compress uploads, or use a smaller file.",
       );
     }
     if (needsPrep) {
       console.warn(
         "[audio-prepare] ffmpeg not available; sending original audio " +
-          `(${(buffer.length / 1024 / 1024).toFixed(1)}MB). Long tracks may 504 on AceMusic.`,
+          `(${(buffer.length / 1024 / 1024).toFixed(1)}MB).`,
       );
     }
     return buffer;
@@ -94,38 +96,27 @@ export async function prepareCoverAudio(
   const inPath = join(tmpdir(), `remix-in-${id}${extForMime(mime)}`);
   const outPath = join(tmpdir(), `remix-out-${id}.mp3`);
 
+  const ffmpegArgs = ["-y", "-i", inPath];
+  if (maxDurationSec != null && maxDurationSec > 0) {
+    ffmpegArgs.push("-t", String(maxDurationSec));
+  }
+  ffmpegArgs.push("-ac", "1", "-ar", "24000", "-b:a", "64k", outPath);
+
   try {
     await writeFile(inPath, buffer);
-    await execFileAsync(
-      ffmpeg,
-      [
-        "-y",
-        "-i",
-        inPath,
-        "-t",
-        String(maxDurationSec),
-        "-ac",
-        "1",
-        "-ar",
-        "24000",
-        "-b:a",
-        "64k",
-        outPath,
-      ],
-      { timeout: 120_000 },
-    );
+    await execFileAsync(ffmpeg, ffmpegArgs, { timeout: 180_000 });
 
     const out = await readFile(outPath);
     console.log(
       "[audio-prepare] Prepared cover audio:",
       `${buffer.length} → ${out.length} bytes`,
-      `(max ${maxDurationSec}s, mono 64kbps MP3)`,
+      maxDurationSec ? `(max ${maxDurationSec}s, mono 64kbps MP3)` : "(full length, mono 64kbps MP3)",
     );
 
     if (out.length > maxBytes) {
       throw new Error(
         `Prepared audio is still too large (${(out.length / 1024 / 1024).toFixed(1)}MB). ` +
-          `Try a shorter source clip (under ${maxDurationSec}s).`,
+          "Try a shorter source clip or set ACEMUSIC_MAX_COVER_SEC to trim server-side.",
       );
     }
 

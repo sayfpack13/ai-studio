@@ -4,7 +4,7 @@
  * per https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/API.md
  */
 
-import { prepareCoverAudio, MAX_COVER_DURATION_SEC } from "./audio-prepare.js";
+import { prepareCoverAudio } from "./audio-prepare.js";
 
 const ALLOWED_MODELS = ["acestep-v15-turbo", "acestep-v15-turbo-shift3"];
 
@@ -110,7 +110,7 @@ function buildCaptionMessageContent(prompt, lyrics) {
   return text;
 }
 
-const MAX_COVER_AUDIO_BYTES = 2 * 1024 * 1024;
+const MAX_COVER_AUDIO_BYTES = 8 * 1024 * 1024;
 
 function buildCompletionPayload(options = {}, modelId) {
   const { fields, files, effectiveTags, lyricsText } = buildTaskFields(options);
@@ -122,9 +122,6 @@ function buildCompletionPayload(options = {}, modelId) {
 
   if (fields.audio_duration != null) {
     audioConfig.duration = fields.audio_duration;
-  } else if (files.src_audio) {
-    // Cloud cover: cap output duration to reduce gateway timeouts on long sources
-    audioConfig.duration = MAX_COVER_DURATION_SEC;
   }
   if (fields.bpm) audioConfig.bpm = fields.bpm;
   if (fields.key_scale) audioConfig.key_scale = fields.key_scale;
@@ -152,7 +149,7 @@ function buildCompletionPayload(options = {}, modelId) {
     if (files.src_audio.length > MAX_COVER_AUDIO_BYTES) {
       throw new Error(
         `Source audio is too large (${Math.round(files.src_audio.length / 1024 / 1024)}MB). ` +
-          `Use a clip under ${MAX_COVER_DURATION_SEC}s or compress to under 2MB (mono 64kbps MP3).`,
+          "Use a shorter clip or let the server compress it (requires ffmpeg).",
       );
     }
 
@@ -231,8 +228,8 @@ function friendlyAceStepError(rawMessage = "", prefix = "") {
   }
   if (/504|502|503|gateway timeout|cloudflare/i.test(msg)) {
     return (
-      "AceMusic timed out (504). Long tracks often fail on the cloud API — use a clip under 90 seconds. " +
-      "The server auto-trims/compresses when ffmpeg is available; retry in a moment."
+      "AceMusic request timed out. Long remixes can take several minutes — please retry. " +
+      "If it keeps failing, try a shorter clip or set ACEMUSIC_MAX_COVER_SEC in server env."
     );
   }
   return withPrefix(msg || "ACE-Step generation failed");
@@ -543,10 +540,6 @@ async function prepareCompletionOptions(options = {}) {
   next.audio_mime = "audio/mpeg";
   next.audioMime = "audio/mpeg";
 
-  if (next.audio_duration == null && next.duration == null) {
-    next.audio_duration = MAX_COVER_DURATION_SEC;
-  }
-
   return next;
 }
 
@@ -567,7 +560,7 @@ async function* streamAceStepCompletion(options = {}) {
     yield {
       type: "progress",
       value: 8,
-      message: `Preparing source audio (first ${MAX_COVER_DURATION_SEC}s, compressed for cloud)…`,
+      message: "Preparing source audio for upload…",
     };
   }
 

@@ -17,7 +17,6 @@ const GENRE_TAGS = [
 
 const MIN_DURATION = 15;
 const MAX_DURATION = 240;
-const ACEMUSIC_COVER_MAX_SEC = 90;
 
 const SONICMASTER_SPACE = "amaai-lab/SonicMaster";
 const WHISPER_SPACE = "openai/whisper";
@@ -630,12 +629,6 @@ export default function MusicRemix() {
               {audioUrl && (
                 <div className="space-y-2">
                   <audio src={audioUrl} controls className="w-full rounded-lg" />
-                  {sourceDuration > ACEMUSIC_COVER_MAX_SEC && (
-                    <p className="text-xs text-amber-400/90">
-                      Long track detected — AceMusic cloud uses the first {ACEMUSIC_COVER_MAX_SEC}s only
-                      (auto-trimmed on the server) to avoid gateway timeouts.
-                    </p>
-                  )}
                   <div className="h-10 rounded-lg bg-gray-800 flex items-end gap-px px-2 overflow-hidden">
                     {Array.from({ length: 48 }).map((_, i) => (
                       <div key={i} className="bg-purple-500/60 flex-1 rounded-t-sm" style={{ height: `${25 + ((i * 17 + i * i) % 75)}%` }} />

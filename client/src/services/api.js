@@ -236,14 +236,16 @@ export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, on
           if (data.type === "progress") onProgress?.(data.value, data.message, data.preview);
           else if (data.type === "result") {
             gotResult = true;
+            console.log("[api.js] received result event:", data);
             onProgress?.(95, "Saving remix…");
             onResult?.(data);
           }
           else if (data.type === "saved") {
             gotSaved = true;
-            settled = true;
+            console.log("[api.js] received saved event:", data.url, data.urls);
             onProgress?.(100, "Complete");
             onSaved?.(data.url, data.urls);
+            settled = true;
           }
           else if (data.type === "error") {
             settled = true;

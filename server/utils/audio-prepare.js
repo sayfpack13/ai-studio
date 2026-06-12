@@ -57,12 +57,13 @@ function extForMime(mime = "") {
   return ".mp3";
 }
 
-async function transcodeToMp3(ffmpeg, inPath, outPath, maxDurationSec = null) {
+async function transcodeToMp3(ffmpeg, inPath, outPath, maxDurationSec = null, bitrateKbps = 64) {
   const args = ["-y", "-i", inPath];
   if (maxDurationSec != null && maxDurationSec > 0) {
     args.push("-t", String(maxDurationSec));
   }
-  args.push("-ac", "1", "-ar", "24000", "-b:a", "64k", outPath);
+  const b = Math.max(16, Math.min(128, Number(bitrateKbps) || 64));
+  args.push("-ac", "1", "-ar", "24000", "-b:a", `${b}k`, outPath);
   await execFileAsync(ffmpeg, args, { timeout: 180_000 });
   return readFile(outPath);
 }
@@ -80,6 +81,7 @@ export async function prepareCoverAudio(
     maxBytes = MAX_COVER_BYTES,
     force = false,
     allowAutoTrim = true,
+    bitrate = null,
   } = {},
 ) {
   if (!buffer?.length) {
@@ -129,9 +131,10 @@ export async function prepareCoverAudio(
     let appliedTrimSec = maxDurationSec;
     let autoTrimmed = false;
 
+    const bitrateKbps = bitrate != null ? Number(bitrate) : 64;
     for (let i = 0; i < trimCandidates.length; i++) {
       const trimSec = trimCandidates[i];
-      out = await transcodeToMp3(ffmpeg, inPath, outPath, trimSec);
+      out = await transcodeToMp3(ffmpeg, inPath, outPath, trimSec, bitrateKbps);
       appliedTrimSec = trimSec;
 
       const withinCloud = out.length <= CLOUD_SAFE_UPLOAD_BYTES;
@@ -166,8 +169,8 @@ export async function prepareCoverAudio(
 
     const trimLabel =
       appliedTrimSec != null
-        ? `max ${appliedTrimSec}s, mono 64kbps MP3`
-        : "full length, mono 64kbps MP3";
+        ? `max ${appliedTrimSec}s, mono ${bitrateKbps}kbps MP3`
+        : `full length, mono ${bitrateKbps}kbps MP3`;
     console.log(
       "[audio-prepare] Prepared cover audio:",
       `${buffer.length} → ${out.length} bytes`,

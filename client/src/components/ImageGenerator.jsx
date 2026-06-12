@@ -32,9 +32,6 @@ const generateImageId = () =>
 // LocalStorage keys for image page model persistence
 const IMAGE_SELECTED_MODEL_KEY = "blackbox_ai_image_selected_model";
 const IMAGE_SELECTED_PROVIDER_KEY = "blackbox_ai_image_selected_provider";
-const IMAGE_HF_MODE_KEY = "blackbox_ai_image_hf_mode";
-const IMAGE_HF_SPACE_TARGET_KEY = "blackbox_ai_image_hf_space_target";
-const IMAGE_HF_CUSTOM_SPACE_KEY = "blackbox_ai_image_hf_custom_space";
 const PUBLIC_TONGYI_SPACE_ID = "mrfakename/Z-Image-Turbo";
 const PUBLIC_FLUX_SPACE_ID = "black-forest-labs/FLUX.1-dev";
 const PUBLIC_NANO_BANANA_SPACE_ID = "multimodalart/nano-banana";
@@ -204,15 +201,6 @@ export default function ImageGenerator() {
     () => localStorage.getItem(IMAGE_SELECTED_PROVIDER_KEY) || "",
   );
   const [isLocalModelSelected, setIsLocalModelSelected] = useState(false);
-  const [hfMode, setHfMode] = useState(
-    () => localStorage.getItem(IMAGE_HF_MODE_KEY) || "inference",
-  );
-  const [hfSpaceTarget, setHfSpaceTarget] = useState(
-    () => localStorage.getItem(IMAGE_HF_SPACE_TARGET_KEY) || "public",
-  );
-  const [hfCustomSpace, setHfCustomSpace] = useState(
-    () => localStorage.getItem(IMAGE_HF_CUSTOM_SPACE_KEY) || "",
-  );
   const [spaceUrlCopied, setSpaceUrlCopied] = useState(false);
   const searchInputRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -424,18 +412,6 @@ export default function ImageGenerator() {
     }
   }, [configuredProviderFilter]);
 
-  useEffect(() => {
-    localStorage.setItem(IMAGE_HF_MODE_KEY, hfMode);
-  }, [hfMode]);
-
-  useEffect(() => {
-    localStorage.setItem(IMAGE_HF_SPACE_TARGET_KEY, hfSpaceTarget);
-  }, [hfSpaceTarget]);
-
-  useEffect(() => {
-    localStorage.setItem(IMAGE_HF_CUSTOM_SPACE_KEY, hfCustomSpace);
-  }, [hfCustomSpace]);
-
   // Load prompt data from selected job
   useEffect(() => {
     if (selectedJob && selectedJob.type === "image") {
@@ -564,23 +540,6 @@ export default function ImageGenerator() {
             }));
           }
 
-          if (
-            typeof metadata.hfMode === "string" &&
-            ["inference", "space"].includes(metadata.hfMode)
-          ) {
-            setHfMode(metadata.hfMode);
-          }
-
-          if (
-            typeof metadata.hfSpaceTarget === "string" &&
-            ["public", "custom"].includes(metadata.hfSpaceTarget)
-          ) {
-            setHfSpaceTarget(metadata.hfSpaceTarget);
-          }
-
-          if (typeof metadata.hfCustomSpace === "string") {
-            setHfCustomSpace(metadata.hfCustomSpace);
-          }
         }
       } else {
         setLocalError("");
@@ -695,23 +654,6 @@ export default function ImageGenerator() {
             }));
           }
 
-          if (
-            typeof metadata.hfMode === "string" &&
-            ["inference", "space"].includes(metadata.hfMode)
-          ) {
-            setHfMode(metadata.hfMode);
-          }
-
-          if (
-            typeof metadata.hfSpaceTarget === "string" &&
-            ["public", "custom"].includes(metadata.hfSpaceTarget)
-          ) {
-            setHfSpaceTarget(metadata.hfSpaceTarget);
-          }
-
-          if (typeof metadata.hfCustomSpace === "string") {
-            setHfCustomSpace(metadata.hfCustomSpace);
-          }
         }
 
         // If job is completed, try to load result
@@ -1071,18 +1013,6 @@ export default function ImageGenerator() {
               resolution: nanoBananaParams.resolution,
             }
           : undefined,
-        hfMode: isHuggingFaceSelection ? hfMode : undefined,
-        hfSpaceTarget:
-          isHFSpaceModel && isHuggingFaceSelection && hfMode === "space"
-            ? hfSpaceTarget
-            : undefined,
-        hfCustomSpace:
-          isHFSpaceModel &&
-          isHuggingFaceSelection &&
-          hfMode === "space" &&
-          hfSpaceTarget === "custom"
-            ? hfCustomSpace.trim()
-            : undefined,
       },
       metadata: {
         modelKey: selectedModelInfo?.modelKey || selectedModel,
@@ -1127,18 +1057,6 @@ export default function ImageGenerator() {
               resolution: nanoBananaParams.resolution,
             }
           : undefined,
-        hfMode: isHuggingFaceSelection ? hfMode : undefined,
-        hfSpaceTarget:
-          isHFSpaceModel && isHuggingFaceSelection && hfMode === "space"
-            ? hfSpaceTarget
-            : undefined,
-        hfCustomSpace:
-          isHFSpaceModel &&
-          isHuggingFaceSelection &&
-          hfMode === "space" &&
-          hfSpaceTarget === "custom"
-            ? hfCustomSpace.trim()
-            : undefined,
         customParamsText: customParamsText || "",
       },
     };
@@ -1318,23 +1236,6 @@ export default function ImageGenerator() {
           }));
         }
 
-        if (
-          typeof metadata.hfMode === "string" &&
-          ["inference", "space"].includes(metadata.hfMode)
-        ) {
-          setHfMode(metadata.hfMode);
-        }
-
-        if (
-          typeof metadata.hfSpaceTarget === "string" &&
-          ["public", "custom"].includes(metadata.hfSpaceTarget)
-        ) {
-          setHfSpaceTarget(metadata.hfSpaceTarget);
-        }
-
-        if (typeof metadata.hfCustomSpace === "string") {
-          setHfCustomSpace(metadata.hfCustomSpace);
-        }
       } else {
         setNegativePrompt("");
         setWidth(1024);
@@ -1494,7 +1395,6 @@ export default function ImageGenerator() {
     selectedModelInfo?.id === "huggingface/black-forest-labs/FLUX.1-dev";
   const isNanoBananaModel =
     selectedModelInfo?.id === "huggingface/multimodalart/nano-banana";
-  const isHFSpaceModel = isTongyiZImageTurbo || isFluxModel || isNanoBananaModel;
   const selectedProviderForModel =
     selectedModelInfo?.configuredProvider ||
     selectedModelInfo?.provider ||
@@ -1505,33 +1405,12 @@ export default function ImageGenerator() {
   const selectedModelHints = selectedModelInfo
     ? modelParameterHints[selectedModelInfo.id]
     : null;
-  const activeTongyiSpaceValue =
-    hfSpaceTarget === "custom" && hfCustomSpace.trim()
-      ? hfCustomSpace.trim()
-      : PUBLIC_TONGYI_SPACE_ID;
-  const activeTongyiSpaceUrl = toHuggingFaceSpacePageUrl(activeTongyiSpaceValue);
-
-  const activeFluxSpaceValue =
-    hfSpaceTarget === "custom" && hfCustomSpace.trim()
-      ? hfCustomSpace.trim()
-      : PUBLIC_FLUX_SPACE_ID;
-  const activeFluxSpaceUrl = toHuggingFaceSpacePageUrl(activeFluxSpaceValue);
-
-  const activeSpaceLabel = isFluxModel
-    ? `FLUX.1-dev`
-    : isNanoBananaModel
-      ? `Nano Banana`
-      : `Tongyi Z-Image-Turbo`;
   const activeSpaceValue = isFluxModel
-    ? activeFluxSpaceValue
+    ? PUBLIC_FLUX_SPACE_ID
     : isNanoBananaModel
-      ? (hfSpaceTarget === "custom" && hfCustomSpace.trim() ? hfCustomSpace.trim() : PUBLIC_NANO_BANANA_SPACE_ID)
-      : activeTongyiSpaceValue;
-  const activeSpaceUrl = isFluxModel
-    ? activeFluxSpaceUrl
-    : isNanoBananaModel
-      ? toHuggingFaceSpacePageUrl(hfSpaceTarget === "custom" && hfCustomSpace.trim() ? hfCustomSpace.trim() : PUBLIC_NANO_BANANA_SPACE_ID)
-      : activeTongyiSpaceUrl;
+      ? PUBLIC_NANO_BANANA_SPACE_ID
+      : PUBLIC_TONGYI_SPACE_ID;
+  const activeSpaceUrl = toHuggingFaceSpacePageUrl(activeSpaceValue);
   const activePublicSpaceId = isFluxModel
     ? PUBLIC_FLUX_SPACE_ID
     : isNanoBananaModel
@@ -1830,105 +1709,32 @@ export default function ImageGenerator() {
               {isHuggingFaceSelection && (
                 <div className="p-3 bg-gray-800 rounded-lg space-y-2">
                   <label className="block text-sm font-medium text-gray-300">
-                    HuggingFace Mode
+                    HuggingFace Space
                   </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setHfMode("inference")}
-                      className={`px-3 py-1.5 rounded text-xs border transition-colors ${
-                        hfMode === "inference"
-                          ? "bg-purple-600/30 text-purple-100 border-purple-400/50"
-                          : "bg-gray-700 text-gray-300 border-gray-600"
-                      }`}
-                    >
-                      Inference API
-                    </button>
-                    <button
-                      onClick={() => setHfMode("space")}
-                      className={`px-3 py-1.5 rounded text-xs border transition-colors ${
-                        hfMode === "space"
-                          ? "bg-purple-600/30 text-purple-100 border-purple-400/50"
-                          : "bg-gray-700 text-gray-300 border-gray-600"
-                      }`}
-                    >
-                      Space API
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-gray-400">
-                    Manual selection only. No automatic fallback.
-                  </p>
-
-                  {isHFSpaceModel && hfMode === "space" && (
-                    <div className="pt-2 border-t border-gray-700 space-y-2">
-                      <label className="block text-xs font-medium text-gray-300">
-                        {activeSpaceLabel} Space Target
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setHfSpaceTarget("public")}
-                          className={`px-3 py-1.5 rounded text-xs border transition-colors ${
-                            hfSpaceTarget === "public"
-                              ? "bg-emerald-600/30 text-emerald-100 border-emerald-400/50"
-                              : "bg-gray-700 text-gray-300 border-gray-600"
-                          }`}
-                        >
-                          Public Space
-                        </button>
-                        <button
-                          onClick={() => setHfSpaceTarget("custom")}
-                          className={`px-3 py-1.5 rounded text-xs border transition-colors ${
-                            hfSpaceTarget === "custom"
-                              ? "bg-emerald-600/30 text-emerald-100 border-emerald-400/50"
-                              : "bg-gray-700 text-gray-300 border-gray-600"
-                          }`}
-                        >
-                          My Space
-                        </button>
-                      </div>
-
-                      {hfSpaceTarget === "custom" && (
-                        <div>
-                          <label className="block text-xs text-gray-400 mb-1">
-                            Space ID or URL
-                          </label>
-                          <input
-                            type="text"
-                            value={hfCustomSpace}
-                            onChange={(e) => setHfCustomSpace(e.target.value)}
-                            placeholder={`username/your-space or https://...hf.space`}
-                            className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          />
-                        </div>
-                      )}
-
-                      <div className="text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5 space-y-1">
-                        <div>
-                          {hfSpaceTarget === "custom"
-                            ? `Using custom space: ${hfCustomSpace || "(not set)"}`
-                            : `Using public space: ${activePublicSpaceId}`}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={activeSpaceUrl || "#"}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 truncate text-cyan-300 hover:text-cyan-200 underline"
-                            title={activeSpaceUrl}
-                          >
-                            {activeSpaceUrl || "No Space URL set"}
-                          </a>
-                          <button
-                            type="button"
-                            onClick={handleCopySpaceUrl}
-                            disabled={!activeSpaceUrl}
-                            className="px-2 py-1 rounded border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {spaceUrlCopied ? "Copied" : "Copy"}
-                          </button>
-                        </div>
-                      </div>
+                  <div className="text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5 space-y-1">
+                    <div>
+                      Using public space: {activePublicSpaceId}
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={activeSpaceUrl || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 truncate text-cyan-300 hover:text-cyan-200 underline"
+                        title={activeSpaceUrl}
+                      >
+                        {activeSpaceUrl || "No Space URL set"}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleCopySpaceUrl}
+                        disabled={!activeSpaceUrl}
+                        className="px-2 py-1 rounded border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {spaceUrlCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 

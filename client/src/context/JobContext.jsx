@@ -529,11 +529,15 @@ export function JobProvider({ children }) {
             let settled = false;
             let pendingMeta = null;
 
-            const finish = (url) => {
+            const finish = (value) => {
+              console.log("[JobContext] finish called:", value, "settled:", settled);
               if (settled) return;
               settled = true;
+              const url = typeof value === "string" ? value : value?.url;
+              const urls = typeof value === "string" ? null : value?.urls;
               resolve({
                 url,
+                urls,
                 title: pendingMeta?.title,
                 tags: pendingMeta?.tags,
                 lyrics: pendingMeta?.lyrics,
@@ -562,9 +566,11 @@ export function JobProvider({ children }) {
                 }
               },
               onSaved: (savedUrl, savedUrls) => {
-                if (!savedUrl) return;
-                updateJob(job.id, { resultUrl: savedUrl, resultUrls: savedUrls });
-                const result = { url: savedUrl };
+                console.log("[JobContext] onSaved:", savedUrl, savedUrls, "settled:", settled);
+                if (savedUrl) {
+                  updateJob(job.id, { resultUrl: savedUrl, resultUrls: savedUrls });
+                }
+                const result = { url: savedUrl || null };
                 if (savedUrls?.length > 1) result.urls = savedUrls;
                 finish(result);
               },
@@ -731,6 +737,7 @@ export function JobProvider({ children }) {
       // Process job asynchronously
       processJob(job, saveResult)
         .then(async (outcome) => {
+          console.log("[JobContext] processJob resolved:", job.id, "outcome:", outcome.cancelled ? "cancelled" : outcome.error ? "error" : "success");
           // Call job.onSave callback if exists (for UI updates like setGeneratedVideo, addLibraryAsset)
           if (job.onSave && outcome.result) {
             try {
@@ -750,11 +757,14 @@ export function JobProvider({ children }) {
               completedAt: Date.now(),
             });
           } else {
+            console.log("[JobContext] updating job to completed:", job.id);
             updateJob(job.id, {
               status: "completed",
               result: outcome.result,
               resultUrl: outcome.result?.url || job.resultUrl || null,
+              resultUrls: outcome.result?.urls || job.resultUrls || null,
               progress: 100,
+              message: "Complete",
               completedAt: Date.now(),
             });
           }

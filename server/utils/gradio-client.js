@@ -1141,7 +1141,23 @@ async function* streamGenerateWithReplicate(options = {}) {
 export async function* streamGenerateWithACEStep(options = {}) {
   if (isAceStepApiConfigured()) {
     console.log("[ACE-Step] Using ACE-Step task API (ACEMUSIC_API_KEY set)");
-    yield* streamAceStepGeneration(options);
+    const events = [];
+    let lastError = null;
+    for await (const event of streamAceStepGeneration(options)) {
+      events.push(event);
+      if (event.type === "error") {
+        lastError = event;
+      }
+    }
+    // If AceMusic 504'd and Replicate is available, fall back silently
+    if (lastError?.message?.includes("504") && process.env.REPLICATE_API_TOKEN) {
+      console.log("[ACE-Step] AceMusic API 504 — falling back to Replicate…");
+      yield { type: "progress", value: 5, message: "AceMusic overloaded, switching to Replicate…" };
+      yield* streamGenerateWithReplicate(options);
+      return;
+    }
+    // Otherwise yield all buffered events normally
+    for (const event of events) yield event;
     return;
   }
   // Then Replicate if token is available (no ZeroGPU timeouts)

@@ -7,14 +7,18 @@ import {
   Check,
   Trash2,
   Upload,
-  ChevronDown,
-  ChevronUp,
   FileText,
   Image as ImageIcon,
   Video as VideoIcon,
   Music as MusicIcon,
   ImageOff,
+  Wand2,
+  Volume2,
+  Heart,
+  Play,
 } from "lucide-react";
+import { useFavorites } from "../../context/FavoritesContext";
+import { useAudioPlayer } from "../../context/AudioPlayerContext";
 
 const TYPE_META = {
   image: { icon: ImageIcon, label: "IMAGE", accent: "text-violet-300" },
@@ -42,7 +46,14 @@ export default function MediaPreviewDialog({
   showCopy = true,
 }) {
   const [copied, setCopied] = useState(false);
-  const [metaExpanded, setMetaExpanded] = useState(false);
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { pendingTrack, confirmReplace } = useAudioPlayer();
+
+  const safeAsset = asset || {};
+  const type = safeAsset.type || "project";
+  const typeMeta = TYPE_META[type] || TYPE_META.project;
+  const TypeIcon = typeMeta.icon;
+  const resolvedUrl = safeAsset.url ? resolveAssetUrl(safeAsset.url) : "";
 
   useEffect(() => {
     if (!open) return;
@@ -53,26 +64,67 @@ export default function MediaPreviewDialog({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  const safeAsset = asset || {};
-  const type = safeAsset.type || "project";
-  const typeMeta = TYPE_META[type] || TYPE_META.project;
-  const TypeIcon = typeMeta.icon;
-  const resolvedUrl = safeAsset.url ? resolveAssetUrl(safeAsset.url) : "";
-
   const metaRows = useMemo(() => {
-    return [
+    const rows = [
       { label: "Title", value: safeAsset.title || "Untitled" },
       { label: "Type", value: type.toUpperCase() },
       { label: "Source", value: safeAsset.source || "-" },
-      {
-        label: "Updated",
-        value: safeAsset.updatedAt
-          ? new Date(safeAsset.updatedAt).toLocaleString()
-          : safeAsset.createdAt
-            ? new Date(safeAsset.createdAt).toLocaleString()
-            : "-",
-      },
     ];
+
+    if (type === "remix" || type === "music") {
+      if (safeAsset.model || safeAsset.metadata?.model) {
+        rows.push({ label: "Model", value: safeAsset.model || safeAsset.metadata?.model });
+      }
+      if (safeAsset.duration != null || safeAsset.metadata?.duration != null) {
+        rows.push({ label: "Duration", value: `${safeAsset.duration ?? safeAsset.metadata?.duration}s` });
+      }
+      if (safeAsset.seed != null || safeAsset.metadata?.seed != null) {
+        rows.push({ label: "Seed", value: safeAsset.seed ?? safeAsset.metadata?.seed });
+      }
+      if (safeAsset.tags || safeAsset.metadata?.tags) {
+        rows.push({ label: "Tags", value: safeAsset.tags || safeAsset.metadata?.tags });
+      }
+      if (safeAsset.bpm != null || safeAsset.metadata?.bpm != null) {
+        rows.push({ label: "BPM", value: safeAsset.bpm ?? safeAsset.metadata?.bpm });
+      }
+      if (safeAsset.keyScale || safeAsset.metadata?.keyScale) {
+        rows.push({ label: "Key", value: safeAsset.keyScale || safeAsset.metadata?.keyScale });
+      }
+      if (safeAsset.timeSignature != null || safeAsset.metadata?.timeSignature != null) {
+        rows.push({ label: "Time Signature", value: safeAsset.timeSignature ?? safeAsset.metadata?.timeSignature });
+      }
+      if (safeAsset.coverStrength != null || safeAsset.metadata?.coverStrength != null) {
+        const cs = safeAsset.coverStrength ?? safeAsset.metadata?.coverStrength;
+        rows.push({ label: "Cover Strength", value: cs });
+      }
+      if (safeAsset.refAudioStrength != null || safeAsset.metadata?.refAudioStrength != null) {
+        const rs = safeAsset.refAudioStrength ?? safeAsset.metadata?.refAudioStrength;
+        rows.push({ label: "Ref Strength", value: rs });
+      }
+      if (safeAsset.inferStep != null || safeAsset.metadata?.inferStep != null) {
+        rows.push({ label: "Infer Steps", value: safeAsset.inferStep ?? safeAsset.metadata?.inferStep });
+      }
+      if (safeAsset.guidanceScale != null || safeAsset.metadata?.guidanceScale != null) {
+        rows.push({ label: "Guidance", value: safeAsset.guidanceScale ?? safeAsset.metadata?.guidanceScale });
+      }
+      if (safeAsset.negativeStyles || safeAsset.metadata?.negativeStyles) {
+        rows.push({ label: "Negative", value: safeAsset.negativeStyles || safeAsset.metadata?.negativeStyles });
+      }
+      if (safeAsset.thinking != null || safeAsset.metadata?.thinking != null) {
+        rows.push({ label: "Thinking", value: (safeAsset.thinking ?? safeAsset.metadata?.thinking) ? "On" : "Off" });
+      }
+    }
+
+    rows.push({
+      label: "Updated",
+      value: safeAsset.updatedAt
+        ? new Date(safeAsset.updatedAt).toLocaleString()
+        : safeAsset.createdAt
+          ? new Date(safeAsset.createdAt).toLocaleString()
+          : "-",
+    });
+
+    return rows;
   }, [safeAsset, type]);
 
   if (!open || !asset) return null;
@@ -114,12 +166,134 @@ export default function MediaPreviewDialog({
       );
     }
     if (isAudioType(type)) {
+      const isRemix = type === "remix";
+      const urls = asset.urls || (asset.url ? [asset.url] : []);
+      const primaryUrl = urls[0] ? resolveAssetUrl(urls[0]) : "";
+      const promptText =
+        asset.prompt || asset.metadata?.description || asset.title || "";
+      const tagsText = asset.tags || asset.metadata?.tags || "";
+      const lyricsText = asset.lyrics || asset.metadata?.lyrics || "";
+      const thumb = asset.thumbnail || asset.metadata?.thumbnail || null;
+
       return (
-        <div className="w-full max-w-xl mx-auto space-y-3">
-          <p className="text-sm text-gray-300">
-            {type === "remix" ? "Remix preview" : "Audio preview"}
-          </p>
-          <audio src={resolvedUrl} controls autoPlay className="w-full" />
+        <div className="w-full max-w-2xl mx-auto max-h-[70vh] overflow-y-auto space-y-4">
+          {/* Styled player container */}
+          <div
+            className={`bg-gradient-to-br ${
+              isRemix
+                ? "from-purple-950/40 via-gray-900 to-gray-950"
+                : "from-emerald-950/40 via-gray-900 to-gray-950"
+            } rounded-xl p-6 flex flex-col items-center border border-gray-800`}
+          >
+            {thumb && (
+              <img
+                src={resolveAssetUrl(thumb)}
+                alt={asset.title || "Thumbnail"}
+                className="w-24 h-24 rounded-xl object-cover border border-gray-700 mb-4"
+              />
+            )}
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/20">
+              {isRemix ? (
+                <Wand2 className="w-10 h-10 text-white" />
+              ) : (
+                <Volume2 className="w-10 h-10 text-white" />
+              )}
+            </div>
+
+            {pendingTrack ? (
+              <button
+                onClick={confirmReplace}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                Play in Global Player
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900/60 border border-gray-700 text-gray-300">
+                <Play className="w-4 h-4 text-purple-400" />
+                <span className="text-sm font-medium">Playing in Global Player</span>
+              </div>
+            )}
+
+            {promptText && (
+              <p className="text-sm text-gray-300 mt-4 text-center max-w-md font-medium">
+                {promptText}
+              </p>
+            )}
+          </div>
+
+          {/* Tags & Lyrics */}
+          {isRemix && (tagsText || lyricsText) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {tagsText && (
+                <div className="p-3 bg-gray-900/80 rounded-xl border border-gray-800">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">
+                    Generated tags
+                  </p>
+                  <p className="text-sm text-purple-300">{tagsText}</p>
+                </div>
+              )}
+              {lyricsText && (
+                <div className="p-3 bg-gray-900/80 rounded-xl border border-gray-800 max-h-40 overflow-y-auto">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">
+                    Generated lyrics
+                  </p>
+                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
+                    {lyricsText}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Metadata badges */}
+          <div className="flex flex-wrap gap-1.5 justify-center">
+            {(asset.model || asset.metadata?.model || asset.metadata?.mode) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                {asset.model || asset.metadata?.model || asset.metadata?.mode}
+              </span>
+            )}
+            {(asset.duration != null || asset.metadata?.duration != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                {(asset.duration ?? asset.metadata?.duration)}s
+              </span>
+            )}
+            {(asset.seed != null || asset.metadata?.seed != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                seed {asset.seed ?? asset.metadata?.seed}
+              </span>
+            )}
+            {(asset.bpm != null || asset.metadata?.bpm != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                {(asset.bpm ?? asset.metadata?.bpm)} bpm
+              </span>
+            )}
+            {(asset.keyScale || asset.metadata?.keyScale) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                key {asset.keyScale || asset.metadata?.keyScale}
+              </span>
+            )}
+            {(asset.timeSignature != null || asset.metadata?.timeSignature != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                {(asset.timeSignature ?? asset.metadata?.timeSignature)}/4
+              </span>
+            )}
+            {(asset.inferStep != null || asset.metadata?.inferStep != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                {(asset.inferStep ?? asset.metadata?.inferStep)} steps
+              </span>
+            )}
+            {(asset.guidanceScale != null || asset.metadata?.guidanceScale != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                CFG {asset.guidanceScale ?? asset.metadata?.guidanceScale}
+              </span>
+            )}
+            {(asset.coverStrength != null || asset.metadata?.coverStrength != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
+                cover {asset.coverStrength ?? asset.metadata?.coverStrength}
+              </span>
+            )}
+          </div>
         </div>
       );
     }
@@ -158,12 +332,25 @@ export default function MediaPreviewDialog({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-gray-900/80 border border-gray-700 text-white hover:border-gray-600 hover:bg-gray-800 flex items-center justify-center"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => toggleFavorite(type, asset.id)}
+              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors ${
+                isFavorite(type, asset.id)
+                  ? "bg-rose-500/20 border-rose-500/50 text-rose-300"
+                  : "bg-gray-900/80 border-gray-700 text-gray-300 hover:text-rose-200 hover:border-rose-500/60 hover:bg-rose-600/20"
+              }`}
+              title="Favorite"
+            >
+              <Heart className={`w-4 h-4 ${isFavorite(type, asset.id) ? "fill-rose-400" : ""}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-xl bg-gray-900/80 border border-gray-700 text-white hover:border-gray-600 hover:bg-gray-800 flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Media */}
@@ -230,23 +417,6 @@ export default function MediaPreviewDialog({
             ))}
           </div>
 
-          <button
-            onClick={() => setMetaExpanded((prev) => !prev)}
-            className="mt-3 inline-flex items-center gap-2 text-xs text-gray-400 hover:text-white"
-          >
-            {metaExpanded ? (
-              <ChevronUp className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
-            )}
-            {metaExpanded ? "Hide metadata" : "Show raw metadata"}
-          </button>
-
-          {metaExpanded && (
-            <pre className="mt-2 bg-gray-900 border border-gray-800 rounded-xl p-3 overflow-auto text-xs text-gray-300">
-              {JSON.stringify(asset.metadata || {}, null, 2)}
-            </pre>
-          )}
         </div>
       </div>
     </div>

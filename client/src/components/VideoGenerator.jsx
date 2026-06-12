@@ -44,9 +44,6 @@ const WAN_I2V_MODEL_ID = "chutes/Wan-AI/Wan2.2-I2V-14B-Fast";
 const WAN_DEFAULT_NEGATIVE_PROMPT = "";
 const PUBLIC_WAN_I2V_A14B_SPACE_ID = "r3gm/wan2-2-fp8da-aoti-preview";
 
-const VIDEO_HF_SPACE_TARGET_KEY = "blackbox_ai_video_hf_space_target";
-const VIDEO_HF_CUSTOM_SPACE_KEY = "blackbox_ai_video_hf_custom_space";
-
 const toHuggingFaceSpacePageUrl = (spaceValue) => {
   const raw = String(spaceValue || "").trim();
   if (!raw) return "";
@@ -405,22 +402,7 @@ export default function VideoGenerator() {
   const [wanSourceVideoTitle, setWanSourceVideoTitle] = useState("");
   const [showStitchDialog, setShowStitchDialog] = useState(false);
 
-  // HF Space target for Wan I2V A14B
-  const [hfSpaceTarget, setHfSpaceTarget] = useState(
-    () => localStorage.getItem(VIDEO_HF_SPACE_TARGET_KEY) || "public",
-  );
-  const [hfCustomSpace, setHfCustomSpace] = useState(
-    () => localStorage.getItem(VIDEO_HF_CUSTOM_SPACE_KEY) || "",
-  );
   const [spaceUrlCopied, setSpaceUrlCopied] = useState(false);
-
-  useEffect(() => {
-    localStorage.setItem(VIDEO_HF_SPACE_TARGET_KEY, hfSpaceTarget);
-  }, [hfSpaceTarget]);
-
-  useEffect(() => {
-    localStorage.setItem(VIDEO_HF_CUSTOM_SPACE_KEY, hfCustomSpace);
-  }, [hfCustomSpace]);
 
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -457,11 +439,7 @@ export default function VideoGenerator() {
 
   const isHuggingFaceSpace = selectedModelInfo?.provider === "huggingface" && hfModelSpaceId.includes("/");
 
-  const activeWanA14BSpaceValue =
-    hfSpaceTarget === "custom" && hfCustomSpace.trim()
-      ? hfCustomSpace.trim()
-      : PUBLIC_WAN_I2V_A14B_SPACE_ID;
-  const activeWanA14BSpaceUrl = toHuggingFaceSpacePageUrl(activeWanA14BSpaceValue);
+  const activeWanA14BSpaceUrl = toHuggingFaceSpacePageUrl(PUBLIC_WAN_I2V_A14B_SPACE_ID);
 
   const activeSpaceUrl = isWanI2VA14B
     ? activeWanA14BSpaceUrl
@@ -1100,8 +1078,6 @@ export default function VideoGenerator() {
               }),
           ...(isWanI2VA14B && effectiveProvider === "huggingface"
             ? {
-                hfSpaceTarget,
-                hfCustomSpace: hfSpaceTarget === "custom" ? hfCustomSpace.trim() : "",
                 wanSteps,
                 wanDurationSeconds,
                 wanQuality,
@@ -1503,62 +1479,14 @@ export default function VideoGenerator() {
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
                     <span className="text-sm font-medium text-cyan-200">
-                      HuggingFace Public/Private Space Connected
+                      HuggingFace Public Space Connected
                     </span>
                   </div>
-
-                  {/* Wan I2V A14B Space Target toggle */}
-                  {isWanI2VA14B && (
-                    <div className="mb-2 space-y-2">
-                      <label className="block text-xs font-medium text-gray-300">
-                        Wan 2.2 I2V Space Target
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setHfSpaceTarget("public")}
-                          className={`px-3 py-1.5 rounded text-xs border transition-colors ${
-                            hfSpaceTarget === "public"
-                              ? "bg-emerald-600/30 text-emerald-100 border-emerald-400/50"
-                              : "bg-gray-700 text-gray-300 border-gray-600"
-                          }`}
-                        >
-                          Public Space
-                        </button>
-                        <button
-                          onClick={() => setHfSpaceTarget("custom")}
-                          className={`px-3 py-1.5 rounded text-xs border transition-colors ${
-                            hfSpaceTarget === "custom"
-                              ? "bg-emerald-600/30 text-emerald-100 border-emerald-400/50"
-                              : "bg-gray-700 text-gray-300 border-gray-600"
-                          }`}
-                        >
-                          My Space
-                        </button>
-                      </div>
-
-                      {hfSpaceTarget === "custom" && (
-                        <div>
-                          <label className="block text-xs text-gray-400 mb-1">
-                            Space ID or URL
-                          </label>
-                          <input
-                            type="text"
-                            value={hfCustomSpace}
-                            onChange={(e) => setHfCustomSpace(e.target.value)}
-                            placeholder="username/your-wan-space or https://...hf.space"
-                            className="w-full bg-gray-700 text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   <div className="text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-1.5 space-y-1">
                     <div className="text-gray-400">
                       {isWanI2VA14B
-                        ? hfSpaceTarget === "custom"
-                          ? `Using custom space: ${hfCustomSpace || "(not set)"}`
-                          : `Using public space: ${PUBLIC_WAN_I2V_A14B_SPACE_ID}`
+                        ? `Using public space: ${PUBLIC_WAN_I2V_A14B_SPACE_ID}`
                         : `Using space: ${hfModelSpaceId}`}
                     </div>
                     <div className="flex items-center gap-2">

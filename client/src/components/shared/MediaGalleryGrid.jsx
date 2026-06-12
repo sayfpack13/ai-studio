@@ -16,8 +16,11 @@ import {
   Wand2,
   ImageOff,
   Clock,
+  Heart,
 } from "lucide-react";
 import { resolveAssetUrl } from "../../services/api";
+import { useFavorites } from "../../context/FavoritesContext";
+import { useAudioPlayer } from "../../context/AudioPlayerContext";
 
 const TYPE_ACCENT = {
   image: {
@@ -60,6 +63,8 @@ export default function MediaGalleryGrid({
   const [copiedId, setCopiedId] = useState(null);
   const [brokenIds, setBrokenIds] = useState(() => new Set());
   const [failedThumbIds, setFailedThumbIds] = useState(() => new Set());
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { requestPlayTrack, currentTrack, isPlaying } = useAudioPlayer();
 
   const markBroken = (id) => {
     let shouldRemove = false;
@@ -260,7 +265,7 @@ export default function MediaGalleryGrid({
 
   return (
     <div
-      className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 ${className}`}
+      className={`grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 ${className}`}
     >
       <AnimatePresence mode="popLayout">
         {visibleItems.map((item) => {
@@ -274,7 +279,7 @@ export default function MediaGalleryGrid({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.92 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="group relative aspect-square rounded-xl overflow-hidden bg-gray-900 border border-gray-800 cursor-pointer hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition-all duration-200"
+              className="group relative aspect-[4/5] rounded-xl overflow-hidden bg-gray-900 border border-gray-800 cursor-pointer hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition-all duration-200"
               onClick={() => onSelect?.(item)}
             >
               {/* Media content */}
@@ -290,43 +295,109 @@ export default function MediaGalleryGrid({
                 </div>
               )}
 
+              {/* Playing indicator — visible when this track is currently playing */}
+              {currentTrack && isPlaying && (currentTrack.id === item.id || (currentTrack.url && currentTrack.url === item.url)) && (
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-purple-600/90 backdrop-blur-sm border border-purple-500/50">
+                  <div className="flex gap-0.5 items-end h-3">
+                    <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: '0ms', height: '60%' }}></div>
+                    <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: '150ms', height: '100%' }}></div>
+                    <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: '300ms', height: '40%' }}></div>
+                  </div>
+                  <span className="text-[10px] font-medium text-white">Playing</span>
+                </div>
+              )}
+
+              {/* Favorite indicator — always visible */}
+              <div className="absolute top-2 left-2 z-10">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFavorite(mediaType, item.id);
+                  }}
+                  className="flex items-center justify-center w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 transition-colors hover:bg-black/60"
+                  title={isFavorite(mediaType, item.id) ? "Unfavorite" : "Favorite"}
+                >
+                  <Heart
+                    className={`w-3.5 h-3.5 transition-colors ${
+                      isFavorite(mediaType, item.id)
+                        ? "text-rose-400 fill-rose-400"
+                        : "text-gray-300"
+                    }`}
+                  />
+                </button>
+              </div>
+
               {/* Compare badge */}
               {isComparing && (
-                <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-semibold rounded-full shadow-lg">
+                <div className="absolute top-2 left-10 z-10 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-semibold rounded-full shadow-lg">
                   Comparing
                 </div>
               )}
 
               {/* Gradient overlay at bottom (always visible, subtle) */}
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gray-950/90 via-gray-950/40 to-transparent pt-6 pb-1.5 px-2.5 pointer-events-none">
-                <p className="text-[11px] font-medium text-gray-100 truncate leading-tight">
-                  {item.prompt?.slice(0, 50) || "No prompt"}
+                <p className="text-xs font-medium text-gray-100 truncate leading-tight">
+                  {item.prompt?.slice(0, 60) || "No prompt"}
                 </p>
-                <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="flex flex-wrap items-center gap-1 mt-1">
                   <span
                     className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${accent.badge}`}
                   >
                     <TypeIcon className="w-2.5 h-2.5" />
                     {mediaType}
                   </span>
+                  {item.model && (
+                    <span className="text-[10px] text-gray-400 truncate max-w-[100px]">
+                      {item.model}
+                    </span>
+                  )}
+                  {item.duration && (
+                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                      <Clock className="w-3 h-3" />
+                      {item.duration}s
+                    </span>
+                  )}
+                  {item.seed != null && (
+                    <span className="text-[10px] text-gray-400">
+                      #{item.seed}
+                    </span>
+                  )}
                   {item.lastUpdated && (
-                    <span className="text-[9px] text-gray-400 flex items-center gap-0.5">
-                      <Clock className="w-2.5 h-2.5" />
+                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
                       {formatDate(item.lastUpdated)}
                     </span>
                   )}
                 </div>
+                {item.tags && (
+                  <p className="text-[10px] text-purple-300/80 mt-1 truncate leading-tight">
+                    {item.tags}
+                  </p>
+                )}
               </div>
 
               {/* Hover action overlay */}
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex flex-col opacity-0 group-hover:opacity-100">
                 {/* Top row: icon actions */}
                 <div className="absolute top-2 right-2 flex gap-1.5">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(mediaType, item.id);
+                    }}
+                    className={`p-2 rounded-lg border transition-colors ${
+                      isFavorite(mediaType, item.id)
+                        ? "bg-rose-500/20 border-rose-500/50 text-rose-300"
+                        : "bg-gray-900/80 border-gray-700 text-gray-300 hover:text-rose-200 hover:border-rose-500/60 hover:bg-rose-600/20"
+                    }`}
+                    title="Favorite"
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${isFavorite(mediaType, item.id) ? "fill-rose-400" : ""}`} />
+                  </button>
                   {(mediaType === "music" || mediaType === "remix") && item.url && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onView?.(item);
+                        requestPlayTrack({ ...item, type: mediaType }, items);
                       }}
                       className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
                       title="Play"

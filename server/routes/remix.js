@@ -22,8 +22,8 @@ function normalizeAceStepModel(model) {
   return ACESTEP_MODELS.includes(value) ? value : "acestep-v15-turbo";
 }
 
-function normalizeCoverStrength(coverStrength, refAudioStrength) {
-  if (coverStrength != null && Number(coverStrength) !== 1.0) {
+function normalizeCoverStrength(coverStrength) {
+  if (coverStrength != null) {
     return Number(coverStrength);
   }
   return null;
@@ -187,7 +187,7 @@ router.post("/generate", async (req, res) => {
       bpm: bpm ? Number(bpm) : null,
       key_scale: keyScale ? String(keyScale) : null,
       time_signature: timeSignature ? Number(timeSignature) : null,
-      cover_strength: normalizeCoverStrength(coverStrength, refAudioStrength),
+      cover_strength: normalizeCoverStrength(coverStrength),
       negative_styles: negativeStyles ? String(negativeStyles) : null,
       ref_audio: refAudioBuf,
       audio_mime: sourceAudioMime,
@@ -368,7 +368,7 @@ router.post("/generate-stream", async (req, res) => {
       bpm: bpm ? Number(bpm) : null,
       key_scale: keyScale ? String(keyScale) : null,
       time_signature: timeSignature ? Number(timeSignature) : null,
-      cover_strength: normalizeCoverStrength(coverStrength, refAudioStrength),
+      cover_strength: normalizeCoverStrength(coverStrength),
       negative_styles: negativeStyles ? String(negativeStyles) : null,
       ref_audio: refAudioBuf,
       audio_mime: sourceAudioMime,
@@ -418,6 +418,16 @@ router.post("/generate-stream", async (req, res) => {
                 description,
                 duration: Number(duration) || 60,
                 seed: Number(seed) || -1,
+                model: normalizeAceStepModel(model),
+                inferStep: Number(inferStep) || 60,
+                guidanceScale: Number(guidanceScale) || 15.0,
+                coverStrength: coverStrength != null ? Number(coverStrength) : null,
+                refAudioStrength: Number(refAudioStrength) || 0.5,
+                bpm: bpm ? Number(bpm) : null,
+                keyScale: keyScale ? String(keyScale) : null,
+                timeSignature: timeSignature ? Number(timeSignature) : null,
+                negativeStyles: negativeStyles ? String(negativeStyles) : null,
+                thinking: thinking !== false,
                 space: "acemusic-api",
                 remixHistoryId: remixHistoryId || null,
               },

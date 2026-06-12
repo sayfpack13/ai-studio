@@ -1,6 +1,360 @@
 {
-  "updatedAt": "2026-05-30T10:38:46.252Z",
+  "updatedAt": "2026-06-12T13:17:34.556Z",
   "jobs": [
+    {
+      "id": "video_1781270252939_94405a5b8041",
+      "type": "video",
+      "status": "failed",
+      "progress": 20,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "loop animation",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1781270055916_ce573a057ac2.png",
+        "wanFrames": 49,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "480p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1781270252936_rfoma7h54",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 49,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "480p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "loop animation",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": null,
+      "error": {
+        "message": "HuggingFace video generation failed: You have exceeded your ZeroGPU quota (70s requested vs. -35s left). Try again in 0:00:00. Authenticate with a Hugging Face token for more quota - https://huggingface.co/settings/tokens",
+        "name": "Error",
+        "stack": "Error: HuggingFace video generation failed: You have exceeded your ZeroGPU quota (70s requested vs. -35s left). Try again in 0:00:00. Authenticate with a Hugging Face token for more quota - https://huggingface.co/settings/tokens\n    at processVideoJob (file:///C:/Users/sayf/Desktop/ai-studio/server/server.js:956:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async #processLoop (file:///C:/Users/sayf/Desktop/ai-studio/server/services/jobQueue.js:611:26)"
+      },
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-06-12T13:17:32.939Z",
+      "updatedAt": "2026-06-12T13:17:34.546Z",
+      "startedAt": "2026-06-12T13:17:32.943Z",
+      "completedAt": null,
+      "canceledAt": null,
+      "failedAt": "2026-06-12T13:17:34.546Z",
+      "history": [
+        {
+          "at": "2026-06-12T13:17:32.939Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-06-12T13:17:32.943Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-06-12T13:17:32.953Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-06-12T13:17:32.961Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-06-12T13:17:34.546Z",
+          "event": "failed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1781270170564_fd43e007d5a8",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "loop animation background effects",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1781270055916_ce573a057ac2.png",
+        "wanFrames": 49,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1781270170560_b07xhm3x5",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 49,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "loop animation background effects",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/hf_video_loop_animation_background_effects_1781270224480_aecfd1a0.mp4",
+            "revised_prompt": "loop animation background effects"
+          }
+        ]
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-06-12T13:16:10.564Z",
+      "updatedAt": "2026-06-12T13:17:04.486Z",
+      "startedAt": "2026-06-12T13:16:10.568Z",
+      "completedAt": "2026-06-12T13:17:04.486Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-06-12T13:16:10.564Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-06-12T13:16:10.568Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-06-12T13:16:10.578Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-06-12T13:16:10.586Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-06-12T13:17:02.720Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-06-12T13:17:04.482Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-06-12T13:17:04.486Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
+    {
+      "id": "video_1781270077380_eabd5a28d024",
+      "type": "video",
+      "status": "completed",
+      "progress": 100,
+      "priority": 0,
+      "parentJobId": null,
+      "pipelineId": null,
+      "stepType": null,
+      "dependsOn": [],
+      "payload": {
+        "prompt": "A masked street racer standing beside a modified sports car in a neon-lit city at night, dense fog, glowing streetlights, urban cyberpunk atmosphere, dramatic shadows, cinematic action scene, ultra detailed, realistic reflections, high contrast, 4K wallpaper quality, no text, no logos.",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "image": "/uploads/image_1781270055916_ce573a057ac2.png",
+        "wanFrames": 49,
+        "wanFps": 16,
+        "wanFast": true,
+        "wanSeed": null,
+        "wanResolution": "720p",
+        "wanGuidanceScale": 1,
+        "wanGuidanceScale2": 1,
+        "wanNegativePrompt": "",
+        "hfSpaceTarget": "public",
+        "hfCustomSpace": "",
+        "wanSteps": 6,
+        "wanDurationSeconds": 3.5,
+        "wanQuality": 6,
+        "wanScheduler": "UniPCMultistep",
+        "wanFlowShift": 3,
+        "wanFrameMultiplier": 16
+      },
+      "metadata": {
+        "videoId": "vid_1781270077376_h9ncuu946",
+        "modelKey": "huggingface:huggingface/Wan2.2-I2V-A14B",
+        "provider": "huggingface",
+        "wan": {
+          "frames": 49,
+          "fps": 16,
+          "fast": true,
+          "seed": null,
+          "resolution": "720p",
+          "guidance_scale": 1,
+          "guidance_scale_2": 1,
+          "negative_prompt": "",
+          "imageSourceType": "library"
+        },
+        "providerId": "huggingface",
+        "model": "huggingface/Wan2.2-I2V-A14B",
+        "promptPreview": "A masked street racer standing beside a modified sports car in a neon-lit city at night, dense fog, glowing streetlights, urban cyberpunk atmosphere, dramatic shadows, cinematic action scene, ultra de",
+        "ip": "::1",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "enqueuedVia": "api"
+      },
+      "requestedBy": "anonymous",
+      "result": {
+        "success": true,
+        "data": [
+          {
+            "url": "/uploads/videos/hf_video_a_masked_street_racer_standing_beside_a_modified_1781270123892_12be0323.mp4",
+            "revised_prompt": "A masked street racer standing beside a modified sports car in a neon-lit city at night, dense fog, glowing streetlights, urban cyberpunk atmosphere, dramatic shadows, cinematic action scene, ultra detailed, realistic reflections, high contrast, 4K wallpaper quality, no text, no logos."
+          }
+        ]
+      },
+      "error": null,
+      "cancelRequested": false,
+      "attempts": 1,
+      "createdAt": "2026-06-12T13:14:37.380Z",
+      "updatedAt": "2026-06-12T13:15:23.901Z",
+      "startedAt": "2026-06-12T13:14:37.384Z",
+      "completedAt": "2026-06-12T13:15:23.901Z",
+      "canceledAt": null,
+      "failedAt": null,
+      "history": [
+        {
+          "at": "2026-06-12T13:14:37.380Z",
+          "event": "enqueued",
+          "details": {
+            "parentJobId": null,
+            "pipelineId": null,
+            "stepType": null,
+            "dependsOn": []
+          }
+        },
+        {
+          "at": "2026-06-12T13:14:37.384Z",
+          "event": "started",
+          "details": null
+        },
+        {
+          "at": "2026-06-12T13:14:37.394Z",
+          "event": "progress",
+          "details": {
+            "stage": "validating"
+          }
+        },
+        {
+          "at": "2026-06-12T13:14:37.404Z",
+          "event": "progress",
+          "details": {
+            "stage": "requesting_provider"
+          }
+        },
+        {
+          "at": "2026-06-12T13:15:20.538Z",
+          "event": "progress",
+          "details": {
+            "stage": "processing_response"
+          }
+        },
+        {
+          "at": "2026-06-12T13:15:23.897Z",
+          "event": "progress",
+          "details": {
+            "stage": "completed"
+          }
+        },
+        {
+          "at": "2026-06-12T13:15:23.901Z",
+          "event": "completed",
+          "details": null
+        }
+      ]
+    },
     {
       "id": "video_1780137519513_d6b204e563b0",
       "type": "video",

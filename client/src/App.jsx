@@ -3,6 +3,9 @@ import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import { JobProvider, useJobs } from "./context/JobContext";
 import { ToastProvider } from "./context/ToastContext";
+import { AudioPlayerProvider } from "./context/AudioPlayerContext";
+import { FavoritesProvider } from "./context/FavoritesContext";
+import GlobalAudioPlayer from "./components/GlobalAudioPlayer";
 import Sidebar from "./components/Sidebar";
 import JobsPanel from "./components/JobsPanel";
 import Chat from "./components/Chat";
@@ -146,6 +149,9 @@ function AppContent() {
 
       {/* Jobs Panel */}
       <JobsPanel />
+
+      {/* Global Audio Player */}
+      <GlobalAudioPlayer />
     </div>
   );
 }
@@ -155,9 +161,13 @@ function App() {
     <AppProvider>
       <JobProvider>
         <ToastProvider>
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
+          <AudioPlayerProvider>
+            <FavoritesProvider>
+              <BrowserRouter>
+                <AppContent />
+              </BrowserRouter>
+            </FavoritesProvider>
+          </AudioPlayerProvider>
         </ToastProvider>
       </JobProvider>
     </AppProvider>

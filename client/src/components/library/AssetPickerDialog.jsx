@@ -12,7 +12,9 @@ import {
   Play,
   Maximize2,
   FolderOpen,
+  Heart,
 } from "lucide-react";
+import { useFavorites } from "../../context/FavoritesContext";
 
 const fallbackTime = 0;
 
@@ -108,6 +110,8 @@ export default function AssetPickerDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [previewAsset, setPreviewAsset] = useState(null);
   const [selectedAssetId, setSelectedAssetId] = useState(null);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   const mergedAssets = useMemo(() => {
     const apiAssets = (libraryAssets || [])
@@ -200,13 +204,18 @@ export default function AssetPickerDialog({
       });
     }
 
+    // Filter by favorites
+    if (showFavoritesOnly) {
+      assets = assets.filter((asset) => isFavorite(asset.type, asset.id));
+    }
+
     // Sort by most recent
     return assets.sort((a, b) => {
       const aTime = a.updatedAt || a.createdAt || 0;
       const bTime = b.updatedAt || b.createdAt || 0;
       return bTime - aTime;
     });
-  }, [mergedAssets, type, searchQuery]);
+  }, [mergedAssets, type, searchQuery, showFavoritesOnly, isFavorite]);
 
   const handleSelectClick = () => {
     const asset = mergedAssets.find((a) => a.id === selectedAssetId);
@@ -266,13 +275,26 @@ export default function AssetPickerDialog({
               </p>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-gray-800/80 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600 transition-colors"
-          >
-            <X className="w-4 h-4" />
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFavoritesOnly((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                showFavoritesOnly
+                  ? "bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25"
+                  : "bg-gray-800/80 border-gray-700 text-gray-300 hover:text-white hover:border-gray-600"
+              }`}
+            >
+              <Heart className={`w-4 h-4 ${showFavoritesOnly ? "fill-rose-400" : ""}`} />
+              {showFavoritesOnly ? "Favorites" : "All"}
+            </button>
+            <button
+              onClick={handleClose}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-gray-800/80 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600 transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Close
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -375,6 +397,13 @@ export default function AssetPickerDialog({
                     </p>
                   </div>
 
+                  {/* Favorite indicator */}
+                  {isFavorite(asset.type, asset.id) && (
+                    <div className="absolute top-2 left-2 z-10">
+                      <Heart className="w-4 h-4 text-rose-400 fill-rose-400 drop-shadow" />
+                    </div>
+                  )}
+
                   {/* Selected indicator */}
                   {selectedAssetId === asset.id && (
                     <div className="absolute top-2 right-2 w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
@@ -384,6 +413,20 @@ export default function AssetPickerDialog({
 
                   {/* Hover actions */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(asset.type, asset.id);
+                      }}
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                        isFavorite(asset.type, asset.id)
+                          ? "bg-rose-500/20 border border-rose-500/40 text-rose-300"
+                          : "bg-white/10 text-white hover:bg-white/20"
+                      }`}
+                      title="Favorite"
+                    >
+                      <Heart className={`w-4 h-4 ${isFavorite(asset.type, asset.id) ? "fill-rose-400" : ""}`} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

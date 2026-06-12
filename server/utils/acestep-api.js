@@ -239,8 +239,8 @@ function friendlyAceStepError(rawMessage = "", prefix = "") {
   }
   if (/504|502|503|gateway timeout|cloudflare/i.test(msg)) {
     return (
-      "AceMusic timed out (504). Long uploads often hit Cloudflare limits — the server auto-trims " +
-      "large tracks for cloud. Retry, or set ACEMUSIC_MAX_COVER_SEC=120 in server env for a shorter clip."
+      "AceMusic gateway timed out (Cloudflare 100s limit). The origin server is overloaded or the generation " +
+      "takes too long. Try a shorter track, reduce duration/infer steps, or switch to Replicate backend."
     );
   }
   return withPrefix(msg || "ACE-Step generation failed");
@@ -307,9 +307,7 @@ export function buildTaskFields(options = {}) {
 
   if (hasSource) {
     fields.task_type = "cover";
-    const effectiveCover =
-      cover_strength != null ? toNumber(cover_strength, 1.0) : toNumber(ref_audio_strength, 0.5);
-    fields.audio_cover_strength = effectiveCover;
+    fields.audio_cover_strength = toNumber(cover_strength, 1.0);
     files.src_audio = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
   }
 
@@ -637,12 +635,16 @@ async function prepareCompletionOptions(options = {}) {
 
   const forceTrimSec =
     options._forceTrimSec != null ? Number(options._forceTrimSec) : undefined;
+  const forceBitrate =
+    options._forceBitrate != null ? Number(options._forceBitrate) : undefined;
+  const prepareOpts = forceTrimSec != null
+    ? { maxDurationSec: forceTrimSec, force: true }
+    : { allowAutoTrim: false };
+  if (forceBitrate != null) prepareOpts.bitrate = forceBitrate;
   const prepared = await prepareCoverAudio(
     buf,
     next.audio_mime || next.audioMime || "audio/mpeg",
-    forceTrimSec != null
-      ? { maxDurationSec: forceTrimSec, force: true }
-      : { allowAutoTrim: false },
+    prepareOpts,
   );
 
   next.src_audio = prepared.buffer;
@@ -721,70 +723,29 @@ async function* streamAceStepCompletion(options = {}) {
     };
   }
 
-  const COVER_504_TRIM_STEPS = [null, 120, 90, 60, 45];
-
   try {
-    let resp = null;
+    const requestBody = JSON.stringify(payload);
+    console.log(
+      "[ACE-Step Completion] Request size:",
+      `${(requestBody.length / 1024 / 1024).toFixed(2)}MB`,
+      `(cloud safe ≤ ${(CLOUD_SAFE_UPLOAD_BYTES * 1.34 / 1024 / 1024).toFixed(2)}MB est.)`,
+    );
 
-    for (let attempt = 0; attempt < COVER_504_TRIM_STEPS.length; attempt++) {
-      const trimSec = COVER_504_TRIM_STEPS[attempt];
-      if (attempt > 0 && trimSec != null) {
-        yield {
-          type: "progress",
-          value: 12,
-          message: `Gateway timeout — retrying with first ${trimSec}s of audio…`,
-        };
-        preparedOptions = await prepareCompletionOptions({ ...options, _forceTrimSec: trimSec });
-        ({ payload, effectiveTags, lyricsText } = buildCompletionPayload(preparedOptions, modelId));
-        console.log(
-          "[ACE-Step Completion] 504 retry:",
-          trimSec,
-          "s, audio_bytes:",
-          preparedOptions.src_audio?.length,
-        );
-      }
+    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "text/event-stream, application/json",
+      },
+      body: requestBody,
+      signal: AbortSignal.timeout(660_000),
+    });
 
-      const requestBody = JSON.stringify(payload);
-      console.log(
-        "[ACE-Step Completion] Request size:",
-        `${(requestBody.length / 1024 / 1024).toFixed(2)}MB`,
-        `(cloud safe ≤ ${(CLOUD_SAFE_UPLOAD_BYTES * 1.34 / 1024 / 1024).toFixed(2)}MB est.)`,
-        "attempt",
-        attempt + 1,
-      );
-
-      resp = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          Authorization: `Bearer ${apiKey}`,
-          Accept: "text/event-stream, application/json",
-        },
-        body: requestBody,
-        signal: AbortSignal.timeout(660_000),
-      });
-
-      if (resp.ok) break;
-
+    if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
-      const canRetry =
-        COMPLETION_RETRY_STATUSES.has(resp.status) && attempt < COVER_504_TRIM_STEPS.length - 1;
-
-      if (canRetry) {
-        console.warn(
-          `[ACE-Step Completion] HTTP ${resp.status} (attempt ${attempt + 1}), will retry…`,
-          errText.slice(0, 80),
-        );
-        await new Promise((r) => setTimeout(r, COMPLETION_RETRY_DELAYS_MS[attempt] ?? 10_000));
-        continue;
-      }
-
       const detail = parseApiErrorBody(resp.status, errText);
       throw new Error(`AceMusic API ${resp.status}: ${detail}`);
-    }
-
-    if (!resp?.ok) {
-      throw new Error("AceMusic API request failed after retries");
     }
 
     const contentType = String(resp.headers.get("content-type") || "").toLowerCase();

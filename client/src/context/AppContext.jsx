@@ -660,10 +660,23 @@ export function AppProvider({ children }) {
 
       const normalizedResult = {
         url,
+        urls: result?.urls,
         title: result?.title,
         tags: result?.tags,
         lyrics: result?.lyrics,
         thumbnail: result?.thumbnail,
+        duration: result?.duration || metadata?.duration,
+        seed: result?.seed ?? metadata?.seed ?? null,
+        model: result?.model || metadata?.model || null,
+        coverStrength: result?.coverStrength ?? metadata?.coverStrength ?? null,
+        refAudioStrength: result?.refAudioStrength ?? metadata?.refAudioStrength ?? null,
+        bpm: result?.bpm ?? metadata?.bpm ?? null,
+        keyScale: result?.keyScale ?? metadata?.keyScale ?? null,
+        timeSignature: result?.timeSignature ?? metadata?.timeSignature ?? null,
+        negativeStyles: result?.negativeStyles ?? metadata?.negativeStyles ?? null,
+        thinking: result?.thinking ?? metadata?.thinking ?? null,
+        inferStep: result?.inferStep ?? metadata?.inferStep ?? null,
+        guidanceScale: result?.guidanceScale ?? metadata?.guidanceScale ?? null,
       };
 
       setRemixHistory((prev) => {

@@ -25,7 +25,6 @@ import { resolveProviderContext } from "./utils/provider-routing.js";
 import libraryService from "./services/library-service.js";
 import { saveBuffer } from "./services/file-storage.js";
 import { findModel } from "./utils/models.js";
-import { generateImageViaInference } from "./utils/hf-inference-client.js";
 import {
   isWanI2VModel,
   WAN_I2V_ENDPOINT,
@@ -528,201 +527,135 @@ async function processImageJob({ payload, setProgress, isCanceled }) {
     }
   }
 
-  // ── HuggingFace Inference Providers (image) ───────────────────────
+  // ── HuggingFace Space API (image) ─────────────────────────────────
   if (providerContext.providerId === "huggingface") {
-    const hfMode =
-      payload?.hfMode ||
-      process.env.HF_IMAGE_MODE ||
-      "inference";
     const hfToken = undefined;
     const hfModel =
       payload?.hfModel ||
       process.env.HF_IMAGE_MODEL ||
       "Tongyi-MAI/Z-Image-Turbo";
     const normalizedHfModel = String(hfModel).replace(/^huggingface\//i, "");
-    const hfImageProvider = process.env.HF_IMAGE_PROVIDER || "replicate";
-
-    if (!["inference", "space"].includes(hfMode)) {
-      throw new Error("Invalid HuggingFace mode. Use 'inference' or 'space'.");
-    }
-
-    if (hfMode === "space") {
-      try {
-        const isTongyiModel = /Tongyi-MAI\/Z-Image-Turbo/i.test(
-          normalizedHfModel,
-        );
-        const isFluxModel = /black-forest-labs\/FLUX\.1-dev/i.test(
-          normalizedHfModel,
-        );
-        const hfSpaceTarget = String(payload?.hfSpaceTarget || "").toLowerCase();
-        const hfCustomSpace = String(payload?.hfCustomSpace || "").trim();
-        const DEFAULT_FLUX_SPACE = "black-forest-labs/FLUX.1-dev";
-        const spaceUrl = isTongyiModel
-          ? hfSpaceTarget === "custom"
-            ? hfCustomSpace || process.env.HF_TONGYI_SPACE_URL || DEFAULT_TONGYI_SPACE
-            : DEFAULT_TONGYI_SPACE
-          : isFluxModel
-            ? hfSpaceTarget === "custom"
-              ? hfCustomSpace || process.env.HF_FLUX_SPACE_URL || DEFAULT_FLUX_SPACE
-              : DEFAULT_FLUX_SPACE
-            : process.env.HF_IMAGE_SPACE_URL || providerContext.provider.apiBaseUrl;
-
-        if (!spaceUrl) {
-          throw new Error("HuggingFace image Space URL is not configured. Set HF_IMAGE_SPACE_URL or Admin → Providers → HuggingFace.");
-        }
-
-        const result = isTongyiModel
-          ? await generateTongyiZImage(spaceUrl, hfToken, {
-              prompt,
-              resolution:
-                payload?.resolution ||
-                payload?.tongyiParams?.size ||
-                payload?.tongyiParams?.resolution ||
-                "1024x1024 ( 1:1 )",
-              seed: payload?.seed ?? payload?.tongyiParams?.seed ?? 42,
-              steps:
-                payload?.steps ??
-                payload?.numInferenceSteps ??
-                payload?.tongyiParams?.steps ??
-                8,
-              shift:
-                payload?.shift ?? payload?.tongyiParams?.shift ?? 3,
-              random_seed:
-                payload?.random_seed ??
-                payload?.tongyiParams?.random_seed ??
-                true,
-              gallery_images: Array.isArray(payload?.gallery_images)
-                ? payload.gallery_images
-                : Array.isArray(payload?.tongyiParams?.gallery_images)
-                  ? payload.tongyiParams.gallery_images
-                  : [],
-            })
-          : await hfGenerateImage(spaceUrl, hfToken, {
-              prompt,
-              width: Number(payload?.width) || 1024,
-              height: Number(payload?.height) || 1024,
-              num_inference_steps: Number(payload?.numInferenceSteps) || 30,
-              guidance_scale: Number(payload?.guidanceScale) || 4.0,
-              seed: payload?.seed != null ? Number(payload.seed) : -1,
-              randomize_seed: typeof payload?.random_seed === "boolean"
-                ? payload.random_seed
-                : payload?.seed != null
-                  ? false
-                  : true,
-              input_images: Array.isArray(payload?.input_images)
-                ? payload.input_images
-                : [],
-            });
-
-        let imageUrl = result.url;
-        if (typeof imageUrl === "string" && !imageUrl.startsWith("/uploads/")) {
-          if (/^data:image\//i.test(imageUrl)) {
-            const [header, base64Payload] = imageUrl.split(",", 2);
-            const mimeMatch = header?.match(/^data:(image\/[^;]+);base64$/i);
-            if (!base64Payload || !mimeMatch?.[1]) {
-              throw new Error("Space returned an invalid data URL image payload");
-            }
-            const fileBuffer = Buffer.from(base64Payload, "base64");
-            const saved = await saveBuffer(fileBuffer, mimeMatch[1], "image");
-            imageUrl = saved.url;
-          } else if (/^https?:\/\//i.test(imageUrl)) {
-            try {
-              const response = await axios.get(imageUrl, {
-                responseType: "arraybuffer",
-                timeout: 120000,
-                headers: hfToken
-                  ? {
-                      Authorization: `Bearer ${String(hfToken).replace(/^Bearer\s+/i, "").trim()}`,
-                    }
-                  : undefined,
-              });
-              const mimeType =
-                String(response.headers?.["content-type"] || "").split(";")[0] ||
-                "image/png";
-              const saved = await saveBuffer(
-                Buffer.from(response.data),
-                mimeType,
-                "image",
-              );
-              imageUrl = saved.url;
-            } catch (cacheErr) {
-              throw new Error(
-                `Failed to persist Space image into backend storage: ${cacheErr?.message || cacheErr}`,
-              );
-            }
-          }
-        }
-
-        if (typeof imageUrl !== "string" || !imageUrl.startsWith("/uploads/")) {
-          throw new Error("Space image was not persisted to backend storage");
-        }
-        await libraryService.createAsset({
-          type: "image",
-          source: "image",
-          title: payload?.prompt?.slice(0, 80) || "Generated image",
-          url: imageUrl,
-          metadata: {
-            model: normalizedHfModel,
-            provider: "huggingface",
-            hfMode: "space",
-            ...(isTongyiModel
-              ? {
-                  hfSpaceTarget:
-                    hfSpaceTarget === "custom" ? "custom" : "public",
-                  ...(hfSpaceTarget === "custom" && hfCustomSpace
-                    ? { hfCustomSpace }
-                    : {}),
-                }
-              : {}),
-            ...(result.seedUsed ? { seedUsed: result.seedUsed } : {}),
-            ...(result.seed != null ? { seed: result.seed } : {}),
-          },
-        });
-
-        await setProgress(100, { stage: "completed" });
-        return { success: true, data: [{ url: imageUrl, revised_prompt: prompt }] };
-      } catch (error) {
-        throw new Error(`HuggingFace image generation failed (space mode): ${withHfSpaceQuotaHint(error.message)}`);
-      }
-    }
-
-    if (!hfToken) {
-      throw new Error("HuggingFace token is not configured for image inference.");
-    }
 
     try {
-      const result = await generateImageViaInference(hfToken, {
-        prompt,
-        model: normalizedHfModel,
-        provider: hfImageProvider,
-        width: Number(payload?.width) || 1024,
-        height: Number(payload?.height) || 1024,
-        num_inference_steps: Number(payload?.numInferenceSteps) || 30,
-        guidance_scale: Number(payload?.guidanceScale) || 4.0,
-        seed: payload?.seed != null ? Number(payload.seed) : -1,
-      });
+      const isTongyiModel = /Tongyi-MAI\/Z-Image-Turbo/i.test(
+        normalizedHfModel,
+      );
+      const isFluxModel = /black-forest-labs\/FLUX\.1-dev/i.test(
+        normalizedHfModel,
+      );
+      const DEFAULT_FLUX_SPACE = "black-forest-labs/FLUX.1-dev";
+      const spaceUrl = isTongyiModel
+        ? DEFAULT_TONGYI_SPACE
+        : isFluxModel
+          ? DEFAULT_FLUX_SPACE
+          : process.env.HF_IMAGE_SPACE_URL || providerContext.provider.apiBaseUrl;
 
-      const saved = await saveBuffer(result.buffer, result.mimeType, "hf_inference_image");
-      const imageUrl = saved.url;
+      if (!spaceUrl) {
+        throw new Error("HuggingFace image Space URL is not configured. Set HF_IMAGE_SPACE_URL or Admin → Providers → HuggingFace.");
+      }
+
+      const result = isTongyiModel
+        ? await generateTongyiZImage(spaceUrl, hfToken, {
+            prompt,
+            resolution:
+              payload?.resolution ||
+              payload?.tongyiParams?.size ||
+              payload?.tongyiParams?.resolution ||
+              "1024x1024 ( 1:1 )",
+            seed: payload?.seed ?? payload?.tongyiParams?.seed ?? 42,
+            steps:
+              payload?.steps ??
+              payload?.numInferenceSteps ??
+              payload?.tongyiParams?.steps ??
+              8,
+            shift:
+              payload?.shift ?? payload?.tongyiParams?.shift ?? 3,
+            random_seed:
+              payload?.random_seed ??
+              payload?.tongyiParams?.random_seed ??
+              true,
+            gallery_images: Array.isArray(payload?.gallery_images)
+              ? payload.gallery_images
+              : Array.isArray(payload?.tongyiParams?.gallery_images)
+                ? payload.tongyiParams.gallery_images
+                : [],
+          })
+        : await hfGenerateImage(spaceUrl, hfToken, {
+            prompt,
+            width: Number(payload?.width) || 1024,
+            height: Number(payload?.height) || 1024,
+            num_inference_steps: Number(payload?.numInferenceSteps) || 30,
+            guidance_scale: Number(payload?.guidanceScale) || 4.0,
+            seed: payload?.seed != null ? Number(payload.seed) : -1,
+            randomize_seed: typeof payload?.random_seed === "boolean"
+              ? payload.random_seed
+              : payload?.seed != null
+                ? false
+                : true,
+            input_images: Array.isArray(payload?.input_images)
+              ? payload.input_images
+              : [],
+          });
+
+      let imageUrl = result.url;
+      if (typeof imageUrl === "string" && !imageUrl.startsWith("/uploads/")) {
+        if (/^data:image\//i.test(imageUrl)) {
+          const [header, base64Payload] = imageUrl.split(",", 2);
+          const mimeMatch = header?.match(/^data:(image\/[^;]+);base64$/i);
+          if (!base64Payload || !mimeMatch?.[1]) {
+            throw new Error("Space returned an invalid data URL image payload");
+          }
+          const fileBuffer = Buffer.from(base64Payload, "base64");
+          const saved = await saveBuffer(fileBuffer, mimeMatch[1], "image");
+          imageUrl = saved.url;
+        } else if (/^https?:\/\//i.test(imageUrl)) {
+          try {
+            const response = await axios.get(imageUrl, {
+              responseType: "arraybuffer",
+              timeout: 120000,
+              headers: hfToken
+                ? {
+                    Authorization: `Bearer ${String(hfToken).replace(/^Bearer\s+/i, "").trim()}`,
+                  }
+                : undefined,
+            });
+            const mimeType =
+              String(response.headers?.["content-type"] || "").split(";")[0] ||
+              "image/png";
+            const saved = await saveBuffer(
+              Buffer.from(response.data),
+              mimeType,
+              "image",
+            );
+            imageUrl = saved.url;
+          } catch (cacheErr) {
+            throw new Error(
+              `Failed to persist Space image into backend storage: ${cacheErr?.message || cacheErr}`,
+            );
+          }
+        }
+      }
+
+      if (typeof imageUrl !== "string" || !imageUrl.startsWith("/uploads/")) {
+        throw new Error("Space image was not persisted to backend storage");
+      }
       await libraryService.createAsset({
         type: "image",
         source: "image",
         title: payload?.prompt?.slice(0, 80) || "Generated image",
         url: imageUrl,
-        filePath: saved.filepath,
         metadata: {
           model: normalizedHfModel,
           provider: "huggingface",
-          hfMode: "inference",
-          inferenceProvider: hfImageProvider,
-          sizeBytes: saved.size,
+          ...(result.seedUsed ? { seedUsed: result.seedUsed } : {}),
+          ...(result.seed != null ? { seed: result.seed } : {}),
         },
       });
 
       await setProgress(100, { stage: "completed" });
       return { success: true, data: [{ url: imageUrl, revised_prompt: prompt }] };
     } catch (error) {
-      throw new Error(`HuggingFace image generation failed: ${error.message}`);
+      throw new Error(`HuggingFace image generation failed (space mode): ${withHfSpaceQuotaHint(error.message)}`);
     }
   }
 
@@ -860,14 +793,10 @@ async function processVideoJob({ payload, setProgress, isCanceled }) {
     const isSpace = actualVideoModelId && actualVideoModelId.includes("/");
     const isWanI2VA14B = /Wan2\.2-I2V-A14B/i.test(actualVideoModelId || "");
     const DEFAULT_WAN_I2V_A14B_SPACE = "r3gm/wan2-2-fp8da-aoti-preview";
-    const hfSpaceTarget = String(payload?.hfSpaceTarget || "").toLowerCase();
-    const hfCustomSpace = String(payload?.hfCustomSpace || "").trim();
 
     let spaceUrl;
     if (isWanI2VA14B) {
-      spaceUrl = hfSpaceTarget === "custom"
-        ? hfCustomSpace || process.env.HF_WAN_I2V_A14B_SPACE_URL || DEFAULT_WAN_I2V_A14B_SPACE
-        : DEFAULT_WAN_I2V_A14B_SPACE;
+      spaceUrl = DEFAULT_WAN_I2V_A14B_SPACE;
     } else {
       spaceUrl = isSpace ? actualVideoModelId : (process.env.HF_VIDEO_SPACE_URL || providerContext.provider.apiBaseUrl);
     }

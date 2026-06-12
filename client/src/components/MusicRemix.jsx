@@ -6,6 +6,7 @@ import {
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
+import { useAudioPlayer } from "../context/AudioPlayerContext";
 import { MediaOutputPanel } from "./shared";
 import {
   Mic, Sparkles, Wand2, Music2,
@@ -130,6 +131,7 @@ export default function MusicRemix() {
   const [genMessage, setGenMessage] = useState("");
   const [error, setError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const { requestPlayTrack } = useAudioPlayer();
 
   const fileInputRef = useRef(null);
   const saveRemixRef = useRef(saveRemix);
@@ -144,6 +146,12 @@ export default function MusicRemix() {
       saveRemixRef.current?.(remixHistoryId, prompt, result, model, metadata);
     });
   }, [registerSaveFns, saveRemix]);
+
+  useEffect(() => {
+    if (generatedRemix?.url) {
+      requestPlayTrack({ ...generatedRemix, type: "remix" });
+    }
+  }, [generatedRemix?.url, requestPlayTrack]);
 
   const applyRemixFormFromMetadata = useCallback((metadata, fallbackPrompt = "") => {
     if (!metadata || typeof metadata !== "object") {
@@ -227,6 +235,20 @@ export default function MusicRemix() {
           tags: historyResult?.tags,
           lyrics: historyResult?.lyrics,
           thumbnail: historyResult?.thumbnail,
+          duration: historyResult?.duration,
+          seed: historyResult?.seed,
+          coverStrength: historyResult?.coverStrength,
+          refAudioStrength: historyResult?.refAudioStrength,
+          bpm: historyResult?.bpm,
+          keyScale: historyResult?.keyScale,
+          timeSignature: historyResult?.timeSignature,
+          negativeStyles: historyResult?.negativeStyles,
+          thinking: historyResult?.thinking,
+          inferStep: historyResult?.inferStep,
+          guidanceScale: historyResult?.guidanceScale,
+          source: historyItem?.source || "remix",
+          createdAt: historyItem?.createdAt || Date.now(),
+          updatedAt: historyItem?.updatedAt || Date.now(),
         });
       }
     }
@@ -238,6 +260,7 @@ export default function MusicRemix() {
     if (!selectedRunningJobId) return;
 
     const job = remixJobs.find((j) => j.id === selectedRunningJobId);
+    console.log("[MusicRemix] selectedRunningJob effect:", selectedRunningJobId, "job:", job?.status);
     if (!job) {
       setSelectedRunningJobId(null);
       return;
@@ -258,6 +281,20 @@ export default function MusicRemix() {
           tags: historyItem?.result?.tags || job.result?.tags,
           lyrics: historyItem?.result?.lyrics || job.result?.lyrics,
           thumbnail: historyItem?.result?.thumbnail || job.result?.thumbnail,
+          duration: historyItem?.result?.duration || job.result?.duration,
+          seed: historyItem?.result?.seed ?? job.result?.seed ?? null,
+          coverStrength: historyItem?.result?.coverStrength ?? job.result?.coverStrength ?? null,
+          refAudioStrength: historyItem?.result?.refAudioStrength ?? job.result?.refAudioStrength ?? null,
+          bpm: historyItem?.result?.bpm ?? job.result?.bpm ?? null,
+          keyScale: historyItem?.result?.keyScale || job.result?.keyScale || null,
+          timeSignature: historyItem?.result?.timeSignature ?? job.result?.timeSignature ?? null,
+          negativeStyles: historyItem?.result?.negativeStyles || job.result?.negativeStyles || null,
+          thinking: historyItem?.result?.thinking ?? job.result?.thinking ?? null,
+          inferStep: historyItem?.result?.inferStep ?? job.result?.inferStep ?? null,
+          guidanceScale: historyItem?.result?.guidanceScale ?? job.result?.guidanceScale ?? null,
+          source: "remix",
+          createdAt: historyItem?.createdAt || Date.now(),
+          updatedAt: historyItem?.updatedAt || Date.now(),
         });
       }
       setSelectedRunningJobId(null);
@@ -418,7 +455,17 @@ export default function MusicRemix() {
       tags: effectiveTags,
       model,
       refAudioStrength,
+      coverStrength: Number(coverStrength),
       instrumental,
+      duration: duration ? Math.round(Number(duration)) : null,
+      seed: Number(seed),
+      inferStep: Number(inferStep),
+      guidanceScale: Number(guidanceScale),
+      bpm: bpm ? Number(bpm) : null,
+      keyScale: keyScale.trim() || null,
+      timeSignature: timeSignature ? Number(timeSignature) : null,
+      negativeStyles: negativeStyles.trim() || null,
+      thinking,
     };
 
     let workingLyrics = lyrics;
@@ -485,9 +532,7 @@ export default function MusicRemix() {
         refAudioBase64: refAudioBase64 || undefined,
         refAudioMime: refAudioMime || undefined,
       };
-      if (coverStrength !== 1.0) {
-        remixPayload.coverStrength = Number(coverStrength);
-      }
+      remixPayload.coverStrength = Number(coverStrength);
 
       const jobId = enqueueJob(
         "remix",
@@ -509,6 +554,20 @@ export default function MusicRemix() {
             tags: result.tags,
             lyrics: result.lyrics,
             thumbnail: result.thumbnail,
+            duration: remixMetadata.duration,
+            seed: remixMetadata.seed,
+            coverStrength: remixMetadata.coverStrength,
+            refAudioStrength: remixMetadata.refAudioStrength,
+            bpm: remixMetadata.bpm,
+            keyScale: remixMetadata.keyScale,
+            timeSignature: remixMetadata.timeSignature,
+            negativeStyles: remixMetadata.negativeStyles,
+            thinking: remixMetadata.thinking,
+            inferStep: remixMetadata.inferStep,
+            guidanceScale: remixMetadata.guidanceScale,
+            source: "remix",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
           });
         },
       );
@@ -552,6 +611,20 @@ export default function MusicRemix() {
       tags: result.tags,
       lyrics: result.lyrics,
       thumbnail: result.thumbnail,
+      duration: result.duration,
+      seed: result.seed,
+      coverStrength: result.coverStrength,
+      refAudioStrength: result.refAudioStrength,
+      bpm: result.bpm,
+      keyScale: result.keyScale,
+      timeSignature: result.timeSignature,
+      negativeStyles: result.negativeStyles,
+      thinking: result.thinking,
+      inferStep: result.inferStep,
+      guidanceScale: result.guidanceScale,
+      source: remixItem.source || "remix",
+      createdAt: remixItem.createdAt || Date.now(),
+      updatedAt: remixItem.updatedAt || Date.now(),
     });
     setError("");
 
@@ -570,10 +643,22 @@ export default function MusicRemix() {
         model: item.model,
         result: {
           url: item.url,
+          urls: item.urls,
           title: item.title,
           tags: item.tags,
           lyrics: item.lyrics,
           thumbnail: item.thumbnail,
+          duration: item.duration,
+          seed: item.seed,
+          coverStrength: item.coverStrength,
+          refAudioStrength: item.refAudioStrength,
+          bpm: item.bpm,
+          keyScale: item.keyScale,
+          timeSignature: item.timeSignature,
+          negativeStyles: item.negativeStyles,
+          thinking: item.thinking,
+          inferStep: item.inferStep,
+          guidanceScale: item.guidanceScale,
         },
         metadata: item.metadata,
       };
@@ -646,6 +731,20 @@ export default function MusicRemix() {
           tags: item.tags,
           lyrics: item.lyrics,
           thumbnail: item.thumbnail,
+          duration: item.duration,
+          seed: item.seed,
+          coverStrength: item.coverStrength,
+          refAudioStrength: item.refAudioStrength,
+          bpm: item.bpm,
+          keyScale: item.keyScale,
+          timeSignature: item.timeSignature,
+          negativeStyles: item.negativeStyles,
+          thinking: item.thinking,
+          inferStep: item.inferStep,
+          guidanceScale: item.guidanceScale,
+          source: item.source || "remix",
+          createdAt: item.createdAt || Date.now(),
+          updatedAt: item.updatedAt || Date.now(),
         });
       }}
       onDeleteMedia={(remixId) => {

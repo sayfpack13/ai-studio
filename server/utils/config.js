@@ -41,11 +41,19 @@ const DEFAULT_PROVIDERS = {
   huggingface: {
     id: "huggingface",
     name: "HuggingFace",
-    apiBaseUrl: "",
+    apiBaseUrl: "https://router.huggingface.co/v1",
     apiKey: "",
     enabled: false,
     modelsFile: "huggingface",
     apiType: "gradio",
+  },
+  acestep: {
+    id: "acestep",
+    name: "AceMusic",
+    apiBaseUrl: "https://api.acemusic.ai",
+    apiKey: "",
+    enabled: false,
+    modelsFile: "acestep",
   },
 };
 
@@ -138,6 +146,16 @@ export function isProviderConfigured(provider) {
   // Gradio-based providers (HuggingFace Spaces) don't require an API key for public spaces
   if (provider.apiType === "gradio") return true;
   return Boolean(provider.apiKey);
+}
+
+let _globalConfig = null;
+
+export function setGlobalConfig(config) {
+  _globalConfig = config;
+}
+
+export function getGlobalConfig() {
+  return _globalConfig;
 }
 
 export function maskSecret(value) {

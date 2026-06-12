@@ -325,7 +325,21 @@ export default function MediaOutputPanel({
               <Volume2 className="w-10 h-10 text-white" />
             )}
           </div>
-          <audio key={url} src={url} controls className="w-full max-w-md" />
+          {Array.isArray(item.urls) && item.urls.length > 1 ? (
+            <div className="w-full max-w-md space-y-3">
+              {item.urls.map((u, i) => (
+                <div key={u} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400 font-medium">Version {i + 1}</span>
+                    <span className="text-[10px] text-gray-500">{u.split('/').pop()}</span>
+                  </div>
+                  <audio src={resolveAssetUrl(u)} controls className="w-full" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <audio key={url} src={url} controls className="w-full max-w-md" />
+          )}
           {(item.title || item.prompt) && (
             <p className="text-sm text-gray-300 mt-4 text-center max-w-md font-medium">
               {item.title || item.prompt}

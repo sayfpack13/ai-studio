@@ -18,13 +18,14 @@ export default function AdminPanel({ onClose, onAuthChange }) {
   const [success, setSuccess] = useState('');
   const [connectionStatus, setConnectionStatus] = useState({});
   const [testingProvider, setTestingProvider] = useState(null);
+  const [showSecrets, setShowSecrets] = useState(false);
 
   const applyConfig = (configResult) => {
     const providers = (configResult.providers || []).map((provider) => ({
       id: provider.id,
       name: provider.name,
       apiBaseUrl: provider.apiBaseUrl || '',
-      apiKey: '',
+      apiKey: provider.apiKey || '',
       hasApiKey: Boolean(provider.hasApiKey),
       enabled: provider.enabled !== false
     }));
@@ -44,7 +45,7 @@ export default function AdminPanel({ onClose, onAuthChange }) {
           const result = await verifyToken();
           if (result.valid) {
             // Token is valid, fetch config
-            const configResult = await getConfig();
+            const configResult = await getConfig(showSecrets);
             applyConfig(configResult);
             setIsAuthenticated(true);
           }
@@ -57,6 +58,20 @@ export default function AdminPanel({ onClose, onAuthChange }) {
     checkSession();
   }, []);
 
+  // Refetch config when showSecrets toggles
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const fetchConfig = async () => {
+      try {
+        const configResult = await getConfig(showSecrets);
+        applyConfig(configResult);
+      } catch (err) {
+        console.error('Failed to refetch config:', err);
+      }
+    };
+    fetchConfig();
+  }, [showSecrets]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -67,7 +82,7 @@ export default function AdminPanel({ onClose, onAuthChange }) {
       
       if (result.success && result.token) {
         // Fetch config after successful login
-        const configResult = await getConfig();
+        const configResult = await getConfig(showSecrets);
         applyConfig(configResult);
         setIsAuthenticated(true);
         setPassword('');
@@ -356,7 +371,7 @@ export default function AdminPanel({ onClose, onAuthChange }) {
                     />
 
                     <Input
-                      type="password"
+                      type={showSecrets ? 'text' : 'password'}
                       label="Private API Key"
                       value={provider.apiKey}
                       onChange={(e) => updateProviderField(provider.id, 'apiKey', e.target.value)}
@@ -407,14 +422,26 @@ export default function AdminPanel({ onClose, onAuthChange }) {
                   </motion.div>
                 )}
 
-                <Button
-                  type="submit"
-                  variant="success"
-                  loading={loading}
-                  className="w-full"
-                >
-                  {loading ? 'Saving...' : 'Save Configuration'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowSecrets((s) => !s)}
+                    leftIcon={showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    className="flex-shrink-0"
+                  >
+                    {showSecrets ? 'Hide Secrets' : 'Show Secrets'}
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="success"
+                    loading={loading}
+                    className="flex-1"
+                  >
+                    {loading ? 'Saving...' : 'Save Configuration'}
+                  </Button>
+                </div>
 
               </form>
             </motion.div>

@@ -193,32 +193,33 @@ router.post("/generate", async (req, res) => {
       audio_mime: sourceAudioMime,
     });
 
-    const { audio, title, tags: generatedTags, lyrics: generatedLyrics, thumbnail } = result;
+    const { audio, audios, title, tags: generatedTags, lyrics: generatedLyrics, thumbnail } = result;
 
-    let savedUrl = null;
+    const audioList = Array.isArray(audios) && audios.length > 0 ? audios : audio ? [audio] : [];
+    const savedUrls = [];
     let savedThumbUrl = null;
 
-    if (audio) {
+    for (const audioItem of audioList) {
       try {
-        const isDataUrl = audio.startsWith("data:");
+        const isDataUrl = audioItem.startsWith("data:");
         let audioBuf;
         if (isDataUrl) {
-          const base64Part = audio.replace(/^data:[^;]+;base64,/, "");
+          const base64Part = audioItem.replace(/^data:[^;]+;base64,/, "");
           audioBuf = Buffer.from(base64Part, "base64");
         } else {
-          audioBuf = await downloadGradioFile(audio, null);
+          audioBuf = await downloadGradioFile(audioItem, null);
         }
 
         const displayTitle = title || description || tags || "remix";
         const slug = slugify(displayTitle);
-        const saved = await saveBuffer(audioBuf, "audio/wav", `remix_${slug}`);
-        savedUrl = saved.url;
+        const saved = await saveBuffer(audioBuf, "audio/wav", `remix_${slug}_${savedUrls.length + 1}`);
+        savedUrls.push(saved.url);
 
         await libraryService.createAsset({
           type: "audio",
           source: "remix",
-          title: String(displayTitle).slice(0, 80),
-          url: savedUrl,
+          title: `${String(displayTitle).slice(0, 70)} ${savedUrls.length}`,
+          url: saved.url,
           filePath: saved.filepath,
           metadata: {
             mode: effectiveMode,
@@ -232,7 +233,7 @@ router.post("/generate", async (req, res) => {
         });
       } catch (saveErr) {
         console.warn("[remix/generate] Could not save audio file:", saveErr.message);
-        savedUrl = audio;
+        savedUrls.push(audioItem);
       }
     }
 
@@ -256,7 +257,8 @@ router.post("/generate", async (req, res) => {
     return res.json({
       success: true,
       data: {
-        url: savedUrl || audio,
+        url: savedUrls[0] || audio || null,
+        urls: savedUrls,
         title: title || "",
         tags: generatedTags || tags || "",
         lyrics: generatedLyrics || lyrics || "",
@@ -374,7 +376,7 @@ router.post("/generate-stream", async (req, res) => {
     const stream = streamGenerateWithACEStep(payload);
 
     for await (const event of stream) {
-      if (event.type === "result" && event.audio) {
+      if (event.type === "result" && (event.audio || event.audios)) {
         // Send metadata only — audio stays on server (avoids multi-MB SSE + data: URLs in client history)
         send({
           type: "result",
@@ -384,41 +386,52 @@ router.post("/generate-stream", async (req, res) => {
           thumbnail: event.thumbnail,
         });
 
-        try {
-          const isDataUrl = event.audio.startsWith("data:");
-          let audioBuf;
-          if (isDataUrl) {
-            const base64Part = event.audio.replace(/^data:[^;]+;base64,/, "");
-            audioBuf = Buffer.from(base64Part, "base64");
-          } else {
-            audioBuf = await downloadGradioFile(event.audio, null);
+        const audioList = Array.isArray(event.audios) && event.audios.length > 0 ? event.audios : event.audio ? [event.audio] : [];
+        const savedUrls = [];
+        let saveError = null;
+
+        for (const audioItem of audioList) {
+          try {
+            const isDataUrl = audioItem.startsWith("data:");
+            let audioBuf;
+            if (isDataUrl) {
+              const base64Part = audioItem.replace(/^data:[^;]+;base64,/, "");
+              audioBuf = Buffer.from(base64Part, "base64");
+            } else {
+              audioBuf = await downloadGradioFile(audioItem, null);
+            }
+            const displayTitle = event.title || description || tags || "remix";
+            const slug = slugify(displayTitle);
+            const saved = await saveBuffer(audioBuf, "audio/wav", `remix_${slug}_${savedUrls.length + 1}`);
+            savedUrls.push(saved.url);
+
+            await libraryService.createAsset({
+              type: "audio",
+              source: "remix",
+              title: `${String(displayTitle).slice(0, 70)} ${savedUrls.length}`,
+              url: saved.url,
+              filePath: saved.filepath,
+              metadata: {
+                mode: effectiveMode,
+                tags: event.tags || tags,
+                lyrics: event.lyrics || lyrics,
+                description,
+                duration: Number(duration) || 60,
+                seed: Number(seed) || -1,
+                space: "acemusic-api",
+                remixHistoryId: remixHistoryId || null,
+              },
+            });
+          } catch (itemSaveErr) {
+            console.warn("[remix/generate-stream] Could not save audio:", itemSaveErr.message);
+            saveError = itemSaveErr;
           }
-          const displayTitle = event.title || description || tags || "remix";
-          const slug = slugify(displayTitle);
-          const saved = await saveBuffer(audioBuf, "audio/wav", `remix_${slug}`);
+        }
 
-          await libraryService.createAsset({
-            type: "audio",
-            source: "remix",
-            title: String(displayTitle).slice(0, 80),
-            url: saved.url,
-            filePath: saved.filepath,
-            metadata: {
-              mode: effectiveMode,
-              tags: event.tags || tags,
-              lyrics: event.lyrics || lyrics,
-              description,
-              duration: Number(duration) || 60,
-              seed: Number(seed) || -1,
-              space: "acemusic-api",
-              remixHistoryId: remixHistoryId || null,
-            },
-          });
-
-          send({ type: "saved", url: saved.url });
-        } catch (saveErr) {
-          console.warn("[remix/generate-stream] Could not save audio:", saveErr.message);
-          send({ type: "error", message: saveErr.message || "Failed to save remix audio" });
+        if (savedUrls.length > 0) {
+          send({ type: "saved", url: savedUrls[0], urls: savedUrls });
+        } else if (saveError) {
+          send({ type: "error", message: saveError.message || "Failed to save remix audio" });
         }
         continue;
       }

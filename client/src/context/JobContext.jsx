@@ -561,10 +561,12 @@ export function JobProvider({ children }) {
                   finish(candidate);
                 }
               },
-              onSaved: (savedUrl) => {
+              onSaved: (savedUrl, savedUrls) => {
                 if (!savedUrl) return;
-                updateJob(job.id, { resultUrl: savedUrl });
-                finish(savedUrl);
+                updateJob(job.id, { resultUrl: savedUrl, resultUrls: savedUrls });
+                const result = { url: savedUrl };
+                if (savedUrls?.length > 1) result.urls = savedUrls;
+                finish(result);
               },
               onError: (msg) => {
                 if (settled) return;

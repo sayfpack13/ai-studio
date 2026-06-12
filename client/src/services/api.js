@@ -243,7 +243,7 @@ export function streamGenerateRemix(payload, { onProgress, onResult, onSaved, on
             gotSaved = true;
             settled = true;
             onProgress?.(100, "Complete");
-            onSaved?.(data.url);
+            onSaved?.(data.url, data.urls);
           }
           else if (data.type === "error") {
             settled = true;
@@ -463,8 +463,11 @@ export const logoutAdmin = async () => {
 };
 
 // Get configuration (requires JWT)
-export const getConfig = async () => {
-  const response = await authFetch(`${API_BASE_URL}/config/get`);
+export const getConfig = async (reveal = false) => {
+  const url = reveal
+    ? `${API_BASE_URL}/config/get?reveal=true`
+    : `${API_BASE_URL}/config/get`;
+  const response = await authFetch(url);
   return await response.json();
 };
 

@@ -20,7 +20,7 @@ import chutesRoutes from "./routes/chutes.js";
 import audioRoutes from "./routes/audio.js";
 import remixRoutes from "./routes/remix.js";
 import jobQueue from "./services/jobQueue.js";
-import { normalizeConfig } from "./utils/config.js";
+import { normalizeConfig, setGlobalConfig } from "./utils/config.js";
 import { resolveProviderContext } from "./utils/provider-routing.js";
 import libraryService from "./services/library-service.js";
 import { saveBuffer } from "./services/file-storage.js";
@@ -83,6 +83,7 @@ async function loadConfig() {
     config = normalizeConfig({});
     await fs.writeFile(configPath, JSON.stringify(config, null, 2));
   }
+  setGlobalConfig(config);
 }
 
 loadConfig();
@@ -91,6 +92,7 @@ loadConfig();
 app.use((req, res, next) => {
   req.config = config;
   req.configPath = configPath;
+  setGlobalConfig(config);
   next();
 });
 

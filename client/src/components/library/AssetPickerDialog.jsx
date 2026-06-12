@@ -43,13 +43,17 @@ function normalizeHistoryItem(item, id, type, source) {
     item.name ||
     `${type.charAt(0).toUpperCase()}${type.slice(1)} ${id}`;
 
-  const url =
+  let url =
     item?.url ||
     item?.result?.url ||
     item?.result?.video ||
     item?.result?.audio ||
     item?.result?.image ||
     "";
+
+  // If url is an array (e.g. from old data or batch results), use the first element
+  if (Array.isArray(url)) url = url[0] || "";
+  if (typeof url !== "string") url = String(url || "");
 
   if (isInvalidMediaUrl(url)) return null;
 
@@ -127,7 +131,7 @@ export default function AssetPickerDialog({
 
     // Normalize URLs for deduplication (remove trailing slashes, normalize path)
     const normalizeUrl = (url) => {
-      if (!url) return null;
+      if (!url || typeof url !== "string") return null;
       // Remove trailing slashes and convert to lowercase for comparison
       return url.replace(/\/+$/, "").toLowerCase();
     };

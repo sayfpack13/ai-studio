@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { AppProvider, useApp } from "./context/AppContext";
 import { JobProvider, useJobs } from "./context/JobContext";
 import { ToastProvider } from "./context/ToastContext";
@@ -15,7 +15,6 @@ import MediaLibrary from "./components/library/MediaLibrary";
 import AdminDashboard from "./components/AdminDashboard";
 import { ProtectedRoute } from "./components/shared";
 import { getToken } from "./services/api";
-import { useNavigate } from "react-router-dom";
 
 function AppContent() {
   const navigate = useNavigate();
@@ -133,13 +132,13 @@ function AppContent() {
 
         <main className="flex-1 p-4 overflow-hidden">
           <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/" element={<Chat />} />
-            <Route path="/image" element={<ImageGenerator />} />
-            <Route path="/video" element={<VideoGenerator />} />
-            <Route path="/remix" element={<MusicRemix />} />
-            <Route path="/editor" element={<VideoEditor />} />
-            <Route path="/library" element={<MediaLibrary />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+            <Route path="/image" element={<ProtectedRoute><ImageGenerator /></ProtectedRoute>} />
+            <Route path="/video" element={<ProtectedRoute><VideoGenerator /></ProtectedRoute>} />
+            <Route path="/remix" element={<ProtectedRoute><MusicRemix /></ProtectedRoute>} />
+            <Route path="/editor" element={<ProtectedRoute><VideoEditor /></ProtectedRoute>} />
+            <Route path="/library" element={<ProtectedRoute><MediaLibrary /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><AdminDashboard onAuthChange={handleAuthChange} /></ProtectedRoute>} />
           </Routes>
         </main>

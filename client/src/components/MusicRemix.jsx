@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { enqueuePipeline, transcribeAudio, enhanceAudio, resolveAssetUrl } from "../services/api";
+import {
+  enqueuePipeline, transcribeAudio, enhanceAudio, resolveAssetUrl,
+  uploadLibraryFile,
+} from "../services/api";
+import AssetPickerDialog from "./library/AssetPickerDialog";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
 import { MediaOutputPanel } from "./shared";
@@ -8,6 +12,7 @@ import {
   ChevronDown, ChevronUp, Loader2,
   UploadCloud, Clock, AlertCircle,
   SlidersHorizontal, Cpu, Brain,
+  Library,
 } from "lucide-react";
 
 const GENRE_TAGS = [
@@ -70,6 +75,7 @@ export default function MusicRemix() {
     deleteRemix,
     clearAllRemixes,
     getRemixIds,
+    refreshLibraryAssets,
   } = useApp();
   const { enqueueJob, selectedJob, setSelectedJob, getJobsByType, registerSaveFns } = useJobs();
 
@@ -123,6 +129,7 @@ export default function MusicRemix() {
   const [genProgress, setGenProgress] = useState(0);
   const [genMessage, setGenMessage] = useState("");
   const [error, setError] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const fileInputRef = useRef(null);
   const saveRemixRef = useRef(saveRemix);
@@ -213,6 +220,7 @@ export default function MusicRemix() {
         setGeneratedRemix({
           id: remixHistoryId,
           url: resultUrl,
+          urls: selectedJob.resultUrls || historyResult?.urls,
           prompt: historyItem?.prompt || jobPrompt,
           model: historyItem?.model || selectedJob.model,
           title: historyResult?.title,
@@ -245,6 +253,7 @@ export default function MusicRemix() {
           prompt: historyItem?.prompt || job.prompt,
           model: historyItem?.model || job.model,
           url,
+          urls: job.resultUrls || historyItem?.result?.urls,
           title: historyItem?.result?.title || job.result?.title,
           tags: historyItem?.result?.tags || job.result?.tags,
           lyrics: historyItem?.result?.lyrics || job.result?.lyrics,
@@ -283,7 +292,22 @@ export default function MusicRemix() {
       setSourceDuration(detectedDuration);
       // Duration stays empty (auto) — API/LM will auto-fill based on prompt
     }
-  }, []);
+
+    // Persist to library so it can be reused later
+    try {
+      await uploadLibraryFile({
+        fileName: f.name,
+        fileBase64: b64,
+        mimeType: f.type || "audio/mpeg",
+        type: "audio",
+        source: "remix-source",
+        title: f.name,
+      });
+      refreshLibraryAssets?.({ type: "audio" });
+    } catch (libErr) {
+      console.warn("[MusicRemix] Failed to save source audio to library:", libErr);
+    }
+  }, [refreshLibraryAssets]);
 
   const onFileChange = (e) => {
     const f = e.target.files?.[0];
@@ -299,6 +323,36 @@ export default function MusicRemix() {
 
   const onDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
   const onDragLeave = () => setIsDragging(false);
+
+  const handleSelectFromLibrary = useCallback(async (asset) => {
+    if (!asset?.url) return;
+    setError("");
+    setGeneratedRemix(null);
+    setEnhancedUrl(null);
+    setValidationErrors([]);
+
+    try {
+      const url = resolveAssetUrl(asset.url);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch audio (${response.status})`);
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      const b64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+      );
+      const objectUrl = URL.createObjectURL(blob);
+      setFile(null);
+      setAudioUrl(objectUrl);
+      setAudioBase64(b64);
+
+      const detectedDuration = await readAudioDuration(objectUrl);
+      if (detectedDuration && detectedDuration > 0) {
+        setSourceDuration(detectedDuration);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to load selected audio");
+    }
+  }, []);
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) => {
@@ -450,6 +504,7 @@ export default function MusicRemix() {
             prompt: jobPrompt,
             model: modelLabel,
             url: result.url,
+            urls: result.urls,
             title: result.title,
             tags: result.tags,
             lyrics: result.lyrics,
@@ -490,6 +545,7 @@ export default function MusicRemix() {
     setGeneratedRemix({
       id: remixId,
       url: result.url,
+      urls: result.urls,
       prompt: remixItem.prompt,
       model: remixItem.model,
       title: result.title,
@@ -583,6 +639,7 @@ export default function MusicRemix() {
         setGeneratedRemix({
           id: item.id,
           url: item.url,
+          urls: item.urls,
           prompt: item.prompt,
           model: item.model,
           title: item.title,
@@ -660,6 +717,15 @@ export default function MusicRemix() {
                 <span className="text-xs text-gray-600">MP3, WAV, OGG, M4A supported</span>
                 <input ref={fileInputRef} type="file" accept="audio/*" onChange={onFileChange} className="hidden" />
               </div>
+
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 text-sm transition-colors"
+              >
+                <Library className="w-4 h-4" />
+                Select from Library
+              </button>
 
               {audioUrl && (
                 <div className="space-y-2">
@@ -1126,6 +1192,14 @@ export default function MusicRemix() {
           {renderOutputPanel("h-full")}
         </div>
       </div>
+
+      <AssetPickerDialog
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handleSelectFromLibrary}
+        type="audio"
+        title="Select Source Audio"
+      />
     </div>
   );
 }

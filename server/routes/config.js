@@ -16,11 +16,12 @@ const router = express.Router();
 // Get current configuration (requires JWT auth)
 router.get('/get', requireAuth, async (req, res) => {
   try {
+    const reveal = String(req.query?.reveal || '').toLowerCase() === 'true';
     const providers = Object.values(req.config.providers || {}).map((provider) => ({
       id: provider.id,
       name: provider.name,
       apiBaseUrl: provider.apiBaseUrl,
-      apiKey: maskSecret(provider.apiKey),
+      apiKey: reveal ? provider.apiKey : maskSecret(provider.apiKey),
       hasApiKey: !!provider.apiKey,
       enabled: provider.enabled,
       timeout: provider.timeout,
@@ -60,15 +61,30 @@ router.post('/test', requireAuth, async (req, res) => {
     }
 
     // Test connection by fetching models
-    const response = await axios.get(`${provider.apiBaseUrl}/models`, {
-      headers: {
-        'Authorization': `Bearer ${provider.apiKey}`
-      },
-      timeout: 10000
-    });
+    // OpenAI-compatible APIs use /v1/models; some providers already embed /v1 in the base URL.
+    let response;
+    try {
+      response = await axios.get(`${provider.apiBaseUrl}/v1/models`, {
+        headers: {
+          'Authorization': `Bearer ${provider.apiKey}`
+        },
+        timeout: 10000
+      });
+    } catch (err) {
+      if (err.response?.status === 404) {
+        response = await axios.get(`${provider.apiBaseUrl}/models`, {
+          headers: {
+            'Authorization': `Bearer ${provider.apiKey}`
+          },
+          timeout: 10000
+        });
+      } else {
+        throw err;
+      }
+    }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Connection successful',
       modelsCount: response.data?.data?.length || 0
     });

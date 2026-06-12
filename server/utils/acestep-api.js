@@ -5,6 +5,7 @@
  */
 
 import { prepareCoverAudio, CLOUD_SAFE_UPLOAD_BYTES } from "./audio-prepare.js";
+import { getGlobalConfig } from "./config.js";
 
 const ALLOWED_MODELS = ["acestep-v15-turbo", "acestep-v15-turbo-shift3"];
 
@@ -22,8 +23,17 @@ function normalizeModel(model) {
 }
 
 export function getAceStepConfig() {
-  const apiKey = process.env.ACEMUSIC_API_KEY || process.env.ACESTEP_API_KEY || "";
+  const globalCfg = getGlobalConfig();
+  const aceProvider = globalCfg?.providers?.acestep;
+
+  const apiKey = (
+    aceProvider?.apiKey ||
+    process.env.ACEMUSIC_API_KEY ||
+    process.env.ACESTEP_API_KEY ||
+    ""
+  );
   const baseUrl = (
+    aceProvider?.apiBaseUrl ||
     process.env.ACEMUSIC_BASE_URL ||
     process.env.ACESTEP_API_BASE_URL ||
     "https://api.acemusic.ai"
@@ -135,6 +145,7 @@ function buildCompletionPayload(options = {}, modelId) {
     use_cot_caption: true,
     use_cot_language: false,
     stream: true,
+    batch_size: 2,
     audio_config: audioConfig,
   };
 
@@ -190,11 +201,11 @@ function parseCompletionResponse(body) {
     throw new Error(body?.error?.message || body?.detail || "AceMusic API returned no audio");
   }
 
-  const audioUrl = audioArr[0]?.audio_url?.url;
-  if (!audioUrl) {
+  const audioUrls = audioArr.map((a) => a?.audio_url?.url).filter(Boolean);
+  if (audioUrls.length === 0) {
     throw new Error("AceMusic API returned no audio URL");
   }
-  return audioUrl;
+  return audioUrls;
 }
 
 function parseApiErrorBody(status, errText) {
@@ -270,7 +281,7 @@ export function buildTaskFields(options = {}) {
     model: normalizeModel(model),
     inference_steps: toNumber(infer_step, 8),
     guidance_scale: toNumber(guidance_scale, 7),
-    batch_size: 1,
+    batch_size: 2,
     audio_format: "mp3",
     thinking: hasSource ? false : thinking !== false,
   };
@@ -407,12 +418,12 @@ export async function queryTasks(baseUrl, apiKey, taskIds) {
 }
 
 /**
- * Parse a single task row from /query_result into an audio file URL.
- * @returns {{ fileUrl: string|null, status: number, queuePosition: number|null, error: string|null, metas: object|null }}
+ * Parse a single task row from /query_result into audio file URL(s).
+ * @returns {{ fileUrl: string|null, fileUrls: string[], status: number, queuePosition: number|null, error: string|null, metas: object|null }}
  */
 export function parseTaskResult(taskRow) {
   if (!taskRow) {
-    return { fileUrl: null, status: -1, queuePosition: null, error: null, metas: null };
+    return { fileUrl: null, fileUrls: [], status: -1, queuePosition: null, error: null, metas: null };
   }
 
   const status = taskRow.status ?? taskRow.task_status ?? -1;
@@ -421,6 +432,7 @@ export function parseTaskResult(taskRow) {
   if (status === 2) {
     return {
       fileUrl: null,
+      fileUrls: [],
       status,
       queuePosition,
       error: taskRow.error || taskRow.message || "Task failed",
@@ -429,14 +441,17 @@ export function parseTaskResult(taskRow) {
   }
 
   if (status !== 1) {
-    return { fileUrl: null, status, queuePosition, error: null, metas: null };
+    return { fileUrl: null, fileUrls: [], status, queuePosition, error: null, metas: null };
   }
 
   // Direct fields (some providers)
-  let fileUrl = taskRow.file || taskRow.audio_url || taskRow.result?.file || null;
+  let fileUrls = [];
+  if (taskRow.file) fileUrls.push(taskRow.file);
+  if (taskRow.audio_url) fileUrls.push(taskRow.audio_url);
+  if (taskRow.result?.file) fileUrls.push(taskRow.result.file);
 
   // Official API: result is a JSON string array
-  if (!fileUrl && taskRow.result) {
+  if (fileUrls.length === 0 && taskRow.result) {
     let parsed = taskRow.result;
     if (typeof parsed === "string") {
       try {
@@ -446,18 +461,23 @@ export function parseTaskResult(taskRow) {
       }
     }
     if (Array.isArray(parsed) && parsed.length > 0) {
-      const item = parsed.find((r) => r?.status === 1 && r?.file) || parsed[0];
-      fileUrl = item?.file || null;
-    } else if (parsed && typeof parsed === "object") {
-      fileUrl = parsed.file || null;
+      fileUrls = parsed
+        .filter((r) => r?.status === 1 && r?.file)
+        .map((r) => r.file);
+      if (fileUrls.length === 0) {
+        fileUrls = parsed.filter((r) => r?.file).map((r) => r.file);
+      }
+    } else if (parsed && typeof parsed === "object" && parsed.file) {
+      fileUrls = [parsed.file];
     }
   }
 
   return {
-    fileUrl,
+    fileUrl: fileUrls[0] || null,
+    fileUrls,
     status,
     queuePosition,
-    error: fileUrl ? null : "Task succeeded but returned no audio file URL",
+    error: fileUrls.length > 0 ? null : "Task succeeded but returned no audio file URL",
     metas: null,
   };
 }
@@ -491,7 +511,7 @@ export async function downloadAudio(baseUrl, apiKey, filePathOrUrl) {
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLLS = 200;
 const COMPLETION_RETRY_STATUSES = new Set([502, 503, 504]);
-const COMPLETION_RETRY_DELAYS_MS = [8000, 20000];
+const COMPLETION_RETRY_DELAYS_MS = [12_000, 20_000, 30_000, 30_000];
 
 async function fetchWithRetry(url, init, { label = "request", retries = 2 } = {}) {
   let lastResponse = null;
@@ -536,7 +556,7 @@ async function* readCompletionSseStream(response) {
   const decoder = new TextDecoder();
   let buffer = "";
   let chunkIndex = 0;
-  let audioUrl = null;
+  const audioUrls = new Set();
   let finishReason = null;
   let errorMessage = null;
 
@@ -579,14 +599,16 @@ async function* readCompletionSseStream(response) {
 
         const audioArr = delta.audio || message.audio;
         if (Array.isArray(audioArr) && audioArr.length > 0) {
-          const url = audioArr[0]?.audio_url?.url;
-          if (url) audioUrl = url;
+          for (const a of audioArr) {
+            const url = a?.audio_url?.url;
+            if (url) audioUrls.add(url);
+          }
         }
 
         const progress = Math.min(92, 15 + Math.floor(chunkIndex * 1.5));
         yield {
           progress,
-          audioUrl,
+          audioUrls: Array.from(audioUrls),
           finishReason,
           errorMessage,
           chunkIndex,
@@ -596,8 +618,8 @@ async function* readCompletionSseStream(response) {
   }
 
   yield {
-    progress: audioUrl ? 95 : 15,
-    audioUrl,
+    progress: audioUrls.size > 0 ? 95 : 15,
+    audioUrls: Array.from(audioUrls),
     finishReason,
     errorMessage,
     chunkIndex,
@@ -618,7 +640,9 @@ async function prepareCompletionOptions(options = {}) {
   const prepared = await prepareCoverAudio(
     buf,
     next.audio_mime || next.audioMime || "audio/mpeg",
-    forceTrimSec != null ? { maxDurationSec: forceTrimSec, force: true } : {},
+    forceTrimSec != null
+      ? { maxDurationSec: forceTrimSec, force: true }
+      : { allowAutoTrim: false },
   );
 
   next.src_audio = prepared.buffer;
@@ -697,14 +721,14 @@ async function* streamAceStepCompletion(options = {}) {
     };
   }
 
-  const COVER_504_TRIM_STEPS = [120, 90, 60];
+  const COVER_504_TRIM_STEPS = [null, 120, 90, 60, 45];
 
   try {
     let resp = null;
 
-    for (let attempt = 0; attempt <= (isCover ? COVER_504_TRIM_STEPS.length : 1); attempt++) {
-      if (attempt > 0 && isCover) {
-        const trimSec = COVER_504_TRIM_STEPS[attempt - 1];
+    for (let attempt = 0; attempt < COVER_504_TRIM_STEPS.length; attempt++) {
+      const trimSec = COVER_504_TRIM_STEPS[attempt];
+      if (attempt > 0 && trimSec != null) {
         yield {
           type: "progress",
           value: 12,
@@ -743,23 +767,15 @@ async function* streamAceStepCompletion(options = {}) {
       if (resp.ok) break;
 
       const errText = await resp.text().catch(() => "");
-      const canRetryCover =
-        isCover &&
-        COMPLETION_RETRY_STATUSES.has(resp.status) &&
-        attempt < COVER_504_TRIM_STEPS.length;
+      const canRetry =
+        COMPLETION_RETRY_STATUSES.has(resp.status) && attempt < COVER_504_TRIM_STEPS.length - 1;
 
-      if (canRetryCover) {
+      if (canRetry) {
         console.warn(
-          `[ACE-Step Completion] HTTP ${resp.status} (attempt ${attempt + 1}), will trim and retry…`,
+          `[ACE-Step Completion] HTTP ${resp.status} (attempt ${attempt + 1}), will retry…`,
           errText.slice(0, 80),
         );
         await new Promise((r) => setTimeout(r, COMPLETION_RETRY_DELAYS_MS[attempt] ?? 10_000));
-        continue;
-      }
-
-      if (!isCover && COMPLETION_RETRY_STATUSES.has(resp.status) && attempt === 0) {
-        console.warn(`[ACE-Step Completion] HTTP ${resp.status}, retrying once…`);
-        await new Promise((r) => setTimeout(r, COMPLETION_RETRY_DELAYS_MS[0] ?? 8000));
         continue;
       }
 
@@ -772,7 +788,7 @@ async function* streamAceStepCompletion(options = {}) {
     }
 
     const contentType = String(resp.headers.get("content-type") || "").toLowerCase();
-    let audioUrl = null;
+    let audioUrls = [];
 
     if (contentType.includes("text/event-stream")) {
       let lastProgress = 15;
@@ -783,8 +799,8 @@ async function* streamAceStepCompletion(options = {}) {
         if (chunk.finishReason === "error") {
           throw new Error("AceMusic generation failed");
         }
-        if (chunk.audioUrl) {
-          audioUrl = chunk.audioUrl;
+        if (chunk.audioUrls?.length > 0) {
+          audioUrls = chunk.audioUrls;
         }
         if (!chunk.done && chunk.progress > lastProgress) {
           lastProgress = chunk.progress;
@@ -799,24 +815,29 @@ async function* streamAceStepCompletion(options = {}) {
       }
     } else {
       const body = await resp.json();
-      audioUrl = parseCompletionResponse(body);
+      audioUrls = parseCompletionResponse(body);
     }
 
-    if (!audioUrl) {
+    if (!audioUrls || audioUrls.length === 0) {
       throw new Error("AceMusic API returned no audio");
     }
 
-    let resultAudio = audioUrl;
-    if (!audioUrl.startsWith("data:")) {
-      const { buffer, mimeType } = await downloadAudio(baseUrl, apiKey, audioUrl);
-      resultAudio = `data:${mimeType};base64,${buffer.toString("base64")}`;
+    const resultAudios = [];
+    for (const url of audioUrls) {
+      if (url.startsWith("data:")) {
+        resultAudios.push(url);
+      } else {
+        const { buffer, mimeType } = await downloadAudio(baseUrl, apiKey, url);
+        resultAudios.push(`data:${mimeType};base64,${buffer.toString("base64")}`);
+      }
     }
 
-    console.log("[ACE-Step Completion] Success, audio size:", Math.round(resultAudio.length * 0.75), "bytes");
+    console.log("[ACE-Step Completion] Success, audios:", resultAudios.length, "total size:", Math.round(resultAudios.reduce((sum, a) => sum + a.length, 0) * 0.75), "bytes");
     yield { type: "progress", value: 95, message: "Audio ready!" };
     yield {
       type: "result",
-      audio: resultAudio,
+      audio: resultAudios[0],
+      audios: resultAudios,
       title: effectiveTags.slice(0, 60),
       tags: effectiveTags,
       lyrics: lyricsText === "[Instrumental]" ? "" : lyricsText,
@@ -891,7 +912,7 @@ async function* streamAceStepNative(options = {}) {
 
     const taskRow = rows.find((r) => r?.task_id === taskId) || rows[0];
     const parsed = parseTaskResult(taskRow);
-    const { status, queuePosition, error: taskError, fileUrl } = parsed;
+    const { status, queuePosition, error: taskError, fileUrl, fileUrls } = parsed;
 
     if (status !== lastStatus || (queuePosition != null && queuePosition !== lastQueuePos)) {
       lastStatus = status;
@@ -918,14 +939,19 @@ async function* streamAceStepNative(options = {}) {
       yield { type: "progress", value: 92, message: "Downloading audio…" };
 
       try {
-        const { buffer, mimeType } = await downloadAudio(baseUrl, apiKey, fileUrl);
-        const base64 = buffer.toString("base64");
-        console.log("[ACE-Step API] Success, audio bytes:", buffer.length);
+        const resultAudios = [];
+        for (const url of parsed.fileUrls || [fileUrl]) {
+          const { buffer, mimeType } = await downloadAudio(baseUrl, apiKey, url);
+          const base64 = buffer.toString("base64");
+          resultAudios.push(`data:${mimeType};base64,${base64}`);
+        }
+        console.log("[ACE-Step API] Success, audios:", resultAudios.length, "total bytes:", Math.round(resultAudios.reduce((sum, a) => sum + a.length, 0) * 0.75));
 
         yield { type: "progress", value: 95, message: "Audio ready!" };
         yield {
           type: "result",
-          audio: `data:${mimeType};base64,${base64}`,
+          audio: resultAudios[0],
+          audios: resultAudios,
           title: effectiveTags.slice(0, 60),
           tags: effectiveTags,
           lyrics: lyricsText === "[Instrumental]" ? "" : lyricsText,

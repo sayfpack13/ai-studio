@@ -79,6 +79,7 @@ export async function prepareCoverAudio(
     maxDurationSec = MAX_COVER_DURATION_SEC,
     maxBytes = MAX_COVER_BYTES,
     force = false,
+    allowAutoTrim = true,
   } = {},
 ) {
   if (!buffer?.length) {
@@ -118,8 +119,10 @@ export async function prepareCoverAudio(
     const trimCandidates = [];
     if (maxDurationSec != null && maxDurationSec > 0) {
       trimCandidates.push(maxDurationSec);
-    } else {
+    } else if (allowAutoTrim) {
       trimCandidates.push(null, ...AUTO_TRIM_STEPS_SEC);
+    } else {
+      trimCandidates.push(null);
     }
 
     let out = null;

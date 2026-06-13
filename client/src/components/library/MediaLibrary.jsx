@@ -7,27 +7,20 @@ import {
   Filter,
   Upload,
   RefreshCw,
-  Download,
-  Maximize2,
-  Trash2,
-  Music,
-  Video,
-  Image,
   FolderOpen,
-  ImageOff,
   Copy,
   Check,
   ChevronDown,
   ChevronUp,
-  FileText,
   X,
   Heart,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { resolveAssetUrl, uploadLibraryFile } from "../../services/api";
 import MediaPreviewDialog from "../shared/MediaPreviewDialog";
-import { useFavorites } from "../../context/FavoritesContext";
+import MediaCard from "../shared/MediaCard";
 import { useAudioPlayer } from "../../context/AudioPlayerContext";
+import { useFavorites } from "../../context/FavoritesContext";
 
 const fallbackTime = 0;
 
@@ -78,13 +71,15 @@ function normalizeHistoryItem(item, id, type, source) {
 
 function normalizeLibraryAsset(asset) {
   if (!asset) return null;
+  const isRemix = asset.source === "remix";
   return {
     ...asset,
+    type: isRemix ? "remix" : asset.type,
     thumbnail: asset.thumbnail || asset.metadata?.thumbnail || null,
     createdAt: asset.createdAt || asset.updatedAt || fallbackTime,
     updatedAt: asset.updatedAt || asset.createdAt || fallbackTime,
     _origin: "library",
-    _originId: asset.id,
+    _originId: asset.metadata?.remixHistoryId || asset.id,
   };
 }
 
@@ -239,15 +234,12 @@ export default function MediaLibrary() {
     getEditorProjectIds,
   } = useApp();
 
-  const { isFavorite, toggleFavorite } = useFavorites();
-  const { requestPlayTrack, currentTrack, isPlaying } = useAudioPlayer();
+  const { requestPlayTrack } = useAudioPlayer();
+  const { isFavorite } = useFavorites();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [previewAsset, setPreviewAsset] = useState(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-
-  const [imgErrors, setImgErrors] = useState({});
-  const [imgVideoErrors, setImgVideoErrors] = useState({});
 
   // Upload state
   const [uploadFile, setUploadFile] = useState(null);
@@ -403,10 +395,16 @@ export default function MediaLibrary() {
 
     const query = (libraryFilters?.query || "").trim().toLowerCase();
     const type = (libraryFilters?.type || "").trim().toLowerCase();
+    const favoritesOnly = libraryFilters?.favoritesOnly || false;
 
     const filtered = all.filter((asset) => {
       const typeOk = !type || (asset.type || "").toLowerCase() === type;
       if (!typeOk) return false;
+
+      if (favoritesOnly) {
+        const favOk = isFavorite(asset.type, asset._originId || asset.id);
+        if (!favOk) return false;
+      }
 
       if (!query) return true;
       const haystack = [
@@ -491,45 +489,6 @@ export default function MediaLibrary() {
     }
   };
 
-  const typeIcon = (type) => {
-    switch (type) {
-      case "image":
-        return <Image className="w-3.5 h-3.5" />;
-      case "video":
-        return <Video className="w-3.5 h-3.5" />;
-      case "audio":
-        return <Music className="w-3.5 h-3.5" />;
-      default:
-        return <FileText className="w-3.5 h-3.5" />;
-    }
-  };
-
-  const typeAccent = (type) => {
-    switch (type) {
-      case "image":
-        return "from-blue-500/90";
-      case "video":
-        return "from-rose-500/90";
-      case "audio":
-        return "from-emerald-500/90";
-      default:
-        return "from-amber-500/90";
-    }
-  };
-
-  const typeBadgeBg = (type) => {
-    switch (type) {
-      case "image":
-        return "bg-blue-500/30 text-blue-200";
-      case "video":
-        return "bg-rose-500/30 text-rose-200";
-      case "audio":
-        return "bg-emerald-500/30 text-emerald-200";
-      default:
-        return "bg-amber-500/30 text-amber-200";
-    }
-  };
-
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
@@ -604,6 +563,26 @@ export default function MediaLibrary() {
           >
             <Search className="w-4 h-4" />
             Search
+          </button>
+          <button
+            onClick={() =>
+              setLibraryFilters((prev) => ({
+                ...prev,
+                favoritesOnly: !prev.favoritesOnly,
+              }))
+            }
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-150 shrink-0 ${
+              libraryFilters.favoritesOnly
+                ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+                : "bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300"
+            }`}
+          >
+            <Heart
+              className={`w-4 h-4 ${
+                libraryFilters.favoritesOnly ? "fill-rose-400 text-rose-400" : ""
+              }`}
+            />
+            {libraryFilters.favoritesOnly ? "Favorites" : "All"}
           </button>
           <button
             onClick={() => setUploadOpen((v) => !v)}
@@ -729,221 +708,38 @@ export default function MediaLibrary() {
         {!loading && mergedAssets.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {mergedAssets.map((asset) => (
-              <motion.div
+              <MediaCard
                 key={asset.id}
-                whileHover={{ scale: 1.03 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                className="group relative aspect-square rounded-xl overflow-hidden bg-gray-900 border border-gray-800 shadow-md shadow-black/30 cursor-pointer"
-                onClick={() => {
-                  setPreviewAsset(asset);
-                  if ((asset.type === "audio" || asset.type === "remix") && asset.url) {
-                    requestPlayTrack(asset, mergedAssets.filter((a) => a.type === asset.type));
+                item={asset}
+                mediaType={asset.type}
+                aspectRatio="aspect-square"
+                onSelect={(item) => {
+                  setPreviewAsset(item);
+                  if (
+                    (item.type === "audio" || item.type === "remix") &&
+                    item.url
+                  ) {
+                    requestPlayTrack(
+                      item,
+                      mergedAssets.filter((a) => a.type === item.type),
+                    );
                   }
                 }}
-              >
-                {/* ── Media Preview ── */}
-                {asset.type === "image" && asset.url && (
-                  <>
-                    {imgErrors[asset.id] ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800/80">
-                        <ImageOff className="w-8 h-8 text-gray-600 mb-1" />
-                        <span className="text-[10px] text-gray-600">
-                          Preview unavailable
-                        </span>
-                      </div>
-                    ) : (
-                      <img
-                        src={resolveAssetUrl(asset.url)}
-                        alt={asset.title}
-                        className="w-full h-full object-cover"
-                        onError={() =>
-                          setImgErrors((prev) => ({
-                            ...prev,
-                            [asset.id]: true,
-                          }))
-                        }
-                      />
-                    )}
-                  </>
-                )}
-
-                {asset.type === "video" && asset.url && (
-                  <>
-                    {imgVideoErrors[asset.id] ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800/80">
-                        <ImageOff className="w-8 h-8 text-gray-600 mb-1" />
-                        <span className="text-[10px] text-gray-600">
-                          Preview unavailable
-                        </span>
-                      </div>
-                    ) : asset.thumbnail ? (
-                      <img
-                        src={resolveAssetUrl(asset.thumbnail)}
-                        alt={asset.title}
-                        className="w-full h-full object-cover"
-                        onError={() =>
-                          setImgVideoErrors((prev) => ({
-                            ...prev,
-                            [asset.id]: true,
-                          }))
-                        }
-                      />
-                    ) : (
-                      <video
-                        src={resolveAssetUrl(asset.url)}
-                        className="w-full h-full object-cover"
-                        muted
-                        playsInline
-                        preload="metadata"
-                        onError={() =>
-                          setImgVideoErrors((prev) => ({
-                            ...prev,
-                            [asset.id]: true,
-                          }))
-                        }
-                      />
-                    )}
-                    {!imgVideoErrors[asset.id] && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="w-5 h-5 fill-white"
-                          >
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {asset.type === "audio" && asset.url && (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-950/80 via-gray-900 to-gray-950">
-                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/15">
-                      <Music className="w-10 h-10 text-emerald-400/70" />
-                    </div>
-                  </div>
-                )}
-
-                {asset.type === "project" && (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-amber-950/80 via-gray-900 to-gray-950">
-                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/15">
-                      <FileText className="w-10 h-10 text-amber-400/70" />
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Playing indicator — visible when this track is currently playing */}
-                {currentTrack && isPlaying && (currentTrack.id === asset.id || (currentTrack.url && currentTrack.url === asset.url)) && (
-                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-purple-600/90 backdrop-blur-sm border border-purple-500/50">
-                    <div className="flex gap-0.5 items-end h-3">
-                      <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: '0ms', height: '60%' }}></div>
-                      <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: '150ms', height: '100%' }}></div>
-                      <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: '300ms', height: '40%' }}></div>
-                    </div>
-                    <span className="text-[10px] font-medium text-white">Playing</span>
-                  </div>
-                )}
-
-                {/* ── Favorite indicator — always visible */}
-                <div className="absolute top-2 left-2 z-10">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(asset.type, asset._originId || asset.id);
-                    }}
-                    className="flex items-center justify-center w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 transition-colors hover:bg-black/60"
-                    title={isFavorite(asset.type, asset._originId || asset.id) ? "Unfavorite" : "Favorite"}
-                  >
-                    <Heart
-                      className={`w-3.5 h-3.5 transition-colors ${
-                        isFavorite(asset.type, asset._originId || asset.id)
-                          ? "text-rose-400 fill-rose-400"
-                          : "text-gray-300"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* ── Gradient Overlay ── */}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gray-950 via-gray-950/70 to-transparent pt-8 pb-2 px-2.5">
-                  <p className="text-[11px] font-medium text-gray-100 truncate leading-tight">
-                    {asset.title}
-                  </p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span
-                      className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-md ${typeBadgeBg(asset.type)}`}
-                    >
-                      {typeIcon(asset.type)}
-                      {asset.type}
-                    </span>
-                    {asset._origin === "history" && (
-                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/30 text-purple-200">
-                        history
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Hover Actions ── */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  <div className="absolute top-2 right-2 flex gap-1.5">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPreviewAsset(asset);
-                      }}
-                      className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-purple-500 hover:bg-purple-600/20 text-gray-300 hover:text-purple-300 transition-all"
-                      title="Preview"
-                    >
-                      <Maximize2 className="w-4 h-4" />
-                    </button>
-                    {asset.url && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDownload(
-                            asset.url,
-                            asset.title,
-                            asset.type,
-                            asset.metadata,
-                          );
-                        }}
-                        className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-purple-500 hover:bg-purple-600/20 text-gray-300 hover:text-purple-300 transition-all"
-                        title="Download"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                    )}
-                    {asset._origin === "library" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeLibraryAsset(asset.id);
-                        }}
-                        className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-red-500 hover:bg-red-600/20 text-gray-300 hover:text-red-300 transition-all"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                    {asset._origin === "history" &&
-                      asset.type !== "project" && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLoadHistory(asset);
-                          }}
-                          className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 hover:border-purple-500 hover:bg-purple-600/20 text-gray-300 hover:text-purple-300 transition-all"
-                          title="Load in editor"
-                        >
-                          <Upload className="w-4 h-4" />
-                        </button>
-                      )}
-                  </div>
-                </div>
-              </motion.div>
+                onPreview={(item) => setPreviewAsset(item)}
+                onDownload={(item) =>
+                  handleDownload(item.url, item.title, item.type, item.metadata)
+                }
+                onDelete={
+                  asset._origin === "library"
+                    ? (id) => removeLibraryAsset(id)
+                    : undefined
+                }
+                onLoadHistory={
+                  asset._origin === "history" && asset.type !== "project"
+                    ? handleLoadHistory
+                    : undefined
+                }
+              />
             ))}
           </div>
         )}

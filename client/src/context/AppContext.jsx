@@ -176,7 +176,7 @@ const mergeRemixHistoryFromLibrary = (history, assets = []) => {
   );
 
   for (const asset of assets) {
-    if (!asset || asset.type !== "audio") continue;
+    if (!asset || (asset.type !== "audio" && asset.type !== "remix")) continue;
     if (asset.source !== "remix") continue;
 
     const url = asset.url;
@@ -290,7 +290,7 @@ export function AppProvider({ children }) {
   );
   const [libraryAssets, setLibraryAssets] = useState([]);
   const [libraryFilters, setLibraryFilters] = useState(() =>
-    loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "" }),
+    loadFromStorage(LIBRARY_FILTERS_KEY, { query: "", type: "", favoritesOnly: false }),
   );
   const hasBootstrappedLibraryRef = useRef(false);
 

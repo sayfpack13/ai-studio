@@ -145,6 +145,7 @@ router.post("/generate", async (req, res) => {
       refAudioBase64,
       refAudioMime,
       audioMime,
+      remixHistoryId,
     } = req.body || {};
 
     const effectiveMode = String(mode).trim().toLowerCase();
@@ -216,7 +217,7 @@ router.post("/generate", async (req, res) => {
         savedUrls.push(saved.url);
 
         await libraryService.createAsset({
-          type: "audio",
+          type: "remix",
           source: "remix",
           title: `${String(displayTitle).slice(0, 70)} ${savedUrls.length}`,
           url: saved.url,
@@ -229,6 +230,7 @@ router.post("/generate", async (req, res) => {
             duration: Number(duration) || 60,
             seed: Number(seed) || -1,
             space: "acemusic-api",
+            remixHistoryId: remixHistoryId || null,
           },
         });
       } catch (saveErr) {
@@ -406,7 +408,7 @@ router.post("/generate-stream", async (req, res) => {
             savedUrls.push(saved.url);
 
             await libraryService.createAsset({
-              type: "audio",
+              type: "remix",
               source: "remix",
               title: `${String(displayTitle).slice(0, 70)} ${savedUrls.length}`,
               url: saved.url,

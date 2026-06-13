@@ -134,19 +134,6 @@ export function AudioPlayerProvider({ children }) {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) {
-      audio.play().catch((err) => {
-        console.error("Audio play failed:", err);
-        setIsPlaying(false);
-      });
-    } else {
-      audio.pause();
-    }
-  }, [isPlaying, currentTrack]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
     audio.volume = volume;
   }, [volume]);
 
@@ -197,6 +184,19 @@ export function AudioPlayerProvider({ children }) {
       audio.removeEventListener("waiting", onWaiting);
     };
   }, [currentTrack, queue, queueIndex, next]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.play().catch((err) => {
+        console.error("Audio play failed:", err);
+        setIsPlaying(false);
+      });
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying, currentTrack]);
 
   return (
     <AudioPlayerContext.Provider

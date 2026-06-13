@@ -145,7 +145,7 @@ export default function ProjectListCard({ onOpenManager }) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/40">
+      <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/40">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <svg
@@ -229,7 +229,7 @@ export default function ProjectListCard({ onOpenManager }) {
                   className={`group relative rounded-lg border transition-all ${
                     isActive
                       ? "bg-blue-500/10 border-blue-500/50"
-                      : "bg-gray-950/60 border-gray-800 hover:border-gray-700"
+                      : "bg-gray-900/60 border-gray-800 hover:border-gray-700"
                   }`}
                 >
                   {/* Active indicator */}

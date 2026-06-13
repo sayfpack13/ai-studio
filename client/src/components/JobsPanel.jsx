@@ -12,7 +12,6 @@ import {
   Image,
   Video,
   Music,
-  Wand2,
   ExternalLink,
 } from "lucide-react";
 import { useJobs } from "../context/JobContext";
@@ -30,7 +29,7 @@ const TYPE_ICONS = {
   video: Video,
   music: Music,
   audio: Music,
-  remix: Wand2,
+  remix: Music,
 };
 
 const STATUS_CONFIG = {

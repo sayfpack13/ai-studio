@@ -88,7 +88,7 @@ function ProjectSettings() {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/40">
+      <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/40">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2">
           <svg
             className="w-4 h-4 text-blue-400"
@@ -426,7 +426,7 @@ function ProjectSettings() {
       </div>
 
       {/* Info Message */}
-      <div className="px-4 py-3 border-t border-gray-800 bg-gray-950/20">
+      <div className="px-4 py-3 border-t border-gray-800 bg-gray-900/20">
         <p className="text-[11px] text-gray-500 flex items-center gap-2">
           <svg
             className="w-3.5 h-3.5 text-blue-400 flex-shrink-0"
@@ -461,7 +461,7 @@ function ClipSettings() {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/40">
+      <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/40">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
             <svg

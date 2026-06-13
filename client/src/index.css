@@ -7,7 +7,7 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: #374151;
   border-radius: 4px;
 }
 
@@ -18,6 +18,19 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
+}
+
+/* Pointer cursor for all interactive elements */
+button,
+a,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+label[for],
+select,
+summary {
+  cursor: pointer;
 }
 
 /* Smooth transitions */

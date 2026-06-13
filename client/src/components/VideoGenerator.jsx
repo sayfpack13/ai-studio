@@ -1283,12 +1283,12 @@ export default function VideoGenerator() {
 
       {showModelSelector && (
         <div
-          className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+          className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm flex items-center justify-center z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseModelSelector();
           }}
         >
-          <div className="bg-gray-950 border border-gray-800 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden mx-4 flex flex-col shadow-2xl">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden mx-4 flex flex-col shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center">
@@ -1599,7 +1599,7 @@ export default function VideoGenerator() {
                               className="w-full h-32 object-cover"
                             />
                             {wanImageSourceType === "video" && (
-                              <div className="absolute top-1.5 left-1.5 bg-black/70 text-[10px] text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <div className="absolute top-1.5 left-1.5 bg-gray-900/70 text-[10px] text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1">
                                 <Film className="w-3 h-3" />
                                 Last frame
                               </div>

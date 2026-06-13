@@ -6,14 +6,11 @@ import {
   RotateCcw,
   GitCompare,
   Maximize2,
-  Copy,
-  Check,
   Play,
   Volume2,
   Video,
   Image,
   Music,
-  Wand2,
   ImageOff,
   Clock,
   Heart,
@@ -21,6 +18,7 @@ import {
 import { resolveAssetUrl } from "../../services/api";
 import { useFavorites } from "../../context/FavoritesContext";
 import { useAudioPlayer } from "../../context/AudioPlayerContext";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 const TYPE_ACCENT = {
   image: {
@@ -43,7 +41,7 @@ const TYPE_ACCENT = {
   },
   remix: {
     bg: "from-purple-500/20 via-gray-900 to-gray-950",
-    icon: Wand2,
+    icon: Music,
     badge: "bg-purple-500/25 text-purple-200",
     glow: "ring-purple-500/40",
   },
@@ -60,9 +58,9 @@ export default function MediaGalleryGrid({
   selectedForCompare = [],
   className = "",
 }) {
-  const [copiedId, setCopiedId] = useState(null);
   const [brokenIds, setBrokenIds] = useState(() => new Set());
   const [failedThumbIds, setFailedThumbIds] = useState(() => new Set());
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { requestPlayTrack, currentTrack, isPlaying } = useAudioPlayer();
 
@@ -87,13 +85,6 @@ export default function MediaGalleryGrid({
       next.add(id);
       return next;
     });
-  };
-
-  const handleCopyPrompt = (e, item) => {
-    e.stopPropagation();
-    navigator.clipboard?.writeText(item.prompt || "");
-    setCopiedId(item.id);
-    setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleDownload = async (e, item) => {
@@ -136,7 +127,13 @@ export default function MediaGalleryGrid({
 
   const handleDelete = (e, itemId) => {
     e.stopPropagation();
-    onDelete?.(itemId);
+    setDeleteConfirm(itemId);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteConfirm) return;
+    onDelete?.(deleteConfirm);
+    setDeleteConfirm(null);
   };
 
   const handleCompare = (e, item) => {
@@ -194,7 +191,7 @@ export default function MediaGalleryGrid({
             />
           )}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20">
+            <div className="w-11 h-11 rounded-full bg-gray-900/50 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20">
               <Play className="w-5 h-5 text-white fill-white ml-0.5" />
             </div>
           </div>
@@ -220,7 +217,7 @@ export default function MediaGalleryGrid({
               onError={() => markBroken(item.id)}
             />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20">
+              <div className="w-11 h-11 rounded-full bg-gray-900/50 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20">
                 <Play className="w-5 h-5 text-white fill-white ml-0.5" />
               </div>
             </div>
@@ -239,7 +236,7 @@ export default function MediaGalleryGrid({
             }`}
           >
             {mediaType === "remix" ? (
-              <Wand2 className="w-10 h-10 text-purple-400/70" />
+              <Music className="w-10 h-10 text-purple-400/70" />
             ) : (
               <Volume2 className="w-10 h-10 text-emerald-400/70" />
             )}
@@ -264,6 +261,7 @@ export default function MediaGalleryGrid({
   };
 
   return (
+    <>
     <div
       className={`grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 ${className}`}
     >
@@ -307,32 +305,30 @@ export default function MediaGalleryGrid({
                 </div>
               )}
 
-              {/* Favorite indicator — always visible */}
-              <div className="absolute top-2 left-2 z-10">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(mediaType, item.id);
-                  }}
-                  className="flex items-center justify-center w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 transition-colors hover:bg-black/60"
-                  title={isFavorite(mediaType, item.id) ? "Unfavorite" : "Favorite"}
-                >
-                  <Heart
-                    className={`w-3.5 h-3.5 transition-colors ${
-                      isFavorite(mediaType, item.id)
-                        ? "text-rose-400 fill-rose-400"
-                        : "text-gray-300"
-                    }`}
-                  />
-                </button>
-              </div>
-
               {/* Compare badge */}
               {isComparing && (
                 <div className="absolute top-2 left-10 z-10 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-semibold rounded-full shadow-lg">
                   Comparing
                 </div>
               )}
+
+              {/* Favorite button — always visible */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(mediaType, item._originId || item.id);
+                }}
+                className={`absolute top-2 right-2 z-10 flex items-center justify-center w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 transition-colors hover:bg-black/60 ${
+                  isFavorite(mediaType, item._originId || item.id) ? "text-rose-400" : "text-gray-300"
+                }`}
+                title={isFavorite(mediaType, item._originId || item.id) ? "Unfavorite" : "Favorite"}
+              >
+                <Heart
+                  className={`w-3.5 h-3.5 transition-colors ${
+                    isFavorite(mediaType, item._originId || item.id) ? "fill-rose-400" : ""
+                  }`}
+                />
+              </button>
 
               {/* Gradient overlay at bottom (always visible, subtle) */}
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gray-950/90 via-gray-950/40 to-transparent pt-6 pb-1.5 px-2.5 pointer-events-none">
@@ -376,86 +372,57 @@ export default function MediaGalleryGrid({
               </div>
 
               {/* Hover action overlay */}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex flex-col opacity-0 group-hover:opacity-100">
-                {/* Top row: icon actions */}
-                <div className="absolute top-2 right-2 flex gap-1.5">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(mediaType, item.id);
-                    }}
-                    className={`p-2 rounded-lg border transition-colors ${
-                      isFavorite(mediaType, item.id)
-                        ? "bg-rose-500/20 border-rose-500/50 text-rose-300"
-                        : "bg-gray-900/80 border-gray-700 text-gray-300 hover:text-rose-200 hover:border-rose-500/60 hover:bg-rose-600/20"
-                    }`}
-                    title="Favorite"
-                  >
-                    <Heart className={`w-3.5 h-3.5 ${isFavorite(mediaType, item.id) ? "fill-rose-400" : ""}`} />
-                  </button>
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-gray-900/50 transition-colors duration-200 flex flex-col opacity-0 group-hover:opacity-100 p-2">
+                {/* Top row: primary actions */}
+                <div className="flex flex-wrap justify-end gap-1">
                   {(mediaType === "music" || mediaType === "remix") && item.url && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         requestPlayTrack({ ...item, type: mediaType }, items);
                       }}
-                      className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                      className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
                       title="Play"
                     >
-                      <Play className="w-3.5 h-3.5" />
+                      <Play className="w-3 h-3" />
                     </button>
                   )}
                   <button
                     onClick={(e) => handleDownload(e, item)}
-                    className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                    className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
                     title="Download"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-3 h-3" />
                   </button>
+                </div>
+                {/* Bottom row: secondary actions */}
+                <div className="mt-auto flex flex-wrap justify-end gap-1">
                   {onCompare && (
                     <button
                       onClick={(e) => handleCompare(e, item)}
-                      className={`p-2 rounded-lg border transition-colors ${
+                      className={`p-1.5 rounded-md border transition-colors ${
                         isComparing
                           ? "bg-purple-500/30 border-purple-500/60 text-white"
                           : "bg-gray-900/80 border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20"
                       }`}
                       title="Compare"
                     >
-                      <GitCompare className="w-3.5 h-3.5" />
+                      <GitCompare className="w-3 h-3" />
                     </button>
                   )}
                   <button
                     onClick={(e) => handleReload(e, item)}
-                    className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-blue-200 hover:border-blue-500/60 hover:bg-blue-600/20 transition-colors"
+                    className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-blue-200 hover:border-blue-500/60 hover:bg-blue-600/20 transition-colors"
                     title="Reload prompt"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <RotateCcw className="w-3 h-3" />
                   </button>
                   <button
                     onClick={(e) => handleDelete(e, item.id)}
-                    className="p-2 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-rose-200 hover:border-rose-500/60 hover:bg-rose-600/20 transition-colors"
+                    className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-rose-200 hover:border-rose-500/60 hover:bg-rose-600/20 transition-colors"
                     title="Delete"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Bottom action: copy prompt */}
-                <div className="absolute bottom-2 left-2 right-2">
-                  <button
-                    onClick={(e) => handleCopyPrompt(e, item)}
-                    className="w-full py-1.5 rounded-lg bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600 hover:bg-gray-800/80 text-[10px] transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    {copiedId === item.id ? (
-                      <>
-                        <Check className="w-3 h-3" /> Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" /> Copy prompt
-                      </>
-                    )}
+                    <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -478,5 +445,17 @@ export default function MediaGalleryGrid({
         </div>
       )}
     </div>
+
+    <ConfirmDialog
+      isOpen={deleteConfirm !== null}
+      onClose={() => setDeleteConfirm(null)}
+      onConfirm={confirmDelete}
+      title={`Delete ${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)}`}
+      message="Are you sure you want to delete this item? This action cannot be undone."
+      confirmText="Delete"
+      cancelText="Cancel"
+      variant="danger"
+    />
+  </>
   );
 }

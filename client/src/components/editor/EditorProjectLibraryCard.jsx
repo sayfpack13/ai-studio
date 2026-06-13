@@ -50,7 +50,7 @@ export default function EditorProjectLibraryCard({ onOpenProjectManager }) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col">
       {/* Current Project Status Bar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 bg-gray-950/40">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 bg-gray-900/40">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs text-gray-500 truncate">
             {project.name || "Untitled Project"}
@@ -102,7 +102,7 @@ export default function EditorProjectLibraryCard({ onOpenProjectManager }) {
       </div>
 
       {/* Tab Buttons */}
-      <div className="flex items-center gap-1 border-b border-gray-800 bg-gray-950/60 p-1">
+      <div className="flex items-center gap-1 border-b border-gray-800 bg-gray-900/60 p-1">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
           return (

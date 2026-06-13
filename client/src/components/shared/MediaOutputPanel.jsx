@@ -4,7 +4,6 @@ import {
   Image as ImageIcon,
   Video as VideoIcon,
   Music as MusicIcon,
-  Wand2,
   History,
   GitCompare,
   Download,
@@ -70,7 +69,7 @@ const MEDIA_CONFIG = {
     loadingText: "text-emerald-300",
   },
   remix: {
-    icon: Wand2,
+    icon: MusicIcon,
     label: "Remix",
     loadingMessage: "Generating remix...",
     emptyMessage: "No remix generated yet",
@@ -122,7 +121,7 @@ export default function MediaOutputPanel({
   const [zoomedMedia, setZoomedMedia] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
   const [compareItems, setCompareItems] = useState([]);
-  const { requestPlayTrack } = useAudioPlayer();
+  const { requestPlayTrack, playTrack } = useAudioPlayer();
 
   useEffect(() => {
     if (loading) {
@@ -351,13 +350,13 @@ export default function MediaOutputPanel({
           )}
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/20">
             {mediaType === "remix" ? (
-              <Wand2 className="w-10 h-10 text-white" />
+              <MusicIcon className="w-10 h-10 text-white" />
             ) : (
               <Volume2 className="w-10 h-10 text-white" />
             )}
           </div>
           <button
-            onClick={() => requestPlayTrack({ ...item, type: mediaType })}
+            onClick={() => playTrack({ ...item, type: mediaType })}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-gray-950 font-medium hover:bg-gray-200 transition-colors"
           >
             <Play className="w-5 h-5" />
@@ -381,10 +380,10 @@ export default function MediaOutputPanel({
 
   return (
     <div
-      className={`flex flex-col h-full bg-gray-950/60 border border-gray-800 rounded-2xl overflow-hidden ${className}`}
+      className={`flex flex-col h-full bg-gray-900/60 border border-gray-800 rounded-2xl overflow-hidden ${className}`}
     >
       {/* Tabs Header */}
-      <div className="flex items-center gap-2 p-3 border-b border-gray-800 bg-gray-950/80">
+      <div className="flex items-center gap-2 p-3 border-b border-gray-800 bg-gray-900/80">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -607,16 +606,16 @@ export default function MediaOutputPanel({
                       Download
                     </Button>
                     <Button
-                      variant={isFavorite(mediaType, generatedMedia.id) ? "primary" : "ghost"}
+                      variant={isFavorite(mediaType, generatedMedia._originId || generatedMedia.id) ? "primary" : "ghost"}
                       size="sm"
-                      onClick={() => toggleFavorite(mediaType, generatedMedia.id)}
+                      onClick={() => toggleFavorite(mediaType, generatedMedia._originId || generatedMedia.id)}
                       leftIcon={
                         <Heart
-                          className={`w-4 h-4 ${isFavorite(mediaType, generatedMedia.id) ? "fill-rose-400 text-rose-400" : ""}`}
+                          className={`w-4 h-4 ${isFavorite(mediaType, generatedMedia._originId || generatedMedia.id) ? "fill-rose-400 text-rose-400" : ""}`}
                         />
                       }
                     >
-                      {isFavorite(mediaType, generatedMedia.id) ? "Favorited" : "Favorite"}
+                      {isFavorite(mediaType, generatedMedia._originId || generatedMedia.id) ? "Favorited" : "Favorite"}
                     </Button>
                     {(mediaType === "image" || mediaType === "remix") &&
                       onSendToVideo && (
@@ -629,20 +628,22 @@ export default function MediaOutputPanel({
                         Send to Video
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopyPrompt}
-                      leftIcon={
-                        copiedPrompt ? (
-                          <Check className="w-4 h-4" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )
-                      }
-                    >
-                      {copiedPrompt ? "Copied" : "Copy Prompt"}
-                    </Button>
+                    {mediaType !== "remix" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCopyPrompt}
+                        leftIcon={
+                          copiedPrompt ? (
+                            <Check className="w-4 h-4" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )
+                        }
+                      >
+                        {copiedPrompt ? "Copied" : "Copy Prompt"}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -689,7 +690,7 @@ export default function MediaOutputPanel({
               transition={{ duration: 0.15 }}
               className="flex flex-col h-full"
             >
-              <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-gray-950/70">
+              <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-gray-900/70">
                 <div className="flex items-center gap-2 text-sm text-gray-400">
                   <History className="w-4 h-4" />
                   <span>
@@ -783,7 +784,7 @@ export default function MediaOutputPanel({
               <X className="w-6 h-6" />
             </button>
             {zoomedMedia.prompt && (
-              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-gray-950/90 border border-gray-800 rounded-xl p-3">
+              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-gray-900/90 border border-gray-800 rounded-xl p-3">
                 <p className="text-sm text-gray-300">{zoomedMedia.prompt}</p>
               </div>
             )}

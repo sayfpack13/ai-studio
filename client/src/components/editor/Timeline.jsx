@@ -199,7 +199,7 @@ function TrackRow({
 
   return (
     <div
-      className={`relative h-14 bg-gray-950/40 border border-gray-800/50 rounded-lg overflow-hidden transition-colors ${
+      className={`relative h-14 bg-gray-900/40 border border-gray-800/50 rounded-lg overflow-hidden transition-colors ${
         track.locked ? "opacity-50" : ""
       }`}
       onMouseDown={(e) => {
@@ -319,7 +319,7 @@ function TrackRow({
 function TrackKeyframesRow({ track, pxPerSecond }) {
   const keyframes = track.keyframes || [];
   return (
-    <div className="relative h-6 bg-gray-950/60 border border-gray-800 rounded-lg overflow-hidden">
+    <div className="relative h-6 bg-gray-900/60 border border-gray-800 rounded-lg overflow-hidden">
       {keyframes.map((keyframe, index) => {
         const time = keyframe?.time ?? keyframe?.at ?? keyframe?.t ?? null;
         if (typeof time !== "number") return null;
@@ -702,7 +702,7 @@ export default function Timeline() {
           {tracks.map((track) => (
             <div key={track.id} className="space-y-1">
               <TrackHeader track={track} updateTrack={updateTrack} />
-              <div className="h-6 bg-gray-950/30 border border-gray-800/30 rounded-lg px-3 flex items-center text-[10px] text-gray-600 uppercase tracking-wider">
+              <div className="h-6 bg-gray-900/30 border border-gray-800/30 rounded-lg px-3 flex items-center text-[10px] text-gray-600 uppercase tracking-wider">
                 <svg
                   className="w-3 h-3 mr-1.5 opacity-50"
                   fill="none"

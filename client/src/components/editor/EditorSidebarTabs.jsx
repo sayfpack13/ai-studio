@@ -52,7 +52,7 @@ export default function EditorSidebarTabs() {
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col min-h-[480px]">
-      <div className="flex items-center gap-1 border-b border-gray-800 bg-gray-950/60 p-1 overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-gray-800 bg-gray-900/60 p-1 overflow-x-auto">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
           return (

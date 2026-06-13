@@ -34,9 +34,9 @@ function AppContent() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-white overflow-hidden">
+    <div className="flex flex-col h-screen bg-gray-900 text-white overflow-hidden">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 flex-shrink-0">
+      <header className="bg-gray-800 border-b border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between h-14 px-4">
           {/* Logo and Toggle */}
           <div className="flex items-center gap-3">

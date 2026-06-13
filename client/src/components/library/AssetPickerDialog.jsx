@@ -249,14 +249,14 @@ export default function AssetPickerDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-gray-900/70 flex items-center justify-center p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className="w-full max-w-5xl max-h-[90vh] bg-gray-950 border border-gray-800 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[90vh] bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/80">
+        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900/80">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center">
               {type === "video" ? (
@@ -298,7 +298,7 @@ export default function AssetPickerDialog({
         </div>
 
         {/* Search */}
-        <div className="p-3 border-b border-gray-800 bg-gray-950/80">
+        <div className="p-3 border-b border-gray-800 bg-gray-900/80">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
@@ -397,12 +397,23 @@ export default function AssetPickerDialog({
                     </p>
                   </div>
 
-                  {/* Favorite indicator */}
-                  {isFavorite(asset.type, asset.id) && (
-                    <div className="absolute top-2 left-2 z-10">
-                      <Heart className="w-4 h-4 text-rose-400 fill-rose-400 drop-shadow" />
-                    </div>
-                  )}
+                  {/* Favorite button — always visible */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(asset.type, asset._originId || asset.id);
+                    }}
+                    className={`absolute top-2 left-2 z-10 flex items-center justify-center w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 transition-colors hover:bg-black/60 ${
+                      isFavorite(asset.type, asset._originId || asset.id) ? "text-rose-400" : "text-gray-300"
+                    }`}
+                    title={isFavorite(asset.type, asset._originId || asset.id) ? "Unfavorite" : "Favorite"}
+                  >
+                    <Heart
+                      className={`w-3.5 h-3.5 transition-colors ${
+                        isFavorite(asset.type, asset._originId || asset.id) ? "fill-rose-400" : ""
+                      }`}
+                    />
+                  </button>
 
                   {/* Selected indicator */}
                   {selectedAssetId === asset.id && (
@@ -413,20 +424,6 @@ export default function AssetPickerDialog({
 
                   {/* Hover actions */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(asset.type, asset.id);
-                      }}
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                        isFavorite(asset.type, asset.id)
-                          ? "bg-rose-500/20 border border-rose-500/40 text-rose-300"
-                          : "bg-white/10 text-white hover:bg-white/20"
-                      }`}
-                      title="Favorite"
-                    >
-                      <Heart className={`w-4 h-4 ${isFavorite(asset.type, asset.id) ? "fill-rose-400" : ""}`} />
-                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -456,7 +453,7 @@ export default function AssetPickerDialog({
         </div>
 
         {/* Footer with Select button */}
-        <div className="p-4 border-t border-gray-800 flex items-center justify-between bg-gray-950/80">
+        <div className="p-4 border-t border-gray-800 flex items-center justify-between bg-gray-900/80">
           <p className="text-sm text-gray-400">
             {selectedAssetId
               ? `Selected: ${mergedAssets.find((a) => a.id === selectedAssetId)?.title || "Asset"}`
@@ -475,12 +472,12 @@ export default function AssetPickerDialog({
       {/* Preview Modal */}
       {previewAsset && (
         <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[60] bg-gray-900/80 flex items-center justify-center p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) setPreviewAsset(null);
           }}
         >
-          <div className="max-w-4xl w-full bg-gray-950 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+          <div className="max-w-4xl w-full bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between p-3 border-b border-gray-800">
               <div>
                 <p className="text-sm font-semibold text-white truncate">

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { clsx } from "clsx";
 import { resolveAssetUrl } from "../../services/api";
+import ConfirmDialog from "../ui/ConfirmDialog";
 import {
   X,
   Download,
@@ -12,7 +14,6 @@ import {
   Video as VideoIcon,
   Music as MusicIcon,
   ImageOff,
-  Wand2,
   Volume2,
   Heart,
   Play,
@@ -33,6 +34,10 @@ function isAudioType(type) {
   return type === "audio" || type === "music" || type === "remix";
 }
 
+function cn(...inputs) {
+  return clsx(inputs);
+}
+
 export default function MediaPreviewDialog({
   open,
   asset,
@@ -46,6 +51,8 @@ export default function MediaPreviewDialog({
   showCopy = true,
 }) {
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState("info");
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { pendingTrack, confirmReplace } = useAudioPlayer();
 
@@ -54,6 +61,8 @@ export default function MediaPreviewDialog({
   const typeMeta = TYPE_META[type] || TYPE_META.project;
   const TypeIcon = typeMeta.icon;
   const resolvedUrl = safeAsset.url ? resolveAssetUrl(safeAsset.url) : "";
+  const tagsText = safeAsset.tags || safeAsset.metadata?.tags || "";
+  const lyricsText = safeAsset.lyrics || safeAsset.metadata?.lyrics || "";
 
   useEffect(() => {
     if (!open) return;
@@ -171,12 +180,10 @@ export default function MediaPreviewDialog({
       const primaryUrl = urls[0] ? resolveAssetUrl(urls[0]) : "";
       const promptText =
         asset.prompt || asset.metadata?.description || asset.title || "";
-      const tagsText = asset.tags || asset.metadata?.tags || "";
-      const lyricsText = asset.lyrics || asset.metadata?.lyrics || "";
       const thumb = asset.thumbnail || asset.metadata?.thumbnail || null;
 
       return (
-        <div className="w-full max-w-2xl mx-auto max-h-[70vh] overflow-y-auto space-y-4">
+        <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
           {/* Styled player container */}
           <div
             className={`bg-gradient-to-br ${
@@ -193,11 +200,7 @@ export default function MediaPreviewDialog({
               />
             )}
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/20">
-              {isRemix ? (
-                <Wand2 className="w-10 h-10 text-white" />
-              ) : (
-                <Volume2 className="w-10 h-10 text-white" />
-              )}
+              <MusicIcon className="w-10 h-10 text-white" />
             </div>
 
             {pendingTrack ? (
@@ -221,79 +224,6 @@ export default function MediaPreviewDialog({
               </p>
             )}
           </div>
-
-          {/* Tags & Lyrics */}
-          {isRemix && (tagsText || lyricsText) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {tagsText && (
-                <div className="p-3 bg-gray-900/80 rounded-xl border border-gray-800">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">
-                    Generated tags
-                  </p>
-                  <p className="text-sm text-purple-300">{tagsText}</p>
-                </div>
-              )}
-              {lyricsText && (
-                <div className="p-3 bg-gray-900/80 rounded-xl border border-gray-800 max-h-40 overflow-y-auto">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">
-                    Generated lyrics
-                  </p>
-                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
-                    {lyricsText}
-                  </pre>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Metadata badges */}
-          <div className="flex flex-wrap gap-1.5 justify-center">
-            {(asset.model || asset.metadata?.model || asset.metadata?.mode) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                {asset.model || asset.metadata?.model || asset.metadata?.mode}
-              </span>
-            )}
-            {(asset.duration != null || asset.metadata?.duration != null) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                {(asset.duration ?? asset.metadata?.duration)}s
-              </span>
-            )}
-            {(asset.seed != null || asset.metadata?.seed != null) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                seed {asset.seed ?? asset.metadata?.seed}
-              </span>
-            )}
-            {(asset.bpm != null || asset.metadata?.bpm != null) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                {(asset.bpm ?? asset.metadata?.bpm)} bpm
-              </span>
-            )}
-            {(asset.keyScale || asset.metadata?.keyScale) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                key {asset.keyScale || asset.metadata?.keyScale}
-              </span>
-            )}
-            {(asset.timeSignature != null || asset.metadata?.timeSignature != null) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                {(asset.timeSignature ?? asset.metadata?.timeSignature)}/4
-              </span>
-            )}
-            {(asset.inferStep != null || asset.metadata?.inferStep != null) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                {(asset.inferStep ?? asset.metadata?.inferStep)} steps
-              </span>
-            )}
-            {(asset.guidanceScale != null || asset.metadata?.guidanceScale != null) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                CFG {asset.guidanceScale ?? asset.metadata?.guidanceScale}
-              </span>
-            )}
-            {(asset.coverStrength != null || asset.metadata?.coverStrength != null) && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-gray-800 text-gray-400">
-                cover {asset.coverStrength ?? asset.metadata?.coverStrength}
-              </span>
-            )}
-          </div>
         </div>
       );
     }
@@ -308,13 +238,13 @@ export default function MediaPreviewDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 pb-20">
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm"
         onClick={() => onClose?.()}
       />
       <div
-        className="relative w-full max-w-4xl max-h-[90vh] bg-gray-950 border border-gray-800 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col z-10"
+        className="relative w-full max-w-4xl max-h-[75vh] bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col z-10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -334,15 +264,15 @@ export default function MediaPreviewDialog({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => toggleFavorite(type, asset.id)}
+              onClick={() => toggleFavorite(type, asset._originId || asset.id)}
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors ${
-                isFavorite(type, asset.id)
+                isFavorite(type, asset._originId || asset.id)
                   ? "bg-rose-500/20 border-rose-500/50 text-rose-300"
                   : "bg-gray-900/80 border-gray-700 text-gray-300 hover:text-rose-200 hover:border-rose-500/60 hover:bg-rose-600/20"
               }`}
               title="Favorite"
             >
-              <Heart className={`w-4 h-4 ${isFavorite(type, asset.id) ? "fill-rose-400" : ""}`} />
+              <Heart className={`w-4 h-4 ${isFavorite(type, asset._originId || asset.id) ? "fill-rose-400" : ""}`} />
             </button>
             <button
               onClick={onClose}
@@ -359,7 +289,7 @@ export default function MediaPreviewDialog({
         </div>
 
         {/* Action Bar */}
-        <div className="flex items-center justify-between p-3 border-t border-gray-800 bg-gray-950/80">
+        <div className="flex items-center justify-between p-3 border-t border-gray-800 bg-gray-900/80">
           <div className="flex items-center gap-2">
             {showDownload && asset.url && (
               <button
@@ -395,7 +325,7 @@ export default function MediaPreviewDialog({
           </div>
           {showDelete && (
             <button
-              onClick={() => onDelete?.(asset)}
+              onClick={() => setDeleteConfirm(true)}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-500 text-sm font-medium text-white transition-all"
             >
               <Trash2 className="w-4 h-4" />
@@ -404,21 +334,109 @@ export default function MediaPreviewDialog({
           )}
         </div>
 
-        {/* Metadata */}
-        <div className="p-4 border-t border-gray-800 bg-gray-950/80">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {metaRows.map((row) => (
-              <div key={row.label} className="text-xs text-gray-500">
-                <p className="uppercase tracking-wider">{row.label}</p>
-                <p className="text-sm text-gray-200 mt-1 truncate">
-                  {row.value}
-                </p>
-              </div>
-            ))}
+        {/* Tabbed Details */}
+        {isAudioType(type) && (
+          <div className="border-t border-gray-800 bg-gray-900/80 flex flex-col min-h-0">
+            {/* Tabs */}
+            <div className="flex items-center gap-1 border-b border-gray-800 px-3 pt-2">
+              {[
+                { id: "info", label: "Info" },
+                ...(tagsText ? [{ id: "tags", label: "Tags" }] : []),
+                ...(lyricsText ? [{ id: "lyrics", label: "Lyrics" }] : []),
+                { id: "params", label: "Params" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-t-lg text-xs font-medium transition-colors border-b-2",
+                    activeTab === tab.id
+                      ? "text-purple-300 border-purple-500"
+                      : "text-gray-500 border-transparent hover:text-gray-300"
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* Tab content */}
+            <div className="p-3 overflow-y-auto max-h-[22vh]">
+              {activeTab === "info" && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {metaRows
+                    .filter((r) => !["Tags", "Lyrics", "Seed", "BPM", "Key", "Time Signature", "Cover Strength", "Ref Strength", "Infer Steps", "Guidance", "Negative", "Thinking"].includes(r.label))
+                    .map((row) => (
+                      <div key={row.label} className="text-xs text-gray-500">
+                        <p className="uppercase tracking-wider">{row.label}</p>
+                        <p className="text-sm text-gray-200 mt-1 truncate">
+                          {row.value}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              )}
+              {activeTab === "tags" && tagsText && (
+                <div className="p-2 bg-gray-900/60 rounded-xl border border-gray-800">
+                  <p className="text-sm text-purple-300">{tagsText}</p>
+                </div>
+              )}
+              {activeTab === "lyrics" && lyricsText && (
+                <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono p-2 bg-gray-900/60 rounded-xl border border-gray-800">
+                  {lyricsText}
+                </pre>
+              )}
+              {activeTab === "params" && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {metaRows
+                    .filter((r) => ["Seed", "BPM", "Key", "Time Signature", "Cover Strength", "Ref Strength", "Infer Steps", "Guidance", "Negative", "Thinking"].includes(r.label))
+                    .map((row) => (
+                      <div key={row.label} className="text-xs text-gray-500">
+                        <p className="uppercase tracking-wider">{row.label}</p>
+                        <p className="text-sm text-gray-200 mt-1 truncate">
+                          {row.value}
+                        </p>
+                      </div>
+                    ))}
+                  {/* Fallback if no param fields */}
+                  {metaRows.filter((r) => ["Seed", "BPM", "Key", "Time Signature", "Cover Strength", "Ref Strength", "Infer Steps", "Guidance", "Negative", "Thinking"].includes(r.label)).length === 0 && (
+                    <p className="text-xs text-gray-500 col-span-full">No extra parameters recorded.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
+        )}
 
-        </div>
+        {/* Non-audio metadata fallback */}
+        {!isAudioType(type) && (
+          <div className="p-4 border-t border-gray-800 bg-gray-900/80 max-h-[22vh] overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {metaRows.map((row) => (
+                <div key={row.label} className="text-xs text-gray-500">
+                  <p className="uppercase tracking-wider">{row.label}</p>
+                  <p className="text-sm text-gray-200 mt-1 truncate">
+                    {row.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      <ConfirmDialog
+        isOpen={deleteConfirm}
+        onClose={() => setDeleteConfirm(false)}
+        onConfirm={() => {
+          onDelete?.(asset);
+          setDeleteConfirm(false);
+        }}
+        title={`Delete ${type.charAt(0).toUpperCase() + type.slice(1)}`}
+        message="Are you sure you want to delete this item? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

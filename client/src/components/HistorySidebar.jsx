@@ -13,6 +13,7 @@ import {
   Folder,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import ConfirmDialog from "./ui/ConfirmDialog";
 
 export default function HistorySidebar({ isOpen, onToggle }) {
   const location = useLocation();
@@ -45,6 +46,7 @@ export default function HistorySidebar({ isOpen, onToggle }) {
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const LAST_CHAT_KEY = "blackbox_ai_last_chat_id";
   const LAST_IMAGE_KEY = "blackbox_ai_last_image_id";
@@ -258,6 +260,12 @@ export default function HistorySidebar({ isOpen, onToggle }) {
 
   const handleDelete = (id, event) => {
     event.stopPropagation();
+    setDeleteConfirm(id);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteConfirm) return;
+    const id = deleteConfirm;
     switch (pageType) {
       case "chat":
         deleteChat(id);
@@ -283,6 +291,7 @@ export default function HistorySidebar({ isOpen, onToggle }) {
       default:
         break;
     }
+    setDeleteConfirm(null);
   };
 
   const handleClearAll = () => {
@@ -425,6 +434,17 @@ export default function HistorySidebar({ isOpen, onToggle }) {
           </button>
         </div>
       </aside>
+
+      <ConfirmDialog
+        isOpen={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title={`Delete ${pageLabels[pageType]?.replace(" History", "") || "Item"}`}
+        message="Are you sure you want to delete this item? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </>
   );
 }

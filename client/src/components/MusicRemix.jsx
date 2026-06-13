@@ -769,7 +769,7 @@ export default function MusicRemix() {
   );
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
+    <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
       <div className="flex-shrink-0 p-4 border-b border-gray-800">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">

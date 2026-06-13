@@ -238,7 +238,7 @@ export default function ProjectManagerDialog({ open, onClose }) {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-4">
-            <div className="bg-gray-950/60 border border-gray-800 rounded-lg p-4 space-y-3">
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-4 space-y-3">
               <div>
                 <h4 className="text-sm font-semibold text-white">
                   Current Project
@@ -308,7 +308,7 @@ export default function ProjectManagerDialog({ open, onClose }) {
             </div>
           </div>
 
-          <div className="bg-gray-950/60 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-4 space-y-3">
             <div>
               <h4 className="text-sm font-semibold text-white">
                 Recent Projects

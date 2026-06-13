@@ -568,7 +568,14 @@ export function JobProvider({ children }) {
               onSaved: (savedUrl, savedUrls) => {
                 console.log("[JobContext] onSaved:", savedUrl, savedUrls, "settled:", settled);
                 if (savedUrl) {
-                  updateJob(job.id, { resultUrl: savedUrl, resultUrls: savedUrls });
+                  updateJob(job.id, {
+                    status: "completed",
+                    resultUrl: savedUrl,
+                    resultUrls: savedUrls,
+                    progress: 100,
+                    message: "Complete",
+                    completedAt: Date.now(),
+                  });
                 }
                 const result = { url: savedUrl || null };
                 if (savedUrls?.length > 1) result.urls = savedUrls;
@@ -593,6 +600,14 @@ export function JobProvider({ children }) {
           if (controller.signal.aborted) {
             return { cancelled: true };
           }
+
+          // Defensive: mark completed immediately so UI never gets stuck
+          updateJob(job.id, {
+            status: "completed",
+            progress: 100,
+            message: "Complete",
+            completedAt: Date.now(),
+          });
 
           if (saveResult) {
             await saveResult(resultData);

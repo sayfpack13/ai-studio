@@ -21,7 +21,7 @@ export default function Toolbar({ onExport, onProject }) {
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-1 bg-gray-950/60 border border-gray-800 rounded-lg p-1">
+      <div className="flex items-center gap-1 bg-gray-900/60 border border-gray-800 rounded-lg p-1">
         <button
           className="px-2 py-1 rounded text-gray-300 hover:bg-gray-700 disabled:opacity-50"
           onClick={undo}
@@ -64,7 +64,7 @@ export default function Toolbar({ onExport, onProject }) {
         </button>
       </div>
 
-      <div className="flex items-center gap-1 bg-gray-950/60 border border-gray-800 rounded-lg p-1">
+      <div className="flex items-center gap-1 bg-gray-900/60 border border-gray-800 rounded-lg p-1">
         <button
           className="px-3 py-1.5 rounded text-gray-200 hover:bg-gray-700 text-xs disabled:opacity-50"
           onClick={() =>

@@ -261,13 +261,10 @@ async function handleDownload(url, title, type, metadata = {}, format = "origina
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(objectUrl);
-  } catch {
-    const link = document.createElement("a");
-    link.href = resolved;
-    link.download = filename || "download";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  } catch (err) {
+    console.error("Download failed:", err);
+    // Last resort: try opening in new tab
+    window.open(resolved, "_blank");
   }
 }
 

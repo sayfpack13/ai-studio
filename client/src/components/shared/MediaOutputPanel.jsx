@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { Mp3Encoder } from "lamejs";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Image as ImageIcon,
@@ -18,10 +19,12 @@ import {
   RefreshCw,
   Sparkles,
   Volume2,
+  Loader2,
   AlertCircle,
   Clock,
   Trash2,
   Heart,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "../ui";
 import { resolveAssetUrl } from "../../services/api";
@@ -98,6 +101,9 @@ export default function MediaOutputPanel({
   progress,
   loadingMessage: loadingMessageOverride,
   onClearError,
+  downloadFormat,
+  setDownloadFormat,
+  isConverting,
   className = "",
 }) {
   const config = MEDIA_CONFIG[mediaType];
@@ -121,6 +127,7 @@ export default function MediaOutputPanel({
   const [zoomedMedia, setZoomedMedia] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
   const [compareItems, setCompareItems] = useState([]);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const { requestPlayTrack, playTrack } = useAudioPlayer();
 
   useEffect(() => {
@@ -132,44 +139,48 @@ export default function MediaOutputPanel({
   // Get history items as array
   const historyItems = useMemo(() => {
     const ids = getMediaIds?.() || [];
-    return ids
-      .map((id) => {
-        const item = mediaHistory[id];
-        if (!item) return null;
-        // Handle result object structure (image/video/music history stores url in result)
-        const result = item.result || {};
-        return {
-          id: id,
-          type: mediaType,
-          source: "history",
-          prompt: item.prompt,
-          model: item.model,
-          lastUpdated: item.lastUpdated,
-          updatedAt: item.lastUpdated,
-          url: result.url,
-          urls: result.urls,
-          title: result.title || null,
-          tags: result.tags || null,
-          lyrics: result.lyrics || null,
-          thumbnail: result.thumbnail || null,
-          revisedPrompt: result.revisedPrompt,
-          metadata: item.metadata,
-          mode: result.mode || item.metadata?.mode || null,
-          duration: result.duration || item.metadata?.duration || null,
-          seed: result.seed ?? item.metadata?.seed ?? null,
-          coverStrength: result.coverStrength ?? item.metadata?.coverStrength ?? null,
-          refAudioStrength: result.refAudioStrength ?? item.metadata?.refAudioStrength ?? null,
-          bpm: result.bpm ?? item.metadata?.bpm ?? null,
-          keyScale: result.keyScale ?? item.metadata?.keyScale ?? null,
-          timeSignature: result.timeSignature ?? item.metadata?.timeSignature ?? null,
-          negativeStyles: result.negativeStyles ?? item.metadata?.negativeStyles ?? null,
-          thinking: result.thinking ?? item.metadata?.thinking ?? null,
-          inferStep: result.inferStep ?? item.metadata?.inferStep ?? null,
-          guidanceScale: result.guidanceScale ?? item.metadata?.guidanceScale ?? null,
-        };
-      })
-      .filter((item) => item?.url && !String(item.url).startsWith("data:"));
-  }, [mediaHistory, getMediaIds]);
+    const items = [];
+    
+    for (const id of ids) {
+      const item = mediaHistory[id];
+      if (!item) continue;
+      // Handle result object structure (image/video/music history stores url in result)
+      const result = item.result || {};
+      const baseEntry = {
+        id: id,
+        type: mediaType,
+        source: "history",
+        prompt: item.prompt,
+        model: item.model,
+        lastUpdated: item.lastUpdated,
+        updatedAt: item.lastUpdated,
+        url: result.url,
+        urls: result.urls,
+        title: result.title || null,
+        tags: result.tags || null,
+        lyrics: result.lyrics || null,
+        thumbnail: result.thumbnail || null,
+        revisedPrompt: result.revisedPrompt,
+        metadata: item.metadata,
+        mode: result.mode || item.metadata?.mode || null,
+        duration: result.duration || item.metadata?.duration || null,
+        seed: result.seed ?? item.metadata?.seed ?? null,
+        coverStrength: result.coverStrength ?? item.metadata?.coverStrength ?? null,
+        refAudioStrength: result.refAudioStrength ?? item.metadata?.refAudioStrength ?? null,
+        bpm: result.bpm ?? item.metadata?.bpm ?? null,
+        keyScale: result.keyScale ?? item.metadata?.keyScale ?? null,
+        timeSignature: result.timeSignature ?? item.metadata?.timeSignature ?? null,
+        negativeStyles: result.negativeStyles ?? item.metadata?.negativeStyles ?? null,
+        thinking: result.thinking ?? item.metadata?.thinking ?? null,
+        inferStep: result.inferStep ?? item.metadata?.inferStep ?? null,
+        guidanceScale: result.guidanceScale ?? item.metadata?.guidanceScale ?? null,
+      };
+      
+      items.push(baseEntry);
+    }
+    
+    return items.filter((item) => item?.url && !String(item.url).startsWith("data:"));
+  }, [mediaHistory, getMediaIds, mediaType]);
 
   const displayedHistoryItems = useMemo(() => {
     if (!showFavoritesOnly) return historyItems;
@@ -228,7 +239,7 @@ export default function MediaOutputPanel({
     }
   };
 
-  const handlePreviewDownload = async (asset) => {
+  const handlePreviewDownload = async (asset, format = "original") => {
     if (!asset?.url) return;
     const resolved = resolveAssetUrl(asset.url);
     const sanitize = (value) =>
@@ -244,6 +255,72 @@ export default function MediaOutputPanel({
       ? baseName
       : `${baseName}${ext}`;
 
+    const isAudioType = mediaType === "music" || mediaType === "audio" || mediaType === "remix";
+    if (isAudioType && format === "mp3") {
+      try {
+        const response = await fetch(resolved);
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        const mp3encoder = new Mp3Encoder(audioBuffer.numberOfChannels, audioBuffer.sampleRate, 128);
+        const mp3Data = [];
+
+        const leftChannel = audioBuffer.getChannelData(0);
+        const rightChannel = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : leftChannel;
+
+        const sampleBlockSize = 1152;
+        for (let i = 0; i < leftChannel.length; i += sampleBlockSize) {
+          const leftChunk = leftChannel.subarray(i, i + sampleBlockSize);
+          const rightChunk = rightChannel.subarray(i, i + sampleBlockSize);
+          const leftInt16 = new Int16Array(leftChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const rightInt16 = new Int16Array(rightChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const mp3buf = mp3encoder.encodeBuffer(leftInt16, rightInt16);
+          if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+          }
+        }
+
+        const mp3buf = mp3encoder.flush();
+        if (mp3buf.length > 0) {
+          mp3Data.push(mp3buf);
+        }
+
+        const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        console.error("MP3 conversion failed:", err);
+        // Try direct fetch download as fallback
+        try {
+          const response = await fetch(resolved);
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = objectUrl;
+          link.download = filename.replace('.mp3', '.wav');
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(objectUrl);
+        } catch {
+          window.open(resolved, "_blank");
+        }
+      }
+      return;
+    }
+
+    // Always fetch as blob to handle cross-origin downloads properly
     try {
       const response = await fetch(resolved);
       if (!response.ok) {
@@ -254,17 +331,15 @@ export default function MediaOutputPanel({
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = filename;
+      link.style.display = "none";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
-    } catch {
-      const link = document.createElement("a");
-      link.href = resolved;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Download failed:", err);
+      // Last resort: try opening in new tab
+      window.open(resolved, "_blank");
     }
   };
 
@@ -355,13 +430,41 @@ export default function MediaOutputPanel({
               <Volume2 className="w-10 h-10 text-white" />
             )}
           </div>
-          <button
-            onClick={() => playTrack({ ...item, type: mediaType })}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-gray-950 font-medium hover:bg-gray-200 transition-colors"
-          >
-            <Play className="w-5 h-5" />
-            Play
-          </button>
+          {/* Variant buttons for multi-URL remixes */}
+          {item.urls && item.urls.length > 1 ? (
+            <div className="w-full space-y-2 mt-2">
+              {item.urls.map((variantUrl, idx) => {
+                const label = String.fromCharCode(65 + idx);
+                const variantItem = { ...item, url: variantUrl, id: `${item.id}_${idx}`, type: mediaType };
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => playTrack(variantItem)}
+                    className="w-full flex items-center gap-3 bg-gray-900/50 hover:bg-gray-800/50 rounded-lg p-3 border border-gray-800 transition-colors"
+                  >
+                    <span className="w-8 h-8 rounded-full bg-purple-600/80 text-white text-sm font-semibold flex items-center justify-center shrink-0">
+                      {label}
+                    </span>
+                    <div className="flex-1 text-left">
+                      <span className="text-sm text-white font-medium block">Variant {label}</span>
+                      <span className="text-xs text-gray-500">
+                        {idx === 0 ? "Primary version" : "Alternative version"}
+                      </span>
+                    </div>
+                    <Play className="w-5 h-5 text-purple-400" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <button
+              onClick={() => playTrack({ ...item, type: mediaType })}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-gray-950 font-medium hover:bg-gray-200 transition-colors"
+            >
+              <Play className="w-5 h-5" />
+              Play
+            </button>
+          )}
           {(item.title || item.prompt) && (
             <p className="text-sm text-gray-300 mt-4 text-center max-w-md font-medium">
               {item.title || item.prompt}
@@ -597,14 +700,53 @@ export default function MediaOutputPanel({
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={onDownload}
-                      leftIcon={<Download className="w-4 h-4" />}
-                    >
-                      Download
-                    </Button>
+                    {mediaType === "remix" ? (
+                      <div className="relative">
+                        <Button
+                          variant="success"
+                          size="sm"
+                          onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                          disabled={isConverting}
+                          leftIcon={isConverting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                          rightIcon={<ChevronDown className="w-4 h-4" />}
+                        >
+                          {isConverting ? "Converting..." : "Download"}
+                        </Button>
+                        {showDownloadMenu && (
+                          <div className="absolute top-full left-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 min-w-[150px]">
+                            <button
+                              onClick={() => {
+                                setDownloadFormat?.("wav");
+                                setShowDownloadMenu(false);
+                                onDownload();
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 rounded-t-lg"
+                            >
+                              WAV
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDownloadFormat?.("mp3");
+                                setShowDownloadMenu(false);
+                                onDownload();
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 rounded-b-lg"
+                            >
+                              MP3
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Button
+                        variant="success"
+                        size="sm"
+                        onClick={onDownload}
+                        leftIcon={<Download className="w-4 h-4" />}
+                      >
+                        Download
+                      </Button>
+                    )}
                     <Button
                       variant={isFavorite(mediaType, generatedMedia._originId || generatedMedia.id) ? "primary" : "ghost"}
                       size="sm"

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Mp3Encoder } from "lamejs";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion"; // eslint-disable-line no-unused-vars -- motion is used as motion.div/motion.pre
 import {
@@ -52,6 +53,7 @@ function normalizeHistoryItem(item, id, type, source) {
   if (isInvalidMediaUrl(url)) return null;
 
   const thumbnail = item?.thumbnail || item?.result?.thumbnail || null;
+  const urls = item?.urls || item?.result?.urls || [];
 
   return {
     id: `hist_${type}_${id}`,
@@ -59,6 +61,7 @@ function normalizeHistoryItem(item, id, type, source) {
     type,
     source,
     url,
+    urls,
     thumbnail,
     metadata: item?.metadata || {},
     createdAt: item?.createdAt || item?.lastUpdated || fallbackTime,
@@ -100,7 +103,7 @@ function fileToDataUrl(file) {
   });
 }
 
-async function handleDownload(url, title, type, metadata = {}) {
+async function handleDownload(url, title, type, metadata = {}, format = "original") {
   const resolved = resolveAssetUrl(url);
   const sanitize = (value) => {
     const cleaned = String(value || "download")
@@ -144,7 +147,10 @@ async function handleDownload(url, title, type, metadata = {}) {
     return idx > 0 ? name.slice(0, idx) : name;
   };
 
-  const getExtensionFromType = (assetType, meta) => {
+  const getExtensionFromType = (assetType, meta, selectedFormat) => {
+    if (selectedFormat === "mp3") return ".mp3";
+    if (selectedFormat === "wav") return ".wav";
+    
     const mime = String(meta?.mimeType || meta?.mimetype || "").toLowerCase();
     const mimeMap = {
       "image/png": ".png",
@@ -183,12 +189,63 @@ async function handleDownload(url, title, type, metadata = {}) {
     "download";
 
   const baseName = sanitize(chosenBase);
-  const extFromUrl = getExtensionFromUrl(resolved);
-  const ext = extFromUrl || getExtensionFromType(type, metadata);
+  const extFromUrl = format === "mp3" ? ".mp3" : format === "wav" ? ".wav" : getExtensionFromUrl(resolved);
+  const ext = extFromUrl || getExtensionFromType(type, metadata, format);
   const filename =
     ext && !baseName.toLowerCase().endsWith(ext.toLowerCase())
       ? `${baseName}${ext}`
       : baseName;
+
+  // Handle MP3 conversion for audio files
+  if ((type === "audio" || type === "remix") && format === "mp3") {
+    try {
+      const response = await fetch(resolved);
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      // Convert to MP3 using lamejs
+      const mp3encoder = new Mp3Encoder(audioBuffer.numberOfChannels, audioBuffer.sampleRate, 128);
+      const mp3Data = [];
+      
+      const leftChannel = audioBuffer.getChannelData(0);
+      const rightChannel = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : leftChannel;
+      
+      const sampleBlockSize = 1152;
+      for (let i = 0; i < leftChannel.length; i += sampleBlockSize) {
+        const leftChunk = leftChannel.subarray(i, i + sampleBlockSize);
+        const rightChunk = rightChannel.subarray(i, i + sampleBlockSize);
+        const leftInt16 = new Int16Array(leftChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+        const rightInt16 = new Int16Array(rightChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+        const mp3buf = mp3encoder.encodeBuffer(leftInt16, rightInt16);
+        if (mp3buf.length > 0) {
+          mp3Data.push(mp3buf);
+        }
+      }
+      
+      const mp3buf = mp3encoder.flush();
+      if (mp3buf.length > 0) {
+        mp3Data.push(mp3buf);
+      }
+      
+      const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename || "download.mp3";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+      return;
+    } catch (err) {
+      console.error("MP3 conversion failed:", err);
+      // Fallback to original download
+    }
+  }
 
   try {
     const response = await fetch(resolved);
@@ -233,6 +290,9 @@ export default function MediaLibrary() {
     getRemixIds,
     getEditorProjectIds,
   } = useApp();
+  
+  const [downloadFormat, setDownloadFormat] = useState("original");
+  const [showDownloadMenu, setShowDownloadMenu] = useState(null);
 
   const { requestPlayTrack } = useAudioPlayer();
   const { isFavorite } = useFavorites();
@@ -367,31 +427,70 @@ export default function MediaLibrary() {
       return url.replace(/\/+$/, "").toLowerCase();
     };
 
-    const byUrlOrId = new Map();
+    // Group assets, handling multi-URL remixes specially
+    const groupedAssets = new Map();
 
-    // Add API assets first (they have preference)
+    // Helper to get group key for an asset
+    const getGroupKey = (asset) => {
+      const remixHistoryId = asset.metadata?.remixHistoryId;
+      const hasMultipleUrls = asset.urls && asset.urls.length > 1;
+      // Group by remix history ID, or by ID if has multiple URLs
+      if (remixHistoryId) return `remix:${remixHistoryId}`;
+      if (hasMultipleUrls) return `id:${asset.id}`;
+      return null; // Not grouped, dedupe by URL individually
+    };
+
+    // Process API assets first (they have preference)
     for (const asset of apiAssets) {
-      const normalizedUrl = normalizeUrl(asset.url);
-      const dedupeKey = normalizedUrl
-        ? `url:${normalizedUrl}`
-        : `id:${asset.id}`;
-      if (!byUrlOrId.has(dedupeKey)) {
-        byUrlOrId.set(dedupeKey, asset);
+      const groupKey = getGroupKey(asset);
+      if (groupKey) {
+        // This is a grouped asset (remix)
+        if (!groupedAssets.has(groupKey)) {
+          groupedAssets.set(groupKey, { ...asset, urls: [asset.url] });
+        } else {
+          // Merge URL into existing group
+          const existing = groupedAssets.get(groupKey);
+          if (!existing.urls.includes(asset.url)) {
+            existing.urls.push(asset.url);
+          }
+        }
+      } else {
+        // Regular asset - dedupe by URL
+        const normalizedUrl = normalizeUrl(asset.url);
+        const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
+        if (!groupedAssets.has(dedupeKey)) {
+          groupedAssets.set(dedupeKey, asset);
+        }
       }
     }
 
-    // Add history assets, skipping if URL already exists
+    // Process history assets
     for (const asset of historyAssets) {
-      const normalizedUrl = normalizeUrl(asset.url);
-      const dedupeKey = normalizedUrl
-        ? `url:${normalizedUrl}`
-        : `id:${asset.id}`;
-      if (!byUrlOrId.has(dedupeKey)) {
-        byUrlOrId.set(dedupeKey, asset);
+      const groupKey = getGroupKey(asset);
+      if (groupKey) {
+        // Check if already have this group from API assets
+        if (groupedAssets.has(groupKey)) {
+          // Merge URLs from history into existing group
+          const existing = groupedAssets.get(groupKey);
+          for (const url of asset.urls || [asset.url]) {
+            if (!existing.urls.includes(url)) {
+              existing.urls.push(url);
+            }
+          }
+        } else {
+          groupedAssets.set(groupKey, asset);
+        }
+      } else {
+        // Regular asset - dedupe by URL
+        const normalizedUrl = normalizeUrl(asset.url);
+        const dedupeKey = normalizedUrl ? `url:${normalizedUrl}` : `id:${asset.id}`;
+        if (!groupedAssets.has(dedupeKey)) {
+          groupedAssets.set(dedupeKey, asset);
+        }
       }
     }
 
-    const all = Array.from(byUrlOrId.values());
+    const all = Array.from(groupedAssets.values());
 
     const query = (libraryFilters?.query || "").trim().toLowerCase();
     const type = (libraryFilters?.type || "").trim().toLowerCase();
@@ -726,8 +825,8 @@ export default function MediaLibrary() {
                   }
                 }}
                 onPreview={(item) => setPreviewAsset(item)}
-                onDownload={(item) =>
-                  handleDownload(item.url, item.title, item.type, item.metadata)
+                onDownload={(item, format) =>
+                  handleDownload(item.url, item.title, item.type, item.metadata, format)
                 }
                 onDelete={
                   asset._origin === "library"
@@ -749,8 +848,8 @@ export default function MediaLibrary() {
           open={Boolean(previewAsset)}
           asset={previewAsset}
           onClose={() => setPreviewAsset(null)}
-          onDownload={(asset) =>
-            handleDownload(asset.url, asset.title, asset.type, asset.metadata)
+          onDownload={(asset, format) =>
+            handleDownload(asset.url, asset.title, asset.type, asset.metadata, format)
           }
           onDelete={(asset) => {
             removeLibraryAsset(asset.id);

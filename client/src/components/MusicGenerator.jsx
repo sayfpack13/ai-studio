@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { Mp3Encoder } from "lamejs";
 import { useApp } from "../context/AppContext";
 import { useJobs } from "../context/JobContext";
 import {
@@ -99,6 +100,8 @@ export default function MusicGenerator() {
   const [audioAvailableModels, setAudioAvailableModels] = useState([]);
   const [generatedAudio, setGeneratedAudio] = useState(null);
   const [localError, setLocalError] = useState("");
+  const [downloadFormat, setDownloadFormat] = useState("wav");
+  const [isConverting, setIsConverting] = useState(false);
   const videoInputRef = useRef(null);
 
   // ── Server job tracking ───────────────────────────────────────────
@@ -710,14 +713,65 @@ export default function MusicGenerator() {
   };
 
   // ── Download ──────────────────────────────────────────────────────
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!generatedAudio?.url) return;
     const resolvedUrl = resolveAssetUrl(generatedAudio.url);
-    const link = document.createElement("a");
-    link.href = resolvedUrl;
     const isVideoAudio = generatedAudio.mode === "video_to_audio";
-    link.download = isVideoAudio ? `audio_video_${Date.now()}.mp4` : `audio_${Date.now()}.wav`;
-    link.click();
+
+    if (!isVideoAudio && downloadFormat === "mp3") {
+      setIsConverting(true);
+      try {
+        const response = await fetch(resolvedUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        const mp3encoder = new Mp3Encoder(audioBuffer.numberOfChannels, audioBuffer.sampleRate, 128);
+        const mp3Data = [];
+
+        const leftChannel = audioBuffer.getChannelData(0);
+        const rightChannel = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : leftChannel;
+
+        const sampleBlockSize = 1152;
+        for (let i = 0; i < leftChannel.length; i += sampleBlockSize) {
+          const leftChunk = leftChannel.subarray(i, i + sampleBlockSize);
+          const rightChunk = rightChannel.subarray(i, i + sampleBlockSize);
+          const leftInt16 = new Int16Array(leftChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const rightInt16 = new Int16Array(rightChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const mp3buf = mp3encoder.encodeBuffer(leftInt16, rightInt16);
+          if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+          }
+        }
+
+        const mp3buf = mp3encoder.flush();
+        if (mp3buf.length > 0) {
+          mp3Data.push(mp3buf);
+        }
+
+        const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `audio_${Date.now()}.mp3`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("MP3 conversion failed:", err);
+        // Fallback to WAV download
+        const link = document.createElement("a");
+        link.href = resolvedUrl;
+        link.download = `audio_${Date.now()}.wav`;
+        link.click();
+      } finally {
+        setIsConverting(false);
+      }
+    } else {
+      const link = document.createElement("a");
+      link.href = resolvedUrl;
+      link.download = isVideoAudio ? `audio_video_${Date.now()}.mp4` : `audio_${Date.now()}.wav`;
+      link.click();
+    }
   };
 
   // ── History sidebar integration ───────────────────────────────────
@@ -1459,6 +1513,9 @@ export default function MusicGenerator() {
                 mediaHistory={musicHistory}
                 getMediaIds={getMusicIds}
                 onDownload={handleDownload}
+                downloadFormat={downloadFormat}
+                setDownloadFormat={setDownloadFormat}
+                isConverting={isConverting}
                 onPreview={(audio) => {
                   setSelectedRunningJobId(null);
                   setGeneratedAudio({
@@ -1504,6 +1561,9 @@ export default function MusicGenerator() {
             mediaHistory={musicHistory}
             getMediaIds={getMusicIds}
             onDownload={handleDownload}
+            downloadFormat={downloadFormat}
+            setDownloadFormat={setDownloadFormat}
+            isConverting={isConverting}
             onPreview={(audio) => {
               setSelectedRunningJobId(null);
               setGeneratedAudio({

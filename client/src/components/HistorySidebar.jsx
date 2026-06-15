@@ -127,24 +127,28 @@ export default function HistorySidebar({ isOpen, onToggle }) {
   ]);
 
   const historyIds = useMemo(() => {
-    switch (pageType) {
-      case "chat":
-        return getChatIds();
-      case "image":
-        return getImageIds();
-      case "video":
-        return getVideoIds();
-      case "music":
-        return getMusicIds();
-      case "remix":
-        return getRemixIds();
-      case "editor":
-        return getEditorProjectIds();
-      case "library":
-        return (libraryAssets || []).map((asset) => asset.id);
-      default:
-        return [];
-    }
+    const baseIds = (() => {
+      switch (pageType) {
+        case "chat":
+          return getChatIds();
+        case "image":
+          return getImageIds();
+        case "video":
+          return getVideoIds();
+        case "music":
+          return getMusicIds();
+        case "remix":
+          return getRemixIds();
+        case "editor":
+          return getEditorProjectIds();
+        case "library":
+          return (libraryAssets || []).map((asset) => asset.id);
+        default:
+          return [];
+      }
+    })();
+
+    return baseIds;
   }, [
     pageType,
     getChatIds,
@@ -156,12 +160,14 @@ export default function HistorySidebar({ isOpen, onToggle }) {
     libraryAssets,
   ]);
 
+  const resolveItem = (id) => history[id];
+
   const filteredIds = useMemo(() => {
     if (!searchQuery) return historyIds;
 
     const query = searchQuery.toLowerCase();
     return historyIds.filter((id) => {
-      const item = history[id];
+      const item = resolveItem(id);
       if (!item) return false;
 
       if (pageType === "chat") {
@@ -194,6 +200,9 @@ export default function HistorySidebar({ isOpen, onToggle }) {
     }
     if (pageType === "library") {
       return item.title || "Untitled Asset";
+    }
+    if (pageType === "remix") {
+      return item?.result?.title || item?.prompt?.slice(0, 50) || "No prompt";
     }
     return item.prompt?.slice(0, 50) || item.name?.slice(0, 50) || "No prompt";
   };
@@ -266,6 +275,7 @@ export default function HistorySidebar({ isOpen, onToggle }) {
   const confirmDelete = () => {
     if (!deleteConfirm) return;
     const id = deleteConfirm;
+
     switch (pageType) {
       case "chat":
         deleteChat(id);
@@ -386,7 +396,7 @@ export default function HistorySidebar({ isOpen, onToggle }) {
           ) : (
             <div className="flex flex-col gap-2">
               {filteredIds.map((id) => {
-                const item = history[id];
+                const item = resolveItem(id);
                 if (!item) return null;
                 return (
                   <button
@@ -400,13 +410,13 @@ export default function HistorySidebar({ isOpen, onToggle }) {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm text-gray-100 truncate">
-                          {getItemPreview(item)}
+                          {getItemPreview(item, id)}
                         </div>
                         <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
                           <Clock className="w-3 h-3" />
                           <span>{getItemDate(item)}</span>
                           <span className="w-1 h-1 rounded-full bg-gray-600" />
-                          <span className="uppercase">{getItemMeta(item)}</span>
+                          <span className="uppercase">{getItemMeta(item, id)}</span>
                         </div>
                       </div>
                       <span

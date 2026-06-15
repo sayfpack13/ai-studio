@@ -169,42 +169,62 @@ const mergeRemixHistoryFromLibrary = (history, assets = []) => {
   if (!Array.isArray(assets) || assets.length === 0) return history;
 
   const next = { ...(history || {}) };
-  const existingUrls = new Set(
-    Object.values(history || {})
-      .map((item) => getRemixUrl(item))
-      .filter((url) => !isInvalidMediaUrl(url)),
-  );
 
+  // Group assets by remixHistoryId
+  const assetsByHistoryId = new Map();
   for (const asset of assets) {
     if (!asset || (asset.type !== "audio" && asset.type !== "remix")) continue;
     if (asset.source !== "remix") continue;
 
-    const url = asset.url;
-    if (isInvalidMediaUrl(url) || existingUrls.has(url)) continue;
-
-    const lastUpdatedMs =
-      Date.parse(asset.updatedAt || asset.createdAt || "") || Date.now();
     const historyId = asset.metadata?.remixHistoryId || asset.id;
+    if (!assetsByHistoryId.has(historyId)) {
+      assetsByHistoryId.set(historyId, []);
+    }
+    assetsByHistoryId.get(historyId).push(asset);
+  }
+
+  // Process each history group
+  for (const [historyId, groupAssets] of assetsByHistoryId) {
+    // Skip if history already exists with multiple URLs (don't overwrite with library data)
+    if (next[historyId]?.result?.urls?.length > 1) continue;
+
+    // Collect all URLs from the group
+    const urls = groupAssets.map(a => a.url).filter(url => !isInvalidMediaUrl(url));
+    if (urls.length === 0) continue;
+
+    // Skip if primary URL already exists in history
+    const primaryUrl = urls[0];
+    const existingHistoryItem = next[historyId];
+    if (existingHistoryItem?.result?.url === primaryUrl) continue;
+
+    // Use the first asset for metadata
+    const primaryAsset = groupAssets[0];
+    const lastUpdatedMs =
+      Date.parse(primaryAsset.updatedAt || primaryAsset.createdAt || "") || Date.now();
+
+    // Build result with multiple URLs if available
+    const result = {
+      url: primaryUrl,
+      title: primaryAsset.title,
+      tags: primaryAsset.metadata?.tags,
+      lyrics: primaryAsset.metadata?.lyrics,
+      thumbnail: primaryAsset.thumbnail || null,
+    };
+    if (urls.length > 1) {
+      result.urls = urls;
+    }
 
     next[historyId] = {
       prompt:
-        asset.metadata?.description ||
-        asset.metadata?.tags ||
-        asset.title ||
+        primaryAsset.metadata?.description ||
+        primaryAsset.metadata?.tags ||
+        primaryAsset.title ||
         "Remix",
-      result: {
-        url,
-        title: asset.title,
-        tags: asset.metadata?.tags,
-        lyrics: asset.metadata?.lyrics,
-        thumbnail: asset.thumbnail || null,
-      },
-      model: asset.metadata?.model,
-      metadata: asset.metadata || {},
+      result,
+      model: primaryAsset.metadata?.model,
+      metadata: primaryAsset.metadata || {},
       lastUpdated: lastUpdatedMs,
     };
-
-    existingUrls.add(url);
   }
 
   return trimHistory(next);

@@ -16,6 +16,7 @@ import {
   Heart,
   Maximize2,
   Upload,
+  ChevronDown,
 } from "lucide-react";
 import { resolveAssetUrl } from "../../services/api";
 import { useFavorites } from "../../context/FavoritesContext";
@@ -82,6 +83,8 @@ export default function MediaCard({
 }) {
   const [broken, setBroken] = useState(false);
   const [failedThumb, setFailedThumb] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [activeDownloadVariant, setActiveDownloadVariant] = useState(null);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { playTrack, pause, resume, currentTrack, isPlaying } = useAudioPlayer();
 
@@ -94,6 +97,23 @@ export default function MediaCard({
     currentTrack &&
     (currentTrack.id === item.id ||
       (currentTrack.url && currentTrack.url === item.url));
+
+  const isAudioLike = type === "music" || type === "remix" || type === "audio";
+
+  const hasMultipleUrls = isAudioLike && item.urls && item.urls.length > 1;
+  const variantCount = hasMultipleUrls ? item.urls.length : 1;
+
+  const getVariantItem = (index) => ({
+    ...item,
+    url: item.urls[index],
+    id: `${item.id}_${index}`,
+  });
+
+  const isVariantCurrent = (index) =>
+    currentTrack && currentTrack.url === item.urls[index];
+
+  const isVariantPlaying = (index) =>
+    isVariantCurrent(index) && isPlaying;
 
   const renderMedia = () => {
     if (type === "image") {
@@ -198,9 +218,6 @@ export default function MediaCard({
     return null;
   };
 
-  const isAudioLike =
-    type === "music" || type === "remix" || type === "audio";
-
   return (
     <motion.div
       layout
@@ -224,34 +241,47 @@ export default function MediaCard({
         </div>
       )}
 
-      {/* Playing indicator */}
-      {currentTrack &&
-        isPlaying &&
-        (currentTrack.id === item.id ||
-          (currentTrack.url && currentTrack.url === item.url)) && (
-          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-purple-600/90 backdrop-blur-sm border border-purple-500/50">
+      {/* Playing indicator - shows when any variant is playing */}
+      {(() => {
+        const isAnyVariantPlaying = currentTrack && isPlaying && (
+          currentTrack.id === item.id ||
+          (currentTrack.url && currentTrack.url === item.url) ||
+          (hasMultipleUrls && item.urls.some(url => currentTrack.url === url))
+        );
+        if (!isAnyVariantPlaying) return null;
+        // Find which variant is playing
+        const playingIndex = hasMultipleUrls
+          ? item.urls.findIndex(url => currentTrack.url === url)
+          : -1;
+        const variantLabel = playingIndex >= 0
+          ? String.fromCharCode(65 + playingIndex)
+          : null;
+
+        return (
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 px-2 py-1 rounded-full bg-purple-600/90 backdrop-blur-sm border border-purple-500/50">
             <div className="flex gap-0.5 items-end h-3">
-              <div
-                className="w-0.5 bg-white animate-pulse"
-                style={{ animationDelay: "0ms", height: "60%" }}
-              ></div>
-              <div
-                className="w-0.5 bg-white animate-pulse"
-                style={{ animationDelay: "150ms", height: "100%" }}
-              ></div>
-              <div
-                className="w-0.5 bg-white animate-pulse"
-                style={{ animationDelay: "300ms", height: "40%" }}
-              ></div>
+              <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: "0ms", height: "60%" }} />
+              <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: "150ms", height: "100%" }} />
+              <div className="w-0.5 bg-white animate-pulse" style={{ animationDelay: "300ms", height: "40%" }} />
             </div>
-            <span className="text-[10px] font-medium text-white">Playing</span>
+            <span className="text-[10px] font-medium text-white">
+              {variantLabel ? `Playing ${variantLabel}` : "Playing"}
+            </span>
           </div>
-        )}
+        );
+      })()}
 
       {/* Compare badge */}
       {isComparing && (
         <div className="absolute top-2 left-10 z-10 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-semibold rounded-full shadow-lg">
           Comparing
+        </div>
+      )}
+
+      {/* Variants badge */}
+      {hasMultipleUrls && (
+        <div className="absolute top-11 right-2 z-10 px-2 py-0.5 bg-blue-500/80 backdrop-blur-sm text-white text-[10px] font-semibold rounded-full shadow-lg border border-blue-400/30">
+          {item.urls.length} variants
         </div>
       )}
 
@@ -331,59 +361,202 @@ export default function MediaCard({
       </div>
 
       {/* Hover action overlay */}
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-gray-900/50 transition-colors duration-200 flex flex-col opacity-0 group-hover:opacity-100 p-2">
-        {/* Top row: primary actions */}
-        <div className="flex flex-wrap justify-end gap-1">
-          {isAudioLike && item.url && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isCurrent) {
-                  if (isPlaying) pause();
-                  else resume();
-                } else {
-                  playTrack({ ...item, type });
-                }
-              }}
-              className={`p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors ${
-                isCurrent && isPlaying
-                  ? "text-purple-300 border-purple-500/50 bg-purple-600/20"
-                  : ""
-              }`}
-              title={isCurrent && isPlaying ? "Pause" : "Play"}
-            >
-              {isCurrent && isPlaying ? (
-                <Pause className="w-3 h-3" />
-              ) : (
-                <Play className="w-3 h-3" />
-              )}
-            </button>
-          )}
-          {onPreview && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreview(item);
-              }}
-              className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
-              title="Preview"
-            >
-              <Maximize2 className="w-3 h-3" />
-            </button>
-          )}
-          {onDownload && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDownload(item);
-              }}
-              className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
-              title="Download"
-            >
-              <Download className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+      <div className={`absolute inset-0 bg-black/0 transition-colors duration-200 flex flex-col p-2 ${(showDownloadMenu || activeDownloadVariant !== null) ? 'bg-gray-900/50 opacity-100' : 'bg-black/0 opacity-0 group-hover:bg-gray-900/50 group-hover:opacity-100'}`}>
+        {/* Variant action rows (for multi-URL audio) */}
+        {hasMultipleUrls ? (
+          <div className="flex flex-col gap-1.5">
+            {item.urls.map((variantUrl, idx) => {
+              const variantItem = getVariantItem(idx);
+              const label = String.fromCharCode(65 + idx); // A, B, C...
+              const isPlayingVariant = isVariantPlaying(idx);
+              const isCurrentVariant = isVariantCurrent(idx);
+              const downloadMenuOpen = activeDownloadVariant === idx;
+              return (
+                <div
+                  key={idx}
+                  className={`flex items-center justify-between gap-1 rounded-lg px-2 py-1 border backdrop-blur-sm transition-colors ${
+                    isPlayingVariant
+                      ? 'bg-purple-600/30 border-purple-500/50 shadow-sm'
+                      : isCurrentVariant
+                        ? 'bg-purple-600/15 border-purple-500/30'
+                        : 'bg-gray-900/70 border-gray-700/50'
+                  }`}
+                >
+                  <span className={`text-[10px] font-semibold w-4 ${
+                    isPlayingVariant ? 'text-purple-200' : 'text-gray-300'
+                  }`}>
+                    {label}
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCurrentVariant) {
+                          if (isPlaying) pause();
+                          else resume();
+                        } else {
+                          playTrack({ ...variantItem, type });
+                        }
+                      }}
+                      className={`p-1 rounded-md bg-gray-800 border border-gray-600 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors ${
+                        isCurrentVariant && isPlaying
+                          ? "text-purple-300 border-purple-500/50 bg-purple-600/20"
+                          : ""
+                      }`}
+                      title={isPlayingVariant ? "Pause" : "Play"}
+                    >
+                      {isPlayingVariant ? (
+                        <Pause className="w-3 h-3" />
+                      ) : (
+                        <Play className="w-3 h-3" />
+                      )}
+                    </button>
+                    {onPreview && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPreview(variantItem);
+                        }}
+                        className="p-1 rounded-md bg-gray-800 border border-gray-600 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                        title="Preview"
+                      >
+                        <Maximize2 className="w-3 h-3" />
+                      </button>
+                    )}
+                    {onDownload && (
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDownloadVariant(downloadMenuOpen ? null : idx);
+                          }}
+                          className="p-1 rounded-md bg-gray-800 border border-gray-600 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                          title="Download"
+                        >
+                          <Download className="w-3 h-3" />
+                        </button>
+                        {downloadMenuOpen && (
+                          <div className="absolute top-full right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 min-w-[90px]">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDownloadVariant(null);
+                                onDownload(variantItem, "original");
+                              }}
+                              className="w-full px-3 py-1.5 text-left text-[10px] text-white hover:bg-gray-700 rounded-t-lg"
+                            >
+                              Original
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDownloadVariant(null);
+                                onDownload(variantItem, "mp3");
+                              }}
+                              className="w-full px-3 py-1.5 text-left text-[10px] text-white hover:bg-gray-700 rounded-b-lg"
+                            >
+                              MP3
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Single item: Top row: primary actions */
+          <div className="flex flex-wrap justify-end gap-1">
+            {isAudioLike && item.url && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isCurrent) {
+                    if (isPlaying) pause();
+                    else resume();
+                  } else {
+                    playTrack({ ...item, type });
+                  }
+                }}
+                className={`p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors ${
+                  isCurrent && isPlaying
+                    ? "text-purple-300 border-purple-500/50 bg-purple-600/20"
+                    : ""
+                }`}
+                title={isCurrent && isPlaying ? "Pause" : "Play"}
+              >
+                {isCurrent && isPlaying ? (
+                  <Pause className="w-3 h-3" />
+                ) : (
+                  <Play className="w-3 h-3" />
+                )}
+              </button>
+            )}
+            {onPreview && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPreview(item);
+                }}
+                className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                title="Preview"
+              >
+                <Maximize2 className="w-3 h-3" />
+              </button>
+            )}
+            {onDownload && (type === "audio" || type === "remix") ? (
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDownloadMenu(!showDownloadMenu);
+                  }}
+                  className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                  title="Download"
+                >
+                  <Download className="w-3 h-3" />
+                </button>
+                {showDownloadMenu && (
+                  <div className="absolute top-full right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 min-w-[100px]">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDownloadMenu(false);
+                        onDownload(item, "original");
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs text-white hover:bg-gray-700 rounded-t-lg"
+                    >
+                      Original
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDownloadMenu(false);
+                        onDownload(item, "mp3");
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs text-white hover:bg-gray-700 rounded-b-lg"
+                    >
+                      MP3
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : onDownload ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownload(item);
+                }}
+                className="p-1.5 rounded-md bg-gray-900/80 border border-gray-700 text-gray-300 hover:text-purple-200 hover:border-purple-500/60 hover:bg-purple-600/20 transition-colors"
+                title="Download"
+              >
+                <Download className="w-3 h-3" />
+              </button>
+            ) : null}
+          </div>
+        )}
         {/* Bottom row: secondary actions */}
         <div className="mt-auto flex flex-wrap justify-end gap-1">
           {onCompare && (

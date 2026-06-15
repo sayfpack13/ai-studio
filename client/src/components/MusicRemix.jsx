@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Mp3Encoder } from "lamejs";
 import {
   enqueuePipeline, transcribeAudio, enhanceAudio, resolveAssetUrl,
   uploadLibraryFile, verifyInternalToken,
@@ -643,12 +644,93 @@ export default function MusicRemix() {
     });
   };
 
-  const handleDownload = () => {
+  const [downloadFormat, setDownloadFormat] = useState("wav");
+  const [isConverting, setIsConverting] = useState(false);
+
+  const handleDownload = async () => {
     if (!generatedRemix?.url) return;
-    const link = document.createElement("a");
-    link.href = resolveAssetUrl(generatedRemix.url);
-    link.download = `remix_${Date.now()}.wav`;
-    link.click();
+    
+    if (downloadFormat === "mp3") {
+      setIsConverting(true);
+      try {
+        const audioUrl = resolveAssetUrl(generatedRemix.url);
+        const response = await fetch(audioUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Convert to MP3 using lamejs
+        const mp3encoder = new Mp3Encoder(audioBuffer.numberOfChannels, audioBuffer.sampleRate, 128);
+        const mp3Data = [];
+        
+        const leftChannel = audioBuffer.getChannelData(0);
+        const rightChannel = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : leftChannel;
+        
+        const sampleBlockSize = 1152;
+        for (let i = 0; i < leftChannel.length; i += sampleBlockSize) {
+          const leftChunk = leftChannel.subarray(i, i + sampleBlockSize);
+          const rightChunk = rightChannel.subarray(i, i + sampleBlockSize);
+          const leftInt16 = new Int16Array(leftChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const rightInt16 = new Int16Array(rightChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const mp3buf = mp3encoder.encodeBuffer(leftInt16, rightInt16);
+          if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+          }
+        }
+        
+        const mp3buf = mp3encoder.flush();
+        if (mp3buf.length > 0) {
+          mp3Data.push(mp3buf);
+        }
+        
+        const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `remix_${Date.now()}.mp3`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("MP3 conversion failed:", err);
+        // Fallback to WAV download via fetch
+        try {
+          const audioUrl = resolveAssetUrl(generatedRemix.url);
+          const response = await fetch(audioUrl);
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = objectUrl;
+          link.download = `remix_${Date.now()}.wav`;
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(objectUrl);
+        } catch {
+          window.open(resolveAssetUrl(generatedRemix.url), "_blank");
+        }
+      } finally {
+        setIsConverting(false);
+      }
+    } else {
+      // WAV download - fetch as blob to handle cross-origin
+      try {
+        const audioUrl = resolveAssetUrl(generatedRemix.url);
+        const response = await fetch(audioUrl);
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = `remix_${Date.now()}.wav`;
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        window.open(resolveAssetUrl(generatedRemix.url), "_blank");
+      }
+    }
   };
 
   const applyRemixHistoryItem = useCallback((remixId, remixItem) => {
@@ -724,7 +806,11 @@ export default function MusicRemix() {
     (event) => {
       const { remixId } = event.detail || {};
       if (!remixId) return;
-      applyRemixHistoryItem(remixId, remixHistory[remixId]);
+
+      const remixItem = remixHistory[remixId];
+      if (!remixItem) return;
+
+      applyRemixHistoryItem(remixId, remixItem);
     },
     [applyRemixHistoryItem, remixHistory],
   );
@@ -811,6 +897,9 @@ export default function MusicRemix() {
       error={outputError}
       progress={outputProgress}
       loadingMessage={outputLoadingMessage}
+      downloadFormat={downloadFormat}
+      setDownloadFormat={setDownloadFormat}
+      isConverting={isConverting}
       onClearError={() => {
         setError("");
         if (selectedRunningJobId && selectedRunningJob?.status === "failed") {

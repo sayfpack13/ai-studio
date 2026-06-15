@@ -17,6 +17,8 @@ import {
   Volume2,
   Heart,
   Play,
+  Pause,
+  ChevronDown,
 } from "lucide-react";
 import { useFavorites } from "../../context/FavoritesContext";
 import { useAudioPlayer } from "../../context/AudioPlayerContext";
@@ -53,16 +55,27 @@ export default function MediaPreviewDialog({
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const { isFavorite, toggleFavorite } = useFavorites();
-  const { pendingTrack, confirmReplace } = useAudioPlayer();
+  const { playTrack, pause, currentTrack, isPlaying } = useAudioPlayer();
 
   const safeAsset = asset || {};
   const type = safeAsset.type || "project";
+
+  // Track which variant URL is currently playing
+  const urls = safeAsset.urls || (safeAsset.url ? [safeAsset.url] : []);
+  const activeVariantIndex = urls.findIndex(url => currentTrack?.url === url);
+  const hasActiveVariant = activeVariantIndex !== -1;
   const typeMeta = TYPE_META[type] || TYPE_META.project;
   const TypeIcon = typeMeta.icon;
   const resolvedUrl = safeAsset.url ? resolveAssetUrl(safeAsset.url) : "";
-  const tagsText = safeAsset.tags || safeAsset.metadata?.tags || "";
-  const lyricsText = safeAsset.lyrics || safeAsset.metadata?.lyrics || "";
+  const toTextValue = (v) => {
+    if (!v) return "";
+    if (Array.isArray(v)) return v.join(", ");
+    return String(v);
+  };
+  const tagsText = toTextValue(safeAsset.tags) || toTextValue(safeAsset.metadata?.tags) || "";
+  const lyricsText = toTextValue(safeAsset.lyrics) || toTextValue(safeAsset.metadata?.lyrics) || "";
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +86,12 @@ export default function MediaPreviewDialog({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (open && asset) {
+      setActiveTab("info");
+    }
+  }, [asset?.id, open]);
+
   const metaRows = useMemo(() => {
     const rows = [
       { label: "Title", value: safeAsset.title || "Untitled" },
@@ -81,6 +100,10 @@ export default function MediaPreviewDialog({
     ];
 
     if (type === "remix" || type === "music") {
+      const urls = safeAsset.urls || (safeAsset.url ? [safeAsset.url] : []);
+      if (urls.length > 1) {
+        rows.push({ label: "Variants", value: `${urls.length} audio files (A, B${urls.length > 2 ? ', C...' : ''})` });
+      }
       if (safeAsset.model || safeAsset.metadata?.model) {
         rows.push({ label: "Model", value: safeAsset.model || safeAsset.metadata?.model });
       }
@@ -90,8 +113,9 @@ export default function MediaPreviewDialog({
       if (safeAsset.seed != null || safeAsset.metadata?.seed != null) {
         rows.push({ label: "Seed", value: safeAsset.seed ?? safeAsset.metadata?.seed });
       }
-      if (safeAsset.tags || safeAsset.metadata?.tags) {
-        rows.push({ label: "Tags", value: safeAsset.tags || safeAsset.metadata?.tags });
+      const tagsVal = toTextValue(safeAsset.tags) || toTextValue(safeAsset.metadata?.tags) || "";
+      if (tagsVal) {
+        rows.push({ label: "Tags", value: tagsVal });
       }
       if (safeAsset.bpm != null || safeAsset.metadata?.bpm != null) {
         rows.push({ label: "BPM", value: safeAsset.bpm ?? safeAsset.metadata?.bpm });
@@ -177,7 +201,7 @@ export default function MediaPreviewDialog({
     if (isAudioType(type)) {
       const isRemix = type === "remix";
       const urls = asset.urls || (asset.url ? [asset.url] : []);
-      const primaryUrl = urls[0] ? resolveAssetUrl(urls[0]) : "";
+      const hasMultipleUrls = urls.length > 1;
       const promptText =
         asset.prompt || asset.metadata?.description || asset.title || "";
       const thumb = asset.thumbnail || asset.metadata?.thumbnail || null;
@@ -190,7 +214,7 @@ export default function MediaPreviewDialog({
               isRemix
                 ? "from-purple-950/40 via-gray-900 to-gray-950"
                 : "from-emerald-950/40 via-gray-900 to-gray-950"
-            } rounded-xl p-6 flex flex-col items-center border border-gray-800`}
+            } rounded-xl p-6 flex flex-col items-center border border-gray-800 w-full`}
           >
             {thumb && (
               <img
@@ -203,24 +227,85 @@ export default function MediaPreviewDialog({
               <MusicIcon className="w-10 h-10 text-white" />
             </div>
 
-            {pendingTrack ? (
-              <button
-                onClick={confirmReplace}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"
-              >
-                <Play className="w-4 h-4" />
-                Play in Global Player
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900/60 border border-gray-700 text-gray-300">
-                <Play className="w-4 h-4 text-purple-400" />
-                <span className="text-sm font-medium">Playing in Global Player</span>
-              </div>
+            {promptText && (
+              <p className="text-sm text-gray-300 mb-4 text-center max-w-md font-medium">
+                {promptText}
+              </p>
             )}
 
-            {promptText && (
-              <p className="text-sm text-gray-300 mt-4 text-center max-w-md font-medium">
-                {promptText}
+            {/* Variant Load Buttons */}
+            <div className={`w-full ${urls.length > 1 ? 'space-y-3' : ''}`}>
+              {urls.map((url, index) => {
+                const label = String.fromCharCode(65 + index); // A, B, C...
+                const variantItem = { url, title: `${asset.title || 'Audio'} (${label})`, type, id: `${asset.id}_${index}` };
+                const isThisVariantPlaying = activeVariantIndex === index && isPlaying;
+                const isThisVariantLoaded = activeVariantIndex === index;
+
+                return (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      if (isThisVariantLoaded && isPlaying) {
+                        // Already playing this variant - pause it
+                        pause();
+                      } else {
+                        // Load and play (or resume if paused)
+                        playTrack(variantItem);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 rounded-lg p-3 border transition-all ${
+                      isThisVariantPlaying
+                        ? 'bg-purple-600/20 border-purple-500/50 shadow-lg shadow-purple-500/10'
+                        : isThisVariantLoaded
+                          ? 'bg-purple-600/10 border-purple-500/30'
+                          : 'bg-gray-900/50 hover:bg-gray-800/50 border-gray-800'
+                    }`}
+                  >
+                    {urls.length > 1 && (
+                      <span className={`w-8 h-8 rounded-full text-sm font-semibold flex items-center justify-center shrink-0 transition-colors ${
+                        isThisVariantPlaying
+                          ? 'bg-purple-500 text-white'
+                          : isThisVariantLoaded
+                            ? 'bg-purple-600/60 text-white'
+                            : 'bg-purple-600/80 text-white'
+                      }`}>
+                        {label}
+                      </span>
+                    )}
+                    <div className="flex-1 text-left">
+                      <span className={`text-sm font-medium block ${
+                        isThisVariantPlaying ? 'text-purple-300' : 'text-white'
+                      }`}>
+                        {urls.length > 1 ? `Variant ${label}` : "Play Audio"}
+                      </span>
+                      <span className={`text-xs ${
+                        isThisVariantPlaying ? 'text-purple-400' : 'text-gray-500'
+                      }`}>
+                        {isThisVariantPlaying
+                          ? "● Now Playing • Click to pause"
+                          : isThisVariantLoaded
+                            ? "Paused • Click to play"
+                            : index === 0
+                              ? "Primary version"
+                              : "Alternative version"}
+                      </span>
+                    </div>
+                    {isThisVariantPlaying ? (
+                      // Pause icon when playing
+                      <Pause className="w-5 h-5 text-purple-400" />
+                    ) : (
+                      <Play className={`w-5 h-5 ${
+                        isThisVariantLoaded ? 'text-purple-400' : 'text-purple-400'
+                      }`} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {urls.length > 1 && !hasActiveVariant && (
+              <p className="text-sm text-gray-400 mt-2 text-center max-w-md">
+                Click a variant to load into global player
               </p>
             )}
           </div>
@@ -291,7 +376,40 @@ export default function MediaPreviewDialog({
         {/* Action Bar */}
         <div className="flex items-center justify-between p-3 border-t border-gray-800 bg-gray-900/80">
           <div className="flex items-center gap-2">
-            {showDownload && asset.url && (
+            {showDownload && asset.url && (isAudioType(type) ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm font-medium text-white transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {showDownloadMenu && (
+                  <div className="absolute bottom-full left-0 mb-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 min-w-[120px]">
+                    <button
+                      onClick={() => {
+                        setShowDownloadMenu(false);
+                        onDownload?.(asset, "original");
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 rounded-t-lg"
+                    >
+                      Original
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowDownloadMenu(false);
+                        onDownload?.(asset, "mp3");
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 rounded-b-lg"
+                    >
+                      MP3
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
               <button
                 onClick={() => onDownload?.(asset)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm font-medium text-white transition-all"
@@ -299,7 +417,7 @@ export default function MediaPreviewDialog({
                 <Download className="w-4 h-4" />
                 Download
               </button>
-            )}
+            ))}
             {showCopy && asset.url && (
               <button
                 onClick={handleCopy}

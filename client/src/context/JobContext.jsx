@@ -554,16 +554,14 @@ export function JobProvider({ children }) {
                 });
               },
               onResult: (data) => {
+                // Store metadata but don't settle yet - wait for onSaved with all URLs
                 pendingMeta = {
                   title: data.title,
                   tags: data.tags,
                   lyrics: data.lyrics,
                   thumbnail: data.thumbnail,
                 };
-                const candidate = data.url || data.audio;
-                if (candidate && !String(candidate).startsWith("data:")) {
-                  finish(candidate);
-                }
+                // Don't call finish here - onSaved will provide complete result with all URLs
               },
               onSaved: (savedUrl, savedUrls) => {
                 console.log("[JobContext] onSaved:", savedUrl, savedUrls, "settled:", settled);

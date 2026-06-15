@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Mp3Encoder } from "lamejs";
 import { motion, AnimatePresence } from "framer-motion"; // eslint-disable-line no-unused-vars
 import { Image, Video, Volume2, Music } from "lucide-react";
 import { resolveAssetUrl } from "../../services/api";
@@ -47,7 +48,7 @@ export default function MediaGalleryGrid({
 
   const isInCompare = (itemId) => selectedForCompare.includes(itemId);
 
-  const handleDownload = async (item) => {
+  const handleDownload = async (item, format = "original") => {
     const resolved = resolveAssetUrl(item.url);
     const sanitize = (value) =>
       String(value || "generated")
@@ -60,6 +61,72 @@ export default function MediaGalleryGrid({
       ? baseName
       : `${baseName}${ext}`;
 
+    const isAudioType = mediaType === "music" || mediaType === "audio" || mediaType === "remix";
+    if (isAudioType && format === "mp3") {
+      try {
+        const response = await fetch(resolved);
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        const mp3encoder = new Mp3Encoder(audioBuffer.numberOfChannels, audioBuffer.sampleRate, 128);
+        const mp3Data = [];
+
+        const leftChannel = audioBuffer.getChannelData(0);
+        const rightChannel = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : leftChannel;
+
+        const sampleBlockSize = 1152;
+        for (let i = 0; i < leftChannel.length; i += sampleBlockSize) {
+          const leftChunk = leftChannel.subarray(i, i + sampleBlockSize);
+          const rightChunk = rightChannel.subarray(i, i + sampleBlockSize);
+          const leftInt16 = new Int16Array(leftChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const rightInt16 = new Int16Array(rightChunk.map(x => x < 0 ? x * 32768 : x * 32767));
+          const mp3buf = mp3encoder.encodeBuffer(leftInt16, rightInt16);
+          if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+          }
+        }
+
+        const mp3buf = mp3encoder.flush();
+        if (mp3buf.length > 0) {
+          mp3Data.push(mp3buf);
+        }
+
+        const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        console.error("MP3 conversion failed:", err);
+        // Try direct fetch download as fallback
+        try {
+          const response = await fetch(resolved);
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = objectUrl;
+          link.download = filename.replace('.mp3', '.wav');
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(objectUrl);
+        } catch {
+          window.open(resolved, "_blank");
+        }
+      }
+      return;
+    }
+
+    // Always fetch as blob to handle cross-origin downloads properly
     try {
       const response = await fetch(resolved);
       if (!response.ok) {
@@ -70,17 +137,15 @@ export default function MediaGalleryGrid({
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = filename;
+      link.style.display = "none";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
-    } catch {
-      const link = document.createElement("a");
-      link.href = resolved;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Download failed:", err);
+      // Last resort: try opening in new tab
+      window.open(resolved, "_blank");
     }
   };
 

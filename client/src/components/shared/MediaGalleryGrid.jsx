@@ -54,10 +54,29 @@ export default function MediaGalleryGrid({
       String(value || "generated")
         .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
         .trim() || "generated";
-    const ext =
-      mediaType === "image" ? ".png" : mediaType === "video" ? ".mp4" : ".mp3";
+    const getExtensionFromUrl = (url) => {
+      try {
+        const parsed = new URL(url, window.location.origin);
+        const pathname = parsed.pathname || "";
+        const dot = pathname.lastIndexOf(".");
+        if (dot !== -1 && pathname.length - dot <= 6) {
+          return pathname.slice(dot);
+        }
+      } catch {
+        const dot = String(url || "").lastIndexOf(".");
+        if (dot !== -1 && String(url || "").length - dot <= 6) {
+          return String(url || "").slice(dot);
+        }
+      }
+      return "";
+    };
+
+    const extFromUrl = getExtensionFromUrl(resolved);
+    const ext = format === "mp3"
+      ? ".mp3"
+      : extFromUrl || (mediaType === "image" ? ".png" : mediaType === "video" ? ".mp4" : ".mp3");
     const baseName = sanitize(item.prompt || item.title || `generated-${item.id}`);
-    const filename = baseName.toLowerCase().endsWith(ext)
+    const filename = baseName.toLowerCase().endsWith(ext.toLowerCase())
       ? baseName
       : `${baseName}${ext}`;
 
@@ -113,7 +132,7 @@ export default function MediaGalleryGrid({
           const objectUrl = URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = objectUrl;
-          link.download = filename.replace('.mp3', '.wav');
+          link.download = filename;
           link.style.display = "none";
           document.body.appendChild(link);
           link.click();

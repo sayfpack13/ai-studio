@@ -108,7 +108,7 @@ router.post("/enhance", async (req, res) => {
     if (outputUrl && !outputUrl.startsWith("data:")) {
       try {
         const fileBuf = await downloadGradioFile(outputUrl, null);
-        const saved = await saveBuffer(fileBuf, "audio/wav", "enhanced_audio");
+        const saved = await saveBuffer(fileBuf, "audio/mpeg", "enhanced_audio");
         savedUrl = saved.url;
       } catch (dlErr) {
         console.warn("[remix/enhance] Could not download result, using raw URL:", dlErr.message);
@@ -214,7 +214,7 @@ router.post("/generate", async (req, res) => {
 
         const displayTitle = title || description || tags || "remix";
         const slug = slugify(displayTitle);
-        const saved = await saveBuffer(audioBuf, "audio/wav", `remix_${slug}_${savedUrls.length + 1}`);
+        const saved = await saveBuffer(audioBuf, "audio/mpeg", `remix_${slug}_${savedUrls.length + 1}`);
         savedUrls.push(saved.url);
 
         await libraryService.createAsset({
@@ -423,7 +423,7 @@ router.post("/generate-stream", async (req, res) => {
             }
             const displayTitle = event.title || description || tags || "remix";
             const slug = slugify(displayTitle);
-            const saved = await saveBuffer(audioBuf, "audio/wav", `remix_${slug}_${savedUrls.length + 1}`);
+            const saved = await saveBuffer(audioBuf, "audio/mpeg", `remix_${slug}_${savedUrls.length + 1}`);
             savedUrls.push(saved.url);
 
             await libraryService.createAsset({

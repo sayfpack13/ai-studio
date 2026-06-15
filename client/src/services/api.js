@@ -29,6 +29,21 @@ export const removeToken = () => {
   localStorage.removeItem(TOKEN_KEY);
 };
 
+// Fetch ai_token from AceMusic via the backend server (avoids CORS).
+// If bearerToken is empty, the server uses the environment variable.
+export const verifyInternalToken = async (bearerToken = "") => {
+  const response = await fetch(`${API_BASE_URL}/remix/verify-internal-token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bearerToken }),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || "Token verification failed");
+  }
+  return data;
+};
+
 // Helper function to make authenticated requests
 const authFetch = async (url, options = {}) => {
   const token = getToken();

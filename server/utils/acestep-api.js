@@ -928,6 +928,288 @@ async function* streamAceStepNative(options = {}) {
 }
 
 /**
+ * Fetch the short-lived ai_token JWT from the AceMusic internal auth endpoint.
+ * @param {string} bearerToken - Bearer token for Authorization header
+ * @returns {{ router: string, token: string, expire: string }}
+ */
+async function fetchInternalAiToken(bearerToken) {
+  const resp = await fetch("https://acem-api.acemusic.ai/api/acem/user/ai/token", {
+    headers: { Authorization: `Bearer ${bearerToken}`, Accept: "application/json" },
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    throw new Error(`fetchInternalAiToken ${resp.status}: ${errText.slice(0, 200)}`);
+  }
+  const body = await resp.json();
+  const conf = body?.data?.ai_conf;
+  if (!conf?.token) {
+    throw new Error("AceMusic internal auth returned no ai_token");
+  }
+  return { router: conf.router || "https://ai-api.acemusic.ai", token: conf.token, expire: conf.expire };
+}
+
+const INTERNAL_BASE_URL = "https://ai-api.acemusic.ai/engine/api/engine";
+
+/**
+ * Submit a generation task to the AceMusic internal playground API.
+ */
+async function releaseTaskInternal(bearerToken, aiToken, fields, files = {}) {
+  const form = new FormData();
+  form.append("env", "production");
+  form.append("ai_token", aiToken);
+  form.append("app", "studio-web");
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null) continue;
+    if (key === "param_obj") {
+      form.append(key, typeof value === "string" ? value : JSON.stringify(value));
+      continue;
+    }
+    form.append(key, typeof value === "boolean" ? String(value) : String(value));
+  }
+
+  if (files.src_audio) {
+    form.append(
+      "ctx_audio",
+      new Blob([files.src_audio], { type: "audio/mpeg" }),
+      "source.mp3",
+    );
+  }
+  if (files.reference_audio) {
+    form.append(
+      "reference_audio",
+      new Blob([files.reference_audio], { type: "audio/mpeg" }),
+      "reference.mp3",
+    );
+  }
+
+  const headers = {};
+  if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
+  const response = await fetch(`${INTERNAL_BASE_URL}/release_task`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new Error(`release_task ${response.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const body = await response.json();
+  const data = unwrapResponse(body);
+  const taskId = data?.task_id || body?.task_id;
+  if (!taskId) {
+    throw new Error("release_task returned no task_id");
+  }
+  return {
+    taskId,
+    queuePosition: data?.queue_position ?? null,
+    status: data?.status ?? "queued",
+  };
+}
+
+/**
+ * Query task status on the internal playground API.
+ */
+async function queryTasksInternal(bearerToken, aiToken, taskIds) {
+  const headers = { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" };
+  if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
+  
+  const params = new URLSearchParams();
+  params.append("ai_token", aiToken);
+  params.append("task_id_list", JSON.stringify(taskIds));
+  params.append("app", "studio-web");
+  
+  const response = await fetch(`${INTERNAL_BASE_URL}/query_result`, {
+    method: "POST",
+    headers,
+    body: params,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new Error(`query_result ${response.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const body = await response.json();
+  const data = unwrapResponse(body);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(body)) return body;
+  return data ? [data] : [];
+}
+
+/**
+ * Stream generation via the AceMusic internal playground API.
+ */
+async function* streamAceStepInternal(options = {}) {
+  const bearerToken = options.internalBearerToken || "";
+  const hasAiToken = Boolean(options.internalAiToken);
+  if (!bearerToken && !hasAiToken) {
+    yield { type: "error", message: "Internal API Bearer token or pre-fetched ai_token is required" };
+    return;
+  }
+
+  const { fields, files, effectiveTags, lyricsText } = buildTaskFields(options);
+  if (!effectiveTags) {
+    yield { type: "error", message: "tags or description is required" };
+    return;
+  }
+
+  let aiToken = options.internalAiToken || "";
+  let routerBase = options.internalRouter || "";
+
+  if (!aiToken) {
+    yield { type: "progress", value: 5, message: "Authenticating with AceMusic internal API…" };
+    try {
+      const auth = await fetchInternalAiToken(bearerToken);
+      aiToken = auth.token;
+      routerBase = auth.router;
+      console.log("[ACE-Step Internal] Auth OK, router:", routerBase);
+    } catch (err) {
+      yield { type: "error", message: friendlyAceStepError(err.message, "Internal auth failed") };
+      return;
+    }
+  } else {
+    yield { type: "progress", value: 5, message: "Using pre-fetched ai_token…" };
+    console.log("[ACE-Step Internal] Using pre-fetched ai_token, router:", routerBase || INTERNAL_BASE_URL);
+  }
+
+  // Map fields to playground naming
+  const internalFields = {
+    prompt: effectiveTags,
+    lyrics: lyricsText || "[Instrumental]",
+    model_name: fields.model,
+  };
+
+  const paramObj = {
+    sample_mode: false,
+    seed: String(fields.seed ?? -1),
+    task_type: files.src_audio ? "cover" : "generate",
+    language: "en",
+  };
+  if (fields.audio_duration != null) paramObj.duration = fields.audio_duration;
+  if (fields.bpm) paramObj.bpm = fields.bpm;
+  if (fields.key_scale) paramObj.key = fields.key_scale;
+  if (fields.time_signature) paramObj.time_signature = fields.time_signature;
+  if (fields.audio_cover_strength != null) paramObj.audio_cover_strength = fields.audio_cover_strength;
+  if (fields.lm_negative_prompt) paramObj.lm_negative_prompt = fields.lm_negative_prompt;
+  if (options.ref_audio_strength != null) paramObj.cover_noise_strength = Number(options.ref_audio_strength);
+
+  internalFields.param_obj = JSON.stringify(paramObj);
+
+  console.log(
+    "[ACE-Step Internal] Releasing task, prompt:",
+    effectiveTags.slice(0, 80),
+    "cover:",
+    Boolean(files.src_audio),
+    "model:",
+    fields.model,
+  );
+
+  yield { type: "progress", value: 8, message: "Submitting to AceMusic playground…" };
+
+  let taskId;
+  let initialQueuePos = null;
+  try {
+    const released = await releaseTaskInternal(bearerToken, aiToken, internalFields, files);
+    taskId = released.taskId;
+    initialQueuePos = released.queuePosition;
+    console.log("[ACE-Step Internal] Task released:", taskId, "queue:", initialQueuePos);
+  } catch (err) {
+    yield { type: "error", message: friendlyAceStepError(err.message, "Task submission failed") };
+    return;
+  }
+
+  const queueMsg =
+    initialQueuePos != null ? `Queued #${initialQueuePos + 1} · waiting for GPU…` : "Task queued, waiting for GPU…";
+  yield { type: "progress", value: 10, message: queueMsg };
+
+  let progress = 10;
+  let lastStatus = -1;
+  let lastQueuePos = initialQueuePos;
+
+  for (let poll = 0; poll < MAX_POLLS; poll++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+    let rows;
+    try {
+      rows = await queryTasksInternal(bearerToken, aiToken, [taskId]);
+    } catch (err) {
+      console.warn("[ACE-Step Internal] query_result error:", err.message);
+      continue;
+    }
+
+    const taskRow = rows.find((r) => r?.task_id === taskId) || rows[0];
+    const parsed = parseTaskResult(taskRow);
+    const { status, queuePosition, error: taskError, fileUrl, fileUrls } = parsed;
+
+    if (status !== lastStatus || (queuePosition != null && queuePosition !== lastQueuePos)) {
+      lastStatus = status;
+      lastQueuePos = queuePosition;
+      if (status === 0) {
+        progress = Math.min(progress + 3, 90);
+        const qMsg =
+          queuePosition != null ? `Queued #${queuePosition + 1} · Generating… ${progress}%` : `Generating… ${progress}%`;
+        yield { type: "progress", value: progress, message: qMsg };
+      }
+    }
+
+    if (status === 2) {
+      yield { type: "error", message: friendlyAceStepError(taskError, "ACE-Step generation failed") };
+      return;
+    }
+
+    if (status === 1) {
+      if (!fileUrl) {
+        yield { type: "error", message: friendlyAceStepError(taskError || "No audio URL in result") };
+        return;
+      }
+
+      yield { type: "progress", value: 92, message: "Downloading audio…" };
+
+      try {
+        const resultAudios = [];
+        for (const url of parsed.fileUrls || [fileUrl]) {
+          let audioUrl = String(url || "").trim();
+          if (!audioUrl) continue;
+          // Internal API may return absolute or relative URLs
+          if (!audioUrl.startsWith("http")) {
+            const base = routerBase || INTERNAL_BASE_URL;
+            audioUrl = `${base}${audioUrl.startsWith("/") ? "" : "/"}${audioUrl}`;
+          }
+          // The URL is a pre-signed S3 URL, no additional auth needed
+          const response = await fetch(audioUrl);
+          if (!response.ok) {
+            const errText = await response.text().catch(() => "");
+            throw new Error(`Audio download ${response.status}: ${errText.slice(0, 200)}`);
+          }
+          const buf = Buffer.from(await response.arrayBuffer());
+          const contentType = response.headers.get("content-type") || "audio/mpeg";
+          const mime = contentType.split(";")[0].trim() || "audio/mpeg";
+          resultAudios.push(`data:${mime};base64,${buf.toString("base64")}`);
+        }
+
+        yield { type: "progress", value: 95, message: "Audio ready!" };
+        yield {
+          type: "result",
+          audio: resultAudios[0],
+          audios: resultAudios,
+          title: effectiveTags.slice(0, 60),
+          tags: effectiveTags,
+          lyrics: lyricsText === "[Instrumental]" ? "" : lyricsText,
+        };
+      } catch (dlErr) {
+        yield { type: "error", message: friendlyAceStepError(dlErr.message, "Audio download failed") };
+      }
+      return;
+    }
+  }
+
+  yield { type: "error", message: "ACE-Step internal task timed out after polling" };
+}
+
+/**
  * Route to cloud completion API or self-hosted native task queue.
  */
 export async function* streamAceStepGeneration(options = {}) {
@@ -946,3 +1228,5 @@ export async function* streamAceStepGeneration(options = {}) {
   }
   yield* streamAceStepNative(options);
 }
+
+export { streamAceStepInternal, fetchInternalAiToken };

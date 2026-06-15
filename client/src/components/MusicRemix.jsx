@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   enqueuePipeline, transcribeAudio, enhanceAudio, resolveAssetUrl,
-  uploadLibraryFile,
+  uploadLibraryFile, verifyInternalToken,
 } from "../services/api";
 import AssetPickerDialog from "./library/AssetPickerDialog";
 import { useApp } from "../context/AppContext";
@@ -120,6 +120,12 @@ export default function MusicRemix() {
   const [refAudioBase64, setRefAudioBase64] = useState(null);
   const [refAudioMime, setRefAudioMime] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [useInternalApi, setUseInternalApi] = useState(() => localStorage.getItem("acestudio_use_internal_api") === "true");
+  const [internalBearerToken, setInternalBearerToken] = useState(() => localStorage.getItem("acestudio_internal_bearer") || "");
+  const [internalAiToken, setInternalAiToken] = useState(() => localStorage.getItem("acestudio_internal_ai_token") || "");
+  const [internalRouter, setInternalRouter] = useState(() => localStorage.getItem("acestudio_internal_router") || "");
+  const [tokenVerifyStatus, setTokenVerifyStatus] = useState("idle"); // idle | loading | success | error
+  const [tokenVerifyMessage, setTokenVerifyMessage] = useState("");
 
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -153,6 +159,22 @@ export default function MusicRemix() {
     }
   }, [generatedRemix?.url, requestPlayTrack]);
 
+  useEffect(() => {
+    localStorage.setItem("acestudio_use_internal_api", String(useInternalApi));
+  }, [useInternalApi]);
+
+  useEffect(() => {
+    localStorage.setItem("acestudio_internal_bearer", internalBearerToken);
+  }, [internalBearerToken]);
+
+  useEffect(() => {
+    localStorage.setItem("acestudio_internal_ai_token", internalAiToken);
+  }, [internalAiToken]);
+
+  useEffect(() => {
+    localStorage.setItem("acestudio_internal_router", internalRouter);
+  }, [internalRouter]);
+
   const applyRemixFormFromMetadata = useCallback((metadata, fallbackPrompt = "") => {
     if (!metadata || typeof metadata !== "object") {
       if (fallbackPrompt) setDescription(fallbackPrompt);
@@ -182,6 +204,10 @@ export default function MusicRemix() {
     if (metadata.refAudioStrength != null) {
       setRefAudioStrength(Number(metadata.refAudioStrength));
     }
+    if (metadata.useInternalApi != null) setUseInternalApi(Boolean(metadata.useInternalApi));
+    if (metadata.internalBearerToken != null) setInternalBearerToken(String(metadata.internalBearerToken));
+    if (metadata.internalAiToken != null) setInternalAiToken(String(metadata.internalAiToken));
+    if (metadata.internalRouter != null) setInternalRouter(String(metadata.internalRouter));
   }, []);
 
   // Re-attach UI to in-flight remix jobs when returning to this page
@@ -308,6 +334,25 @@ export default function MusicRemix() {
       if (job.message) setGenMessage(job.message);
     }
   }, [selectedRunningJobId, remixJobs, isPreparing, isTranscribing, isEnhancing, remixHistory]);
+
+  const handleFetchToken = async () => {
+    setTokenVerifyStatus("loading");
+    setTokenVerifyMessage("Fetching ai_token from AceMusic via server…");
+    try {
+      const data = await verifyInternalToken(internalBearerToken.trim());
+      setInternalAiToken(data.token || "");
+      setInternalRouter(data.router || "");
+      // Auto-fill the Bearer token input with the token used (from .env or user input)
+      if (data.bearerToken) {
+        setInternalBearerToken(data.bearerToken);
+      }
+      setTokenVerifyStatus("success");
+      setTokenVerifyMessage(`ai_token OK — expires ${data.expire || "soon"}`);
+    } catch (err) {
+      setTokenVerifyStatus("error");
+      setTokenVerifyMessage(err.message || "Token fetch failed — check your Bearer token");
+    }
+  };
 
   const onFileSelected = useCallback(async (f) => {
     if (!f) return;
@@ -466,6 +511,10 @@ export default function MusicRemix() {
       timeSignature: timeSignature ? Number(timeSignature) : null,
       negativeStyles: negativeStyles.trim() || null,
       thinking,
+      useInternalApi,
+      internalBearerToken: internalBearerToken || null,
+      internalAiToken: internalAiToken || null,
+      internalRouter: internalRouter || null,
     };
 
     let workingLyrics = lyrics;
@@ -531,6 +580,10 @@ export default function MusicRemix() {
         refAudioStrength: Number(refAudioStrength),
         refAudioBase64: refAudioBase64 || undefined,
         refAudioMime: refAudioMime || undefined,
+        useInternalApi,
+        internalBearerToken: internalBearerToken || undefined,
+        internalAiToken: internalAiToken || undefined,
+        internalRouter: internalRouter || undefined,
       };
       remixPayload.coverStrength = Number(coverStrength);
 
@@ -1270,6 +1323,56 @@ export default function MusicRemix() {
         {validationErrors.length > 0 && !isWorking && (
           <ValidationErrors errors={validationErrors} />
         )}
+
+        {/* ── Internal API Toggle ── */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-cyan-400" />
+              <span className="text-sm font-semibold text-white">AceMusic Internal Playground</span>
+            </div>
+            <button
+              onClick={() => { setUseInternalApi((v) => !v); }}
+              className={`relative w-10 h-5 rounded-full transition-colors ${useInternalApi ? "bg-cyan-500" : "bg-gray-700"}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${useInternalApi ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">Route generation through the AceMusic internal playground API instead of the public cloud endpoint</p>
+          {useInternalApi && (
+            <div className="space-y-2">
+              <label className="block text-xs text-gray-400">Bearer Token (optional — server uses .env if empty)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={internalBearerToken}
+                  onChange={(e) => { setInternalBearerToken(e.target.value); setTokenVerifyStatus("idle"); }}
+                  placeholder="Leave empty to use server .env, or paste your own…"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500"
+                />
+                <button
+                  onClick={handleFetchToken}
+                  disabled={tokenVerifyStatus === "loading"}
+                  className="px-3 py-2 rounded-lg text-sm font-medium bg-cyan-600 text-white hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {tokenVerifyStatus === "loading" ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-4 h-4" />
+                  )}
+                  Fetch Token
+                </button>
+              </div>
+              {tokenVerifyStatus === "success" && (
+                <p className="text-[11px] text-green-400">{tokenVerifyMessage}</p>
+              )}
+              {tokenVerifyStatus === "error" && (
+                <p className="text-[11px] text-red-400">{tokenVerifyMessage}</p>
+              )}
+              <p className="text-[11px] text-gray-600">The server fetches the ai_token JWT from AceMusic (uses .env if input is empty)</p>
+            </div>
+          )}
+        </div>
 
         {/* ── Generate ── */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">

@@ -1,6 +1,6 @@
 import { Client, handle_file } from "@gradio/client";
 import Replicate from "replicate";
-import { isAceStepApiConfigured, streamAceStepGeneration } from "./acestep-api.js";
+import { isAceStepApiConfigured, streamAceStepGeneration, streamAceStepInternal } from "./acestep-api.js";
 
 const _clientCacheBySpace = new Map();
 const HF_ACESTEP_SPACE = process.env.HF_ACESTEP_SPACE_URL || "ACE-Step/ACE-Step-1.5";
@@ -1139,6 +1139,12 @@ async function* streamGenerateWithReplicate(options = {}) {
  * @param {object} options  — same shape as generateWithACEStep
  */
 export async function* streamGenerateWithACEStep(options = {}) {
+  if (options.useInternalApi) {
+    console.log("[ACE-Step] Using AceMusic internal playground API");
+    yield* streamAceStepInternal(options);
+    return;
+  }
+
   if (isAceStepApiConfigured()) {
     console.log("[ACE-Step] Using ACE-Step task API (ACEMUSIC_API_KEY set)");
     const events = [];

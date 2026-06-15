@@ -6,6 +6,7 @@ import {
   streamGenerateWithACEStep,
   downloadGradioFile,
 } from "../utils/gradio-client.js";
+import { fetchInternalAiToken } from "../utils/acestep-api.js";
 import { saveBuffer } from "../services/file-storage.js";
 import libraryService from "../services/library-service.js";
 
@@ -313,6 +314,10 @@ router.post("/generate-stream", async (req, res) => {
     refAudioMime,
     audioMime,
     remixHistoryId,
+    useInternalApi,
+    internalBearerToken,
+    internalAiToken,
+    internalRouter,
   } = req.body || {};
 
   const effectiveMode = String(mode).trim().toLowerCase();
@@ -374,6 +379,10 @@ router.post("/generate-stream", async (req, res) => {
       negative_styles: negativeStyles ? String(negativeStyles) : null,
       ref_audio: refAudioBuf,
       audio_mime: sourceAudioMime,
+      useInternalApi: Boolean(useInternalApi),
+      internalBearerToken: internalBearerToken ? String(internalBearerToken) : undefined,
+      internalAiToken: internalAiToken ? String(internalAiToken) : undefined,
+      internalRouter: internalRouter ? String(internalRouter) : undefined,
     };
     const stream = streamGenerateWithACEStep(payload);
 
@@ -457,6 +466,22 @@ router.post("/generate-stream", async (req, res) => {
 
   clearInterval(heartbeat);
   res.end();
+});
+
+// Verify a user-provided Bearer token by fetching the ai_token from AceMusic on the backend
+// If no Bearer token is provided, uses the environment variable as fallback
+router.post("/verify-internal-token", async (req, res) => {
+  const { bearerToken } = req.body || {};
+  const tokenToUse = bearerToken || process.env.ACEMUSIC_INTERNAL_BEARER || "";
+  if (!tokenToUse) {
+    return res.status(400).json({ ok: false, error: "Bearer token is required (provide in UI or set ACEMUSIC_INTERNAL_BEARER in .env)" });
+  }
+  try {
+    const auth = await fetchInternalAiToken(tokenToUse);
+    res.json({ ok: true, router: auth.router, expire: auth.expire, token: auth.token, bearerToken: tokenToUse });
+  } catch (err) {
+    res.status(401).json({ ok: false, error: err.message });
+  }
 });
 
 export default router;

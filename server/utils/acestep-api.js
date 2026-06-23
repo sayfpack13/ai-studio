@@ -511,6 +511,24 @@ const MAX_POLLS = 200;
 const COMPLETION_RETRY_STATUSES = new Set([502, 503, 504]);
 const COMPLETION_RETRY_DELAYS_MS = [12_000, 20_000, 30_000, 30_000];
 
+/**
+ * Summarize a /query_result polling error for logging.
+ * Transient gateway errors (502/503/504) return an HTML error page; collapse
+ * them to a concise, non-alarming one-line message since the poll loop retries.
+ * @returns {{ message: string, transient: boolean }}
+ */
+function summarizePollError(rawMessage = "") {
+  const match = /query_result\s+(\d{3})/.exec(rawMessage);
+  const status = match ? Number(match[1]) : null;
+  if (status && COMPLETION_RETRY_STATUSES.has(status)) {
+    return {
+      message: `transient gateway ${status}, retrying…`,
+      transient: true,
+    };
+  }
+  return { message: rawMessage, transient: false };
+}
+
 async function fetchWithRetry(url, init, { label = "request", retries = 2 } = {}) {
   let lastResponse = null;
   let lastError = null;
@@ -867,7 +885,8 @@ async function* streamAceStepNative(options = {}) {
     try {
       rows = await queryTasks(baseUrl, apiKey, [taskId]);
     } catch (err) {
-      console.warn("[ACE-Step API] query_result error:", err.message);
+      const { message } = summarizePollError(err.message);
+      console.warn("[ACE-Step API] query_result:", message);
       continue;
     }
 
@@ -1136,7 +1155,8 @@ async function* streamAceStepInternal(options = {}) {
     try {
       rows = await queryTasksInternal(bearerToken, aiToken, [taskId]);
     } catch (err) {
-      console.warn("[ACE-Step Internal] query_result error:", err.message);
+      const { message } = summarizePollError(err.message);
+      console.warn("[ACE-Step Internal] query_result:", message);
       continue;
     }
 

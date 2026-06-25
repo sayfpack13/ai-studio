@@ -104,6 +104,7 @@ export default function MediaOutputPanel({
   downloadFormat,
   setDownloadFormat,
   isConverting,
+  downloadName,
   className = "",
 }) {
   const config = MEDIA_CONFIG[mediaType];
@@ -268,7 +269,7 @@ export default function MediaOutputPanel({
       ? ".mp3"
       : extFromUrl || (mediaType === "image" ? ".png" : mediaType === "video" ? ".mp4" : ".mp3");
     const baseName = sanitize(
-      asset.prompt || `generated-${asset.id || "media"}`,
+      downloadName || asset.prompt || `generated-${asset.id || "media"}`,
     );
     const filename = baseName.toLowerCase().endsWith(ext.toLowerCase())
       ? baseName

@@ -910,6 +910,10 @@ export default function MusicRemix() {
       downloadFormat={downloadFormat}
       setDownloadFormat={setDownloadFormat}
       isConverting={isConverting}
+      downloadName={
+        (sourceAudioName || file?.name || "remix")
+          .replace(/\.[^.]+$/, "")
+      }
       onClearError={() => {
         setError("");
         if (selectedRunningJobId && selectedRunningJob?.status === "failed") {

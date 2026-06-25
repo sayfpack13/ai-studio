@@ -90,6 +90,7 @@ export default function MusicRemix() {
   const hasActiveRemixJobs = runningRemixJobs.length > 0 || pendingRemixJobs.length > 0;
 
   const [file, setFile] = useState(null);
+  const [sourceAudioName, setSourceAudioName] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [audioBase64, setAudioBase64] = useState("");
   const [sourceDuration, setSourceDuration] = useState(null);
@@ -362,6 +363,7 @@ export default function MusicRemix() {
     if (!f) return;
     const url = URL.createObjectURL(f);
     setFile(f);
+    setSourceAudioName(f.name);
     setAudioUrl(url);
     setGeneratedRemix(null);
     setError("");
@@ -428,6 +430,7 @@ export default function MusicRemix() {
       );
       const objectUrl = URL.createObjectURL(blob);
       setFile(null);
+      setSourceAudioName(asset.name || asset.fileName || "");
       setAudioUrl(objectUrl);
       setAudioBase64(b64);
 
@@ -652,7 +655,11 @@ export default function MusicRemix() {
 
   const handleDownload = async () => {
     if (!generatedRemix?.url) return;
-    
+
+    const baseName = (sourceAudioName || file?.name || "remix").replace(/\.[^.]+$/, "");
+    const remixNum = Object.keys(remixHistory).length + 1;
+    const downloadName = `${baseName} (remix ${remixNum})`;
+
     if (downloadFormat === "mp3") {
       setIsConverting(true);
       try {
@@ -690,7 +697,7 @@ export default function MusicRemix() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `remix_${Date.now()}.mp3`;
+        link.download = `${downloadName}.mp3`;
         link.click();
         URL.revokeObjectURL(url);
       } catch (err) {
@@ -703,7 +710,7 @@ export default function MusicRemix() {
           const objectUrl = URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = objectUrl;
-          link.download = `remix_${Date.now()}.wav`;
+          link.download = `${downloadName}.wav`;
           link.style.display = "none";
           document.body.appendChild(link);
           link.click();
@@ -724,7 +731,7 @@ export default function MusicRemix() {
         const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = objectUrl;
-        link.download = `remix_${Date.now()}.wav`;
+        link.download = `${downloadName}.wav`;
         link.style.display = "none";
         document.body.appendChild(link);
         link.click();

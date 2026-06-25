@@ -106,7 +106,7 @@ function buildACEStepPayload({
     param_19: 0,                                        // Start (seconds)
     param_20: -1,                                       // End (seconds, -1 for end)
     param_21: "Fill the audio semantic mask based on the given conditions:", // instruction
-    param_22: toNumber(ref_audio_strength, 1),         // audio_cover_strength
+    param_22: toNumber(ref_audio_strength, 0.8),         // audio_cover_strength
     param_23: taskType,                                // task_type (text2music/repaint/cover)
     param_24: false,                                    // use_adg
     param_25: 0,                                        // cfg_interval_start
@@ -869,7 +869,7 @@ export async function generateWithACEStep(options = {}) {
     guidance_scale = 15.0,
     seed = -1,
     src_audio = null,
-    ref_audio_strength = 0.5,
+    ref_audio_strength = 0.2,
     model = "acestep-v15-xl-turbo",
     thinking = true,
   } = options;
@@ -1018,7 +1018,7 @@ async function* streamGenerateWithReplicate(options = {}) {
     guidance_scale = 15.0,
     seed = -1,
     src_audio = null,
-    ref_audio_strength = 0.5,
+    ref_audio_strength = 0.2,
   } = options;
 
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
@@ -1043,7 +1043,7 @@ async function* streamGenerateWithReplicate(options = {}) {
     const audioBuf = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
     const base64Audio = audioBuf.toString("base64");
     input.src_audio = `data:audio/mpeg;base64,${base64Audio}`;
-    input.audio2audio_strength = toNumber(ref_audio_strength, 0.5);
+    input.audio2audio_strength = toNumber(ref_audio_strength, 0.2);
   }
 
   console.log("[ACE-Step Replicate] Starting generation, tags:", effectiveTags.slice(0, 80), "duration:", input.duration);
@@ -1186,7 +1186,7 @@ export async function* streamGenerateWithACEStep(options = {}) {
     guidance_scale = 15.0,
     seed = -1,
     src_audio = null,
-    ref_audio_strength = 0.5,
+    ref_audio_strength = 0.2,
     model = "acestep-v15-xl-turbo",
     thinking = true,
   } = options;

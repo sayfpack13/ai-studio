@@ -10,6 +10,7 @@ import { getGlobalConfig } from "./config.js";
 const ALLOWED_MODELS = ["acestep-v15-turbo", "acestep-v15-turbo-shift3"];
 
 function toNumber(value, fallback) {
+  if (value == null) return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -261,7 +262,7 @@ export function buildTaskFields(options = {}) {
     seed = -1,
     src_audio = null,
     ref_audio = null,
-    ref_audio_strength = 0.5,
+    ref_audio_strength = 0.2,
     cover_strength = null,
     model = "acestep-v15-turbo",
     thinking = false,
@@ -307,7 +308,7 @@ export function buildTaskFields(options = {}) {
 
   if (hasSource) {
     fields.task_type = "cover";
-    fields.audio_cover_strength = toNumber(cover_strength, 1.0);
+    fields.audio_cover_strength = toNumber(cover_strength, 0.8);
     files.src_audio = Buffer.isBuffer(src_audio) ? src_audio : Buffer.from(src_audio, "base64");
   }
 
@@ -1113,7 +1114,7 @@ async function* streamAceStepInternal(options = {}) {
   if (fields.time_signature) paramObj.time_signature = fields.time_signature;
   if (fields.audio_cover_strength != null) paramObj.audio_cover_strength = fields.audio_cover_strength;
   if (fields.lm_negative_prompt) paramObj.lm_negative_prompt = fields.lm_negative_prompt;
-  if (options.ref_audio_strength != null) paramObj.cover_noise_strength = Number(options.ref_audio_strength);
+  if (files.src_audio && options.ref_audio_strength != null) paramObj.cover_noise_strength = Number(options.ref_audio_strength);
 
   internalFields.param_obj = JSON.stringify(paramObj);
 
@@ -1124,6 +1125,10 @@ async function* streamAceStepInternal(options = {}) {
     Boolean(files.src_audio),
     "model:",
     fields.model,
+    "audio_cover_strength:",
+    paramObj.audio_cover_strength,
+    "cover_noise_strength:",
+    paramObj.cover_noise_strength,
   );
 
   yield { type: "progress", value: 8, message: "Submitting to AceMusic playground…" };

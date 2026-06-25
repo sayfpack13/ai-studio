@@ -106,7 +106,7 @@ export default function MusicRemix() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [lyrics, setLyrics] = useState("");
   const [duration, setDuration] = useState("");
-  const [refAudioStrength, setRefAudioStrength] = useState(0.5);
+  const [refAudioStrength, setRefAudioStrength] = useState(0.2);
   const [seed, setSeed] = useState(-1);
   const [inferStep, setInferStep] = useState(8);
   const [guidanceScale, setGuidanceScale] = useState(7.0);
@@ -115,7 +115,7 @@ export default function MusicRemix() {
   const [bpm, setBpm] = useState("");
   const [keyScale, setKeyScale] = useState("");
   const [timeSignature, setTimeSignature] = useState("");
-  const [coverStrength, setCoverStrength] = useState(1.0);
+  const [coverStrength, setCoverStrength] = useState(0.8);
   const [negativeStyles, setNegativeStyles] = useState("");
   const [refAudioFile, setRefAudioFile] = useState(null);
   const [refAudioBase64, setRefAudioBase64] = useState(null);
@@ -204,6 +204,9 @@ export default function MusicRemix() {
     if (metadata.model) setModel(metadata.model);
     if (metadata.refAudioStrength != null) {
       setRefAudioStrength(Number(metadata.refAudioStrength));
+    }
+    if (metadata.coverStrength != null) {
+      setCoverStrength(Number(metadata.coverStrength));
     }
     if (metadata.useInternalApi != null) setUseInternalApi(Boolean(metadata.useInternalApi));
     if (metadata.internalBearerToken != null) setInternalBearerToken(String(metadata.internalBearerToken));
@@ -1184,46 +1187,28 @@ export default function MusicRemix() {
               </div>
 
               {/* Cover Strength */}
-              <div className="space-y-2 py-2 border-t border-gray-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400 font-medium">Cover Strength</span>
-                  <span className="text-xs text-purple-400 font-mono">{Math.round(coverStrength * 100)}%</span>
-                </div>
+              <div className="flex items-center gap-4 py-2 border-t border-gray-800">
+                <span className="text-xs text-gray-400 font-medium shrink-0">Cover Strength</span>
                 <input
-                  type="range" min="0" max="1" step="0.05"
+                  type="range" min="0" max="1" step="0.01"
                   value={coverStrength}
                   onChange={(e) => { setCoverStrength(Number(e.target.value)); }}
-                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-purple-500"
+                  className="flex-1 h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-purple-500"
                 />
-                <div className="flex justify-between text-xs text-gray-600">
-                  <span>Subtle</span>
-                  <span>Strong</span>
-                </div>
+                <span className="text-xs text-purple-400 font-mono tabular-nums shrink-0 w-10 text-right">{Math.round(coverStrength * 100)}%</span>
               </div>
 
               {/* Remix Strength */}
-              {audioBase64 && (
-                <div className="space-y-2 py-2 border-t border-gray-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400 font-medium flex items-center gap-1">
-                      <SlidersHorizontal className="w-3 h-3" />
-                      Remix Strength
-                    </span>
-                    <span className="text-xs text-purple-400 font-mono tabular-nums">{Math.round(refAudioStrength * 100)}%</span>
-                  </div>
-                  <input
-                    type="range" min="0" max="1" step="0.05"
-                    value={refAudioStrength}
-                    onChange={(e) => { setRefAudioStrength(Number(e.target.value)); }}
-                    className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-purple-500"
-                  />
-                  <div className="flex items-center justify-between text-xs text-gray-600">
-                    <span>More Creative</span>
-                    <span>More Original</span>
-                  </div>
-                  <p className="text-xs text-gray-500">Controls how closely the remix matches your uploaded audio. Higher = closer to source.</p>
-                </div>
-              )}
+              <div className="flex items-center gap-4 py-2 border-t border-gray-800">
+                <span className="text-xs text-gray-400 font-medium shrink-0">Remix Strength</span>
+                <input
+                  type="range" min="0" max="1" step="0.01"
+                  value={refAudioStrength}
+                  onChange={(e) => { setRefAudioStrength(Number(e.target.value)); }}
+                  className="flex-1 h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-purple-500"
+                />
+                <span className="text-xs text-purple-400 font-mono tabular-nums shrink-0 w-10 text-right">{Math.round(refAudioStrength * 100)}%</span>
+              </div>
 
               {/* Model & Quality */}
               <div className="space-y-3 py-2 border-t border-gray-800">
@@ -1253,6 +1238,7 @@ export default function MusicRemix() {
                   </div>
                 </div>
 
+                {!audioBase64 && (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Brain className="w-4 h-4 text-emerald-400" />
@@ -1268,6 +1254,7 @@ export default function MusicRemix() {
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${thinking ? "translate-x-5" : "translate-x-0.5"}`} />
                   </button>
                 </div>
+                )}
               </div>
 
               {/* Advanced toggle */}
@@ -1314,13 +1301,51 @@ export default function MusicRemix() {
                   {/* ── Row: Key ── */}
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-gray-400 w-28 shrink-0">Key</span>
-                    <input
-                      type="text"
+                    <select
                       value={keyScale}
-                      placeholder="Auto"
                       onChange={(e) => { setKeyScale(e.target.value); }}
                       className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white"
-                    />
+                    >
+                      <option value="">Auto</option>
+                      <option value="C major">C major</option>
+                      <option value="C minor">C minor</option>
+                      <option value="C♯ major">C♯ major</option>
+                      <option value="C♯ minor">C♯ minor</option>
+                      <option value="D♭ major">D♭ major</option>
+                      <option value="D♭ minor">D♭ minor</option>
+                      <option value="D major">D major</option>
+                      <option value="D minor">D minor</option>
+                      <option value="D♯ major">D♯ major</option>
+                      <option value="D♯ minor">D♯ minor</option>
+                      <option value="E♭ major">E♭ major</option>
+                      <option value="E♭ minor">E♭ minor</option>
+                      <option value="E major">E major</option>
+                      <option value="E minor">E minor</option>
+                      <option value="E♯ major">E♯ major</option>
+                      <option value="E♯ minor">E♯ minor</option>
+                      <option value="F major">F major</option>
+                      <option value="F minor">F minor</option>
+                      <option value="F♯ major">F♯ major</option>
+                      <option value="F♯ minor">F♯ minor</option>
+                      <option value="G♭ major">G♭ major</option>
+                      <option value="G♭ minor">G♭ minor</option>
+                      <option value="G major">G major</option>
+                      <option value="G minor">G minor</option>
+                      <option value="G♯ major">G♯ major</option>
+                      <option value="G♯ minor">G♯ minor</option>
+                      <option value="A♭ major">A♭ major</option>
+                      <option value="A♭ minor">A♭ minor</option>
+                      <option value="A major">A major</option>
+                      <option value="A minor">A minor</option>
+                      <option value="A♯ major">A♯ major</option>
+                      <option value="A♯ minor">A♯ minor</option>
+                      <option value="B♭ major">B♭ major</option>
+                      <option value="B♭ minor">B♭ minor</option>
+                      <option value="B major">B major</option>
+                      <option value="B minor">B minor</option>
+                      <option value="B♯ major">B♯ major</option>
+                      <option value="B♯ minor">B♯ minor</option>
+                    </select>
                     <button onClick={() => { setKeyScale(""); }} className="text-xs text-gray-500 hover:text-white px-2">Clear</button>
                   </div>
 

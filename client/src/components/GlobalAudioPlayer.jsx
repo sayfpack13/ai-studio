@@ -166,7 +166,7 @@ export default function GlobalAudioPlayer() {
 
           {/* Progress */}
           <div className="hidden sm:flex items-center gap-2 flex-1 max-w-2xl select-none">
-            <span className="text-[10px] text-gray-500 w-9 text-right tabular-nums">
+            <span className="text-xs text-white w-10 text-right tabular-nums">
               {formatTime(isDragging ? dragProgress : progress)}
             </span>
             <div
@@ -189,7 +189,7 @@ export default function GlobalAudioPlayer() {
                 />
               </div>
             </div>
-            <span className="text-[10px] text-gray-500 w-9 tabular-nums">
+            <span className="text-xs text-white w-10 tabular-nums">
               {formatTime(duration)}
             </span>
           </div>
@@ -197,7 +197,7 @@ export default function GlobalAudioPlayer() {
           {/* Title + Prompt */}
           <div className="max-w-[160px] sm:max-w-[220px] min-w-0">
             <p className="text-sm font-medium text-white truncate">{title}</p>
-            <p className="text-xs text-gray-400 truncate">{promptText || (isRemix ? "Remix" : "Music")}</p>
+            <p className="text-xs text-white/80 truncate">{promptText || (isRemix ? "Remix" : "Music")}</p>
           </div>
 
           {/* Right-side group: Volume + Details + Close */}
@@ -280,54 +280,54 @@ export default function GlobalAudioPlayer() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
               <div className="bg-gray-800/50 rounded-lg p-2.5">
-                <p className="text-gray-500 uppercase tracking-wider mb-1">Title</p>
-                <p className="text-gray-200 truncate">{title}</p>
+                <p className="text-white/60 uppercase tracking-wider mb-1">Title</p>
+                <p className="text-white truncate">{title}</p>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-2.5">
-                <p className="text-gray-500 uppercase tracking-wider mb-1">Type</p>
-                <p className="text-gray-200 capitalize">{isRemix ? "Remix" : "Music"}</p>
+                <p className="text-white/60 uppercase tracking-wider mb-1">Type</p>
+                <p className="text-white capitalize">{isRemix ? "Remix" : "Music"}</p>
               </div>
               {currentTrack.model && (
                 <div className="bg-gray-800/50 rounded-lg p-2.5">
-                  <p className="text-gray-500 uppercase tracking-wider mb-1">Model</p>
-                  <p className="text-gray-200 truncate">{currentTrack.model}</p>
+                  <p className="text-white/60 uppercase tracking-wider mb-1">Model</p>
+                  <p className="text-white truncate">{currentTrack.model}</p>
                 </div>
               )}
               {currentTrack.duration != null && (
                 <div className="bg-gray-800/50 rounded-lg p-2.5">
-                  <p className="text-gray-500 uppercase tracking-wider mb-1">Duration</p>
-                  <p className="text-gray-200">{formatTime(currentTrack.duration)}</p>
+                  <p className="text-white/60 uppercase tracking-wider mb-1">Duration</p>
+                  <p className="text-white">{formatTime(currentTrack.duration)}</p>
                 </div>
               )}
               {currentTrack.bpm != null && (
                 <div className="bg-gray-800/50 rounded-lg p-2.5">
-                  <p className="text-gray-500 uppercase tracking-wider mb-1">BPM</p>
-                  <p className="text-gray-200">{currentTrack.bpm}</p>
+                  <p className="text-white/60 uppercase tracking-wider mb-1">BPM</p>
+                  <p className="text-white">{currentTrack.bpm}</p>
                 </div>
               )}
               {currentTrack.seed != null && (
                 <div className="bg-gray-800/50 rounded-lg p-2.5">
-                  <p className="text-gray-500 uppercase tracking-wider mb-1">Seed</p>
-                  <p className="text-gray-200">{currentTrack.seed}</p>
+                  <p className="text-white/60 uppercase tracking-wider mb-1">Seed</p>
+                  <p className="text-white">{currentTrack.seed}</p>
                 </div>
               )}
               {currentTrack.keyScale && (
                 <div className="bg-gray-800/50 rounded-lg p-2.5">
-                  <p className="text-gray-500 uppercase tracking-wider mb-1">Key</p>
-                  <p className="text-gray-200">{currentTrack.keyScale}</p>
+                  <p className="text-white/60 uppercase tracking-wider mb-1">Key</p>
+                  <p className="text-white">{currentTrack.keyScale}</p>
                 </div>
               )}
               {currentTrack.coverStrength != null && (
                 <div className="bg-gray-800/50 rounded-lg p-2.5">
-                  <p className="text-gray-500 uppercase tracking-wider mb-1">Cover Strength</p>
-                  <p className="text-gray-200">{currentTrack.coverStrength}</p>
+                  <p className="text-white/60 uppercase tracking-wider mb-1">Cover Strength</p>
+                  <p className="text-white">{currentTrack.coverStrength}</p>
                 </div>
               )}
             </div>
             {promptText && (
               <div className="mt-3 bg-gray-800/50 rounded-lg p-2.5">
-                <p className="text-gray-500 uppercase tracking-wider mb-1">Prompt</p>
-                <p className="text-gray-200 text-xs leading-relaxed">{promptText}</p>
+                <p className="text-white/60 uppercase tracking-wider mb-1">Prompt</p>
+                <p className="text-white text-xs leading-relaxed">{promptText}</p>
               </div>
             )}
           </div>
